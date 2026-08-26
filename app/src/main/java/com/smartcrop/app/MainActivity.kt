@@ -6,11 +6,16 @@ import android.opengl.GLSurfaceView
 import android.os.Bundle
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.camera.core.CameraSelector
+import androidx.camera.core.ImageAnalysis
+import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.google.mediapipe.tasks.core.BaseOptions
 import com.google.mediapipe.tasks.vision.core.RunningMode
 import com.google.mediapipe.tasks.vision.facedetector.FaceDetector
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
 
 class MainActivity : AppCompatActivity() {
 
@@ -19,6 +24,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var cameraSmoother: SpringSmoother
     private var faceDetector: FaceDetector? = null
     private var frameProcessor: FrameProcessor? = null
+    private lateinit var cameraExecutor: ExecutorService
 
     companion object {
         private const val CAMERA_PERMISSION_CODE = 100
@@ -27,6 +33,8 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+
+        cameraExecutor = Executors.newSingleThreadExecutor()
 
         if (checkCameraPermission()) {
             initSmartCropPipeline()
@@ -82,6 +90,9 @@ class MainActivity : AppCompatActivity() {
 
         // Hubungkan ke FrameProcessor
         frameProcessor = FrameProcessor(faceDetector, cameraSmoother)
+
+        // Mulai CameraX Binding
+        startCamera()
     }
 
     private fun setupFaceDetector() {
@@ -99,6 +110,46 @@ class MainActivity : AppCompatActivity() {
         } catch (e: Exception) {
             e.printStackTrace()
         }
+    }
+
+    private fun startCamera() {
+        val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
+
+        cameraProviderFuture.addListener({
+            val cameraProvider = cameraProviderFuture.get()
+
+            val imageAnalysis = ImageAnalysis.Builder()
+                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                .build()
+
+            imageAnalysis.setAnalyzer(cameraExecutor) { imageProxy ->
+                val bitmap = imageProxy.toBitmap()
+                if (bitmap != null && frameProcessor != null) {
+                    val defaultCenterX = bitmap.width / 2f
+                    val smoothedX = frameProcessor!!.processFrame(bitmap, defaultCenterX)
+                    // Perbarui posisi crop X pada OpenGL Renderer
+                    cropRenderer.currentCropX = smoothedX
+                }
+                imageProxy.close()
+            }
+
+            val cameraSelector = CameraSelector.DEFAULT_FRONT_CAMERA
+
+            try {
+                cameraProvider.unbindAll()
+                cameraProvider.bindToLifecycle(
+                    this, cameraSelector, imageAnalysis
+                )
+            } catch (exc: Exception) {
+                exc.printStackTrace()
+            }
+        }, ContextCompat.getMainExecutor(this))
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        cameraExecutor.shutdown()
+        faceDetector?.close()
     }
 }
 
