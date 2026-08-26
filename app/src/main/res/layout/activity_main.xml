@@ -4,8 +4,8 @@
     android:layout_height="match_parent"
     android:background="#000000">
 
-    <SurfaceView
-        android:id="@+id/surfaceView"
+    <android.opengl.GLSurfaceView
+        android:id="@+id/glSurfaceView"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:layout_centerInParent="true" />

@@ -1,7 +1,7 @@
 package com.smartcrop.app
 
+import android.opengl.GLSurfaceView
 import android.os.Bundle
-import android.view.SurfaceView
 import androidx.appcompat.app.AppCompatActivity
 import com.google.mediapipe.tasks.core.BaseOptions
 import com.google.mediapipe.tasks.vision.core.RunningMode
@@ -9,7 +9,8 @@ import com.google.mediapipe.tasks.vision.facedetector.FaceDetector
 
 class MainActivity : AppCompatActivity() {
 
-    private lateinit var surfaceView: SurfaceView
+    private lateinit var glSurfaceView: GLSurfaceView
+    private lateinit var cropRenderer: CropRenderer
     private lateinit var cameraSmoother: SpringSmoother
     private var faceDetector: FaceDetector? = null
     private var frameProcessor: FrameProcessor? = null
@@ -22,7 +23,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun initSmartCropPipeline() {
-        surfaceView = findViewById(R.id.surfaceView)
+        glSurfaceView = findViewById(R.id.glSurfaceView)
+        glSurfaceView.setEGLContextClientVersion(2)
+
+        // Inisialisasi Renderer OpenGL
+        cropRenderer = CropRenderer()
+        glSurfaceView.setRenderer(cropRenderer)
+        glSurfaceView.renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
 
         // Inisialisasi peredam pegas untuk kehalusan gerakan framing vertikal (9:16)
         cameraSmoother = SpringSmoother(stiffness = 0.12f, damping = 0.75f)
