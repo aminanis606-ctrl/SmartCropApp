@@ -30,7 +30,13 @@ jobs:
         echo "$PWD/gradle-8.5/bin" >> $GITHUB_PATH
 
     - name: Build Debug APK
-      run: gradle assembleDebug --info --stacktrace
+      run: |
+        gradle assembleDebug --stacktrace || {
+          echo "=========================================="
+          echo "GRACEFUL ERROR CAPTURE: BUILD FAILED"
+          echo "=========================================="
+          exit 1
+        }
 
     - name: Upload APK Artifact
       if: success()
