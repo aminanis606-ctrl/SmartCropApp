@@ -31,8 +31,7 @@ jobs:
 
     - name: Build Debug APK
       run: |
-        export org.gradle.jvmargs="-Xmx3g -Dfile.encoding=UTF-8"
-        gradle assembleDebug --no-daemon --stacktrace || {
+        gradle assembleDebug --no-daemon -Dorg.gradle.jvmargs="-Xmx3g -Dfile.encoding=UTF-8" --stacktrace || {
           echo "=========================================="
           echo "GRACEFUL ERROR CAPTURE: BUILD FAILED"
           echo "=========================================="
