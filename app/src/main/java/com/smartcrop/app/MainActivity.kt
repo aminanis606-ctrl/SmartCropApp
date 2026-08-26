@@ -1,14 +1,15 @@
 package com.smartcrop.app
-package com.smartcrop.app
 
 import android.os.Bundle
 import android.view.SurfaceView
 import androidx.appcompat.app.AppCompatActivity
+import com.google.mediapipe.tasks.vision.facedetector.FaceDetector
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var surfaceView: SurfaceView
     private lateinit var cameraSmoother: SpringSmoother
+    private var faceDetector: FaceDetector? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -23,9 +24,20 @@ class MainActivity : AppCompatActivity() {
         // Inisialisasi peredam pegas untuk kehalusan gerakan framing vertikal (9:16)
         cameraSmoother = SpringSmoother(stiffness = 0.12f, damping = 0.75f)
 
-        // Simulasi titik koordinat wajah terdeteksi dari frame video (X Center)
-        val mockFaceX = 640f
-        val targetCroppedX = cameraSmoother.update(mockFaceX)
+        // Konfigurasi awal Face Detector (Akan dimuat saat runtime)
+        setupFaceDetector()
+    }
+
+    private fun setupFaceDetector() {
+        try {
+            // Konfigurasi dasar opsi deteksi wajah MediaPipe lokal
+            val optionsBuilder = FaceDetector.FaceDetectorOptions.builder()
+                .setRunningMode(com.google.mediapipe.tasks.vision.core.RunningMode.IMAGE)
+
+            // Catatan: Model file (.task) akan dimuat dari asset direktori pada tahap berikutnya
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 }
 
