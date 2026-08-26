@@ -3,6 +3,8 @@ package com.smartcrop.app
 import android.os.Bundle
 import android.view.SurfaceView
 import androidx.appcompat.app.AppCompatActivity
+import com.google.mediapipe.tasks.core.BaseOptions
+import com.google.mediapipe.tasks.vision.core.RunningMode
 import com.google.mediapipe.tasks.vision.facedetector.FaceDetector
 
 class MainActivity : AppCompatActivity() {
@@ -24,17 +26,22 @@ class MainActivity : AppCompatActivity() {
         // Inisialisasi peredam pegas untuk kehalusan gerakan framing vertikal (9:16)
         cameraSmoother = SpringSmoother(stiffness = 0.12f, damping = 0.75f)
 
-        // Konfigurasi awal Face Detector (Akan dimuat saat runtime)
+        // Muat Face Detector dengan model aset lokal
         setupFaceDetector()
     }
 
     private fun setupFaceDetector() {
         try {
-            // Konfigurasi dasar opsi deteksi wajah MediaPipe lokal
-            val optionsBuilder = FaceDetector.FaceDetectorOptions.builder()
-                .setRunningMode(com.google.mediapipe.tasks.vision.core.RunningMode.IMAGE)
+            val baseOptions = BaseOptions.builder()
+                .setModelAssetPath("face_detector.task")
+                .build()
 
-            // Catatan: Model file (.task) akan dimuat dari asset direktori pada tahap berikutnya
+            val options = FaceDetector.FaceDetectorOptions.builder()
+                .setBaseOptions(baseOptions)
+                .setRunningMode(RunningMode.IMAGE)
+                .build()
+
+            faceDetector = FaceDetector.createFromOptions(this, options)
         } catch (e: Exception) {
             e.printStackTrace()
         }
