@@ -1,8 +1,13 @@
 package com.smartcrop.app
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.opengl.GLSurfaceView
 import android.os.Bundle
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import com.google.mediapipe.tasks.core.BaseOptions
 import com.google.mediapipe.tasks.vision.core.RunningMode
 import com.google.mediapipe.tasks.vision.facedetector.FaceDetector
@@ -15,11 +20,49 @@ class MainActivity : AppCompatActivity() {
     private var faceDetector: FaceDetector? = null
     private var frameProcessor: FrameProcessor? = null
 
+    companion object {
+        private const val CAMERA_PERMISSION_CODE = 100
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        initSmartCropPipeline()
+        if (checkCameraPermission()) {
+            initSmartCropPipeline()
+        } else {
+            requestCameraPermission()
+        }
+    }
+
+    private fun checkCameraPermission(): Boolean {
+        return ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.CAMERA
+        ) == PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun requestCameraPermission() {
+        ActivityCompat.requestPermissions(
+            this,
+            arrayOf(Manifest.permission.CAMERA),
+            CAMERA_PERMISSION_CODE
+        )
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == CAMERA_PERMISSION_CODE) {
+            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                initSmartCropPipeline()
+            } else {
+                Toast.makeText(this, "Izin kamera diperlukan untuk Smart Crop!", Toast.LENGTH_LONG).show()
+            }
+        }
     }
 
     private fun initSmartCropPipeline() {
