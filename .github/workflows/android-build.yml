@@ -27,7 +27,7 @@ jobs:
         echo "$PWD/gradle-8.5/bin" >> $GITHUB_PATH
 
     - name: Build Debug APK
-      run: gradle assembleDebug
+      run: gradle assembleDebug --stacktrace --info
 
     - name: Upload APK Artifact
       uses: actions/upload-artifact@v4
