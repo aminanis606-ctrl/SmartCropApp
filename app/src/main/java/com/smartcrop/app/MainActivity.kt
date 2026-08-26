@@ -12,6 +12,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var surfaceView: SurfaceView
     private lateinit var cameraSmoother: SpringSmoother
     private var faceDetector: FaceDetector? = null
+    private var frameProcessor: FrameProcessor? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -28,6 +29,9 @@ class MainActivity : AppCompatActivity() {
 
         // Muat Face Detector dengan model aset lokal
         setupFaceDetector()
+
+        // Hubungkan ke FrameProcessor
+        frameProcessor = FrameProcessor(faceDetector, cameraSmoother)
     }
 
     private fun setupFaceDetector() {
