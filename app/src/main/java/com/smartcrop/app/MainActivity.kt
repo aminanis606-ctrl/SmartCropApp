@@ -1,17 +1,27 @@
 package com.smartcrop.app
+package com.smartcrop.app
 
 import android.os.Bundle
+import android.view.SurfaceView
 import androidx.appcompat.app.AppCompatActivity
 
 class MainActivity : AppCompatActivity() {
+
+    private lateinit var surfaceView: SurfaceView
+    private lateinit var cameraSmoother: SpringSmoother
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
+
         initSmartCropPipeline()
     }
 
     private fun initSmartCropPipeline() {
+        surfaceView = findViewById(R.id.surfaceView)
+
         // Inisialisasi peredam pegas untuk kehalusan gerakan framing vertikal (9:16)
-        val cameraSmoother = SpringSmoother(stiffness = 0.12f, damping = 0.75f)
+        cameraSmoother = SpringSmoother(stiffness = 0.12f, damping = 0.75f)
 
         // Simulasi titik koordinat wajah terdeteksi dari frame video (X Center)
         val mockFaceX = 640f
