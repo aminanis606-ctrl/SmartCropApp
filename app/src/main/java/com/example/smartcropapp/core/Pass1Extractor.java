@@ -2,8 +2,6 @@ package com.example.smartcropapp.core;
 
 import android.content.Context;
 import android.graphics.Bitmap;
-import android.media.MediaExtractor;
-import android.media.MediaFormat;
 import android.media.MediaMetadataRetriever;
 import android.net.Uri;
 import android.util.Log;
@@ -25,40 +23,43 @@ import java.util.List;
 
 public class Pass1Extractor {
     private static final String TAG = "Pass1Extractor";
-    private static final long INTERVAL_US = 500_000L; // sample tiap 500ms
+    private static final long INTERVAL_US = 500_000L;
     private static final String MODEL_ASSET = "face_landmarker.task";
+    private static final int MAX_FACES = 2;
+    private static final int HIST_GRID = 8;
+    private static final float CUT_THRESHOLD = 0.35f;
 
     public static File extract(Context context, Uri sourceVideoUri, File outputFile) {
         FaceLandmarker faceLandmarker = null;
         MediaMetadataRetriever retriever = new MediaMetadataRetriever();
 
         try {
-            Log.i(TAG, "Memulai Pass 1: Multi-Face Extraction (setNumFaces = 2)...");
+            Log.i(TAG, "Pass 1: multi-face + shot-boundary detection...");
             retriever.setDataSource(context, sourceVideoUri);
 
             long durationMs = 0;
             String durationStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION);
             if (durationStr != null) durationMs = Long.parseLong(durationStr);
             long durationUs = durationMs * 1000L;
-            if (durationUs <= 0) durationUs = 10_000_000L; // fallback aman
+            if (durationUs <= 0) durationUs = 10_000_000L;
 
-            BaseOptions baseOptions = BaseOptions.builder()
-                    .setModelAssetPath(MODEL_ASSET)
-                    .build();
-
-            // Set numFaces ke 2 untuk menangkap wide shot (dua orang sisi kiri/kanan)
+            BaseOptions baseOptions = BaseOptions.builder().setModelAssetPath(MODEL_ASSET).build();
             FaceLandmarker.FaceLandmarkerOptions options = FaceLandmarker.FaceLandmarkerOptions.builder()
                     .setBaseOptions(baseOptions)
                     .setRunningMode(RunningMode.IMAGE)
-                    .setNumFaces(2)
+                    .setNumFaces(MAX_FACES)
                     .build();
-
             faceLandmarker = FaceLandmarker.createFromOptions(context, options);
 
-            JSONArray framesArray = new JSONArray();
+            JSONArray shotsArray = new JSONArray();
+            JSONArray currentSamples = new JSONArray();
+            int shotId = 0;
+            long shotStartMs = 0;
+            float[] prevHistogram = null;
+
             long currentTimeUs = 0;
             int sampleCount = 0;
-            int multiFaceDetectedCount = 0;
+            int detectedAnyCount = 0;
 
             while (currentTimeUs <= durationUs) {
                 Bitmap rawBitmap = retriever.getFrameAtTime(currentTimeUs, MediaMetadataRetriever.OPTION_CLOSEST_SYNC);
@@ -72,32 +73,50 @@ public class Pass1Extractor {
                     }
 
                     if (argbBitmap != null) {
+                        // --- Shot boundary check via spatial brightness grid diff ---
+                        float[] hist = computeGrayHistogram(argbBitmap);
+                        if (prevHistogram != null) {
+                            float diff = histogramDiff(prevHistogram, hist);
+                            if (diff > CUT_THRESHOLD) {
+                                JSONObject shotObj = new JSONObject();
+                                shotObj.put("shotId", shotId);
+                                shotObj.put("startMs", shotStartMs);
+                                shotObj.put("samples", currentSamples);
+                                shotsArray.put(shotObj);
+
+                                Log.i(TAG, "SHOT CUT -> shotId=" + shotId + " t=" + (currentTimeUs / 1000) + "ms diff=" + diff);
+
+                                shotId++;
+                                shotStartMs = currentTimeUs / 1000;
+                                currentSamples = new JSONArray();
+                            }
+                        } else {
+                            shotStartMs = currentTimeUs / 1000;
+                        }
+                        prevHistogram = hist;
+
+                        // --- Face detection ---
                         MPImage mpImage = new BitmapImageBuilder(argbBitmap).build();
                         FaceLandmarkerResult result = faceLandmarker.detect(mpImage);
 
-                        JSONObject frameObj = new JSONObject();
-                        frameObj.put("t", currentTimeUs / 1000);
-
-                        JSONArray candidatesArray = new JSONArray();
-
-                        if (result != null && result.faceLandmarks() != null && !result.faceLandmarks().isEmpty()) {
-                            if (result.faceLandmarks().size() > 1) {
-                                multiFaceDetectedCount++;
-                            }
-
-                            // Loop semua wajah yang terdeteksi dalam frame ini (maksimal 2)
+                        JSONArray facesArray = new JSONArray();
+                        if (result != null && !result.faceLandmarks().isEmpty()) {
                             for (List<NormalizedLandmark> landmarks : result.faceLandmarks()) {
                                 float[] bbox = computeBoundingBox(landmarks);
                                 JSONObject faceObj = new JSONObject();
                                 faceObj.put("x", bbox[0]);
                                 faceObj.put("y", bbox[1]);
                                 faceObj.put("size", bbox[2]);
-                                candidatesArray.put(faceObj);
+                                facesArray.put(faceObj);
                             }
+                            detectedAnyCount++;
                         }
 
-                        frameObj.put("candidates", candidatesArray);
-                        framesArray.put(frameObj);
+                        JSONObject sampleObj = new JSONObject();
+                        sampleObj.put("t", currentTimeUs / 1000);
+                        sampleObj.put("faces", facesArray);
+                        currentSamples.put(sampleObj);
+
                         argbBitmap.recycle();
                     }
                 }
@@ -105,21 +124,26 @@ public class Pass1Extractor {
                 currentTimeUs += INTERVAL_US;
             }
 
-            Log.i(TAG, "Pass 1 Selesai. Total sample: " + sampleCount + ", Frame dengan multi-wajah (>1): " + multiFaceDetectedCount);
+            JSONObject lastShot = new JSONObject();
+            lastShot.put("shotId", shotId);
+            lastShot.put("startMs", shotStartMs);
+            lastShot.put("samples", currentSamples);
+            shotsArray.put(lastShot);
 
-            // Bungkus dalam root JSON terstruktur baru
+            Log.i(TAG, "Total shot: " + (shotId + 1) + ", sample dgn wajah: " + detectedAnyCount + "/" + sampleCount);
+
             JSONObject root = new JSONObject();
-            root.put("frames", framesArray);
+            root.put("shots", shotsArray);
 
             try (FileOutputStream fos = new FileOutputStream(outputFile)) {
                 fos.write(root.toString().getBytes());
             }
 
-            Log.i(TAG, "Trajectory multi-wajah tersimpan di: " + outputFile.getAbsolutePath());
+            Log.i(TAG, "Pass 1 selesai: " + outputFile.getAbsolutePath());
             return outputFile;
 
         } catch (Exception e) {
-            Log.e(TAG, "Gagal pada Pass 1 Multi-Face", e);
+            Log.e(TAG, "Gagal pada Pass 1", e);
             throw new RuntimeException("Pass 1 gagal: " + e.getMessage(), e);
         } finally {
             if (faceLandmarker != null) {
@@ -127,6 +151,44 @@ public class Pass1Extractor {
             }
             try { retriever.release(); } catch (Exception ignored) {}
         }
+    }
+
+    /** Spatial grayscale brightness grid 8x8 untuk deteksi perubahan shot. */
+    private static float[] computeGrayHistogram(Bitmap bitmap) {
+        int w = bitmap.getWidth();
+        int h = bitmap.getHeight();
+        float[] hist = new float[HIST_GRID * HIST_GRID];
+        int cellW = Math.max(1, w / HIST_GRID);
+        int cellH = Math.max(1, h / HIST_GRID);
+
+        for (int gy = 0; gy < HIST_GRID; gy++) {
+            for (int gx = 0; gx < HIST_GRID; gx++) {
+                long sum = 0;
+                int count = 0;
+                int startX = gx * cellW;
+                int startY = gy * cellH;
+                int endX = Math.min(w, startX + cellW);
+                int endY = Math.min(h, startY + cellH);
+                for (int y = startY; y < endY; y += 4) {
+                    for (int x = startX; x < endX; x += 4) {
+                        int pixel = bitmap.getPixel(x, y);
+                        int r = (pixel >> 16) & 0xFF;
+                        int g = (pixel >> 8) & 0xFF;
+                        int b = pixel & 0xFF;
+                        sum += (r + g + b) / 3;
+                        count++;
+                    }
+                }
+                hist[gy * HIST_GRID + gx] = count > 0 ? (sum / (float) count) / 255f : 0f;
+            }
+        }
+        return hist;
+    }
+
+    private static float histogramDiff(float[] a, float[] b) {
+        float sum = 0f;
+        for (int i = 0; i < a.length; i++) sum += Math.abs(a[i] - b[i]);
+        return sum / a.length;
     }
 
     private static float[] computeBoundingBox(List<NormalizedLandmark> landmarks) {
@@ -137,9 +199,6 @@ public class Pass1Extractor {
             minY = Math.min(minY, lm.y());
             maxY = Math.max(maxY, lm.y());
         }
-        float centerX = (minX + maxX) / 2f;
-        float centerY = (minY + maxY) / 2f;
-        float height = maxY - minY;
-        return new float[]{centerX, centerY, height};
+        return new float[]{(minX + maxX) / 2f, (minY + maxY) / 2f, maxY - minY};
     }
 }
