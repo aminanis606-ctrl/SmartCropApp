@@ -8,7 +8,6 @@ import android.os.Build;
 import android.os.Bundle;
 import android.widget.Button;
 import android.widget.TextView;
-import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
@@ -16,6 +15,7 @@ import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import com.example.smartcropapp.core.Pass1Extractor;
 import com.example.smartcropapp.core.Pass2Optimizer;
+import com.example.smartcropapp.core.Pass3Renderer;
 import java.io.File;
 
 public class MainActivity extends AppCompatActivity {
@@ -75,28 +75,28 @@ public class MainActivity extends AppCompatActivity {
         if (requestCode == PICK_VIDEO_REQUEST && resultCode == RESULT_OK && data != null) {
             Uri videoUri = data.getData();
             if (videoUri != null) {
-                tvStatus.setText("Menjalankan Pass 1 & Pass 2 (Skeleton)...");
+                tvStatus.setText("Menjalankan Pipeline End-to-End (Pass 1 -> 2 -> 3)...");
                 
                 File analysisFile = new File(getFilesDir(), "analysis.json");
                 File trajectoryFile = new File(getFilesDir(), "trajectory.json");
+                File outputVideoFile = new File(getFilesDir(), "output_final.mp4");
 
                 new Thread(() -> {
                     try {
-                        // 1. Eksekusi Pass 1 (Ekstraksi Hulu)
+                        // 1. Pass 1
                         Pass1Extractor.extract(getApplicationContext(), videoUri, analysisFile);
                         
-                        // 2. Eksekusi Pass 2 (Skeleton Optimization)
+                        // 2. Pass 2
                         Pass2Optimizer.optimize(analysisFile, trajectoryFile);
 
-                        // 3. Laporkan hasil secara jujur sesuai realitas MVP saat ini
+                        // 3. Pass 3 (Real OpenGL Crop Rendering)
+                        Pass3Renderer.render(getApplicationContext(), videoUri, trajectoryFile, outputVideoFile);
+
                         runOnUiThread(() -> {
-                            tvStatus.setText("PASS 1 & 2 SUKSES (Skeleton)!\n" +
-                                    "Analysis: analysis.json\n" +
-                                    "Trajectory: trajectory.json\n" +
-                                    "(Menunggu Pass 3 untuk Render Video)");
+                            tvStatus.setText("RENDER SUKSES SELESAI!\nFile output tersimpan di:\n" + outputVideoFile.getAbsolutePath());
                         });
                     } catch (Exception e) {
-                        runOnUiThread(() -> tvStatus.setText("Gagal: " + e.getMessage()));
+                        runOnUiThread(() -> tvStatus.setText("Render Gagal: " + e.getMessage()));
                     }
                 }).start();
             }
