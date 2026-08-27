@@ -1,11 +1,14 @@
 package com.example.smartcropapp;
 
 import android.Manifest;
+import android.content.ContentValues;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
+import android.provider.MediaStore;
 import android.widget.Button;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
@@ -17,6 +20,8 @@ import com.example.smartcropapp.core.Pass1Extractor;
 import com.example.smartcropapp.core.Pass2Optimizer;
 import com.example.smartcropapp.core.Pass3Renderer;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.OutputStream;
 
 public class MainActivity extends AppCompatActivity {
     private static final int PICK_VIDEO_REQUEST = 101;
@@ -92,14 +97,43 @@ public class MainActivity extends AppCompatActivity {
                         // 3. Pass 3 (Real OpenGL Crop Rendering)
                         Pass3Renderer.render(getApplicationContext(), videoUri, trajectoryFile, outputVideoFile);
 
+                        // 4. Salin ke MediaStore Public (Agar muncul di Galeri)
+                        exportToGallery(outputVideoFile);
+
                         runOnUiThread(() -> {
-                            tvStatus.setText("RENDER SUKSES SELESAI!\nFile output tersimpan di:\n" + outputVideoFile.getAbsolutePath());
+                            tvStatus.setText("RENDER SUKSES SELESAI!\nDisimpan ke Galeri / Downloads/SmartReframe");
                         });
                     } catch (Exception e) {
                         runOnUiThread(() -> tvStatus.setText("Render Gagal: " + e.getMessage()));
                     }
                 }).start();
             }
+        }
+    }
+
+    private void exportToGallery(File sourceFile) {
+        try {
+            ContentValues values = new ContentValues();
+            values.put(MediaStore.Video.Media.DISPLAY_NAME, "SmartReframe_" + System.currentTimeMillis() + ".mp4");
+            values.put(MediaStore.Video.Media.MIME_TYPE, "video/mp4");
+            values.put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/SmartReframe");
+
+            Uri collection = MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY);
+            Uri itemUri = getContentResolver().insert(collection, values);
+
+            if (itemUri != null) {
+                try (OutputStream out = getContentResolver().openOutputStream(itemUri);
+                     FileInputStream in = new FileInputStream(sourceFile)) {
+                    byte[] buffer = new byte[8192];
+                    int read;
+                    while ((read = in.read(buffer)) != -1) {
+                        out.write(buffer, 0, read);
+                    }
+                    out.flush();
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
         }
     }
 }

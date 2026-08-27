@@ -22,6 +22,7 @@ public class Pass1Extractor {
             retriever.setDataSource(context, videoUri);
             String durationStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION);
             long durationMs = durationStr != null ? Long.parseLong(durationStr) : 0;
+            if (durationMs <= 0) durationMs = 5000; // Fallback aman 5 detik jika metadata gagal
 
             JSONArray facesArray = new JSONArray();
             JSONArray cutsArray = new JSONArray();
@@ -29,12 +30,13 @@ public class Pass1Extractor {
 
             Log.i(TAG, "Memulai Pass 1 ekstraksi untuk durasi: " + durationMs + " ms");
 
+            // Walking Skeleton: Menghasilkan titik sampel konstan yang valid
             for (long timeMs = 0; timeMs < durationMs; timeMs += SAMPLE_INTERVAL_MS) {
                 JSONObject faceSample = new JSONObject();
                 faceSample.put("t", timeMs);
                 faceSample.put("x", 0.5);
-                faceSample.put("y", 0.5);
-                faceSample.put("size", 0.2);
+                faceSample.put("y", 0.4);
+                faceSample.put("size", 0.3);
                 faceSample.put("mar", 0.0);
                 facesArray.put(faceSample);
             }
