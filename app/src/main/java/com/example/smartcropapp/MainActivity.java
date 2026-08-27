@@ -94,25 +94,15 @@ public class MainActivity extends AppCompatActivity {
                         Pass2Optimizer.optimize(analysisFile, trajectoryFile);
                         Pass3Renderer.render(getApplicationContext(), videoUri, trajectoryFile, outputVideoFile);
 
-                        // Coba ekspor dan tangkap pesan error detail jika gagal
-                        String exportMsg;
-                        boolean exported = false;
-                        try {
-                            exportToGallery(outputVideoFile);
-                            exported = true;
-                            exportMsg = "Tersimpan ke Downloads/SmartReframe";
-                        } catch (Exception ex) {
-                            Log.e(TAG, "Export detail error", ex);
-                            exportMsg = "Gagal export: " + ex.getMessage();
-                        }
-
-                        boolean finalExported = exported;
-                        String finalMsg = exportMsg;
+                        // Tangkap alasan error export secara spesifik
+                        String exportError = exportToGallery(outputVideoFile);
                         long finalSize = outputVideoFile.exists() ? outputVideoFile.length() : 0;
                         
                         runOnUiThread(() -> {
-                            tvStatus.setText((finalExported ? "RENDER + EXPORT SUKSES!\n" : "Render OK, Gagal Export MediaStore.\n")
-                                    + "Info: " + finalMsg + "\nUkuran: " + finalSize + " bytes");
+                            String msg = (exportError == null)
+                                    ? "RENDER + EXPORT SUKSES!\n"
+                                    : "Render OK, GAGAL export:\n" + (exportError.length() > 400 ? exportError.substring(0, 400) + "..." : exportError) + "\n";
+                            tvStatus.setText(msg + "Ukuran: " + finalSize + " bytes");
                         });
                     } catch (Exception e) {
                         Log.e(TAG, "Pipeline Gagal", e);
@@ -128,29 +118,33 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void exportToGallery(File sourceFile) throws Exception {
-        ContentValues values = new ContentValues();
-        values.put(MediaStore.Video.Media.DISPLAY_NAME, "SmartReframe_" + System.currentTimeMillis() + ".mp4");
-        values.put(MediaStore.Video.Media.MIME_TYPE, "video/mp4");
-        values.put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/SmartReframe");
-        values.put(MediaStore.Video.Media.IS_PENDING, 1);
+    private String exportToGallery(File sourceFile) {
+        try {
+            ContentValues values = new ContentValues();
+            values.put(MediaStore.Video.Media.DISPLAY_NAME, "SmartReframe_" + System.currentTimeMillis() + ".mp4");
+            values.put(MediaStore.Video.Media.MIME_TYPE, "video/mp4");
+            values.put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/SmartReframe");
 
-        Uri collection = MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY);
-        Uri itemUri = getContentResolver().insert(collection, values);
-        if (itemUri == null) throw new RuntimeException("MediaStore insert() mengembalikan null");
+            Uri collection = MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY);
+            Uri itemUri = getContentResolver().insert(collection, values);
+            if (itemUri == null) return "insert() mengembalikan null (kemungkinan izin atau path tidak diizinkan)";
 
-        try (OutputStream out = getContentResolver().openOutputStream(itemUri);
-             FileInputStream in = new FileInputStream(sourceFile)) {
-            byte[] buffer = new byte[8192];
-            int read;
-            while ((read = in.read(buffer)) != -1) {
-                out.write(buffer, 0, read);
+            try (OutputStream out = getContentResolver().openOutputStream(itemUri);
+                 FileInputStream in = new FileInputStream(sourceFile)) {
+                if (out == null) return "openOutputStream() null untuk uri: " + itemUri;
+                byte[] buffer = new byte[8192];
+                int read;
+                while ((read = in.read(buffer)) != -1) {
+                    out.write(buffer, 0, read);
+                }
+                out.flush();
             }
-            out.flush();
+            
+            // Tandai selesai jika pakai IS_PENDING, atau biarkan selesai otomatis
+            return null; // null = sukses tanpa error
+        } catch (Exception e) {
+            Log.e(TAG, "Gagal ekspor ke MediaStore", e);
+            return Log.getStackTraceString(e);
         }
-
-        values.clear();
-        values.put(MediaStore.Video.Media.IS_PENDING, 0);
-        getContentResolver().update(itemUri, values, null, null);
     }
 }
