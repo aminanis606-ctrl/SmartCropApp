@@ -12,7 +12,13 @@ import java.nio.charset.StandardCharsets;
 
 public class Pass2Optimizer {
     private static final String TAG = "Pass2Optimizer";
-    private static final int SMOOTH_WINDOW = 3;
+    
+    // Batas tengah kosong yang harus dihindari saat ada dua wajah
+    private static final float CENTER_MIN = 0.40f;
+    private static final float CENTER_MAX = 0.60f;
+    
+    // Hysteresis: berapa sample berturut-turut dibutuhkan untuk pindah target (Kiri <-> Kanan)
+    private static final int HYSTERESIS_THRESHOLD = 3; 
 
     public static void optimize(File analysisFile, File trajectoryFile) throws Exception {
         String content;
@@ -31,66 +37,134 @@ public class Pass2Optimizer {
             JSONObject shot = shots.getJSONObject(s);
             JSONArray samples = shot.getJSONArray("samples");
 
-            Log.i(TAG, "Shot " + shot.optInt("shotId")
+            Log.i(TAG, "Processing Shot " + shot.optInt("shotId")
                     + " samples=" + samples.length()
                     + " startMs=" + shot.optLong("startMs"));
 
-            float[] rawX = new float[samples.length()];
-            float[] rawY = new float[samples.length()];
-            float[] rawSize = new float[samples.length()];
-            long[] times = new long[samples.length()];
-            boolean hasEverHadFace = false;
-            float lastX = 0.5f, lastY = 0.4f, lastSize = 0.3f;
+            int n = samples.length();
+            if (n == 0) continue;
 
-            for (int i = 0; i < samples.length(); i++) {
+            float[] lockedX = new float[n];
+            float[] lockedY = new float[n];
+            float[] lockedSize = new float[n];
+            long[] times = new long[n];
+
+            float lastX = 0.3f; 
+            float lastY = 0.4f;
+            float lastSize = 0.3f;
+            boolean hasEverHadFace = false;
+
+            String currentSide = "LEFT"; 
+            String pendingSide = "LEFT";
+            int sideCounter = 0;
+
+            // --- TAHAP 1: DISCRETE TARGET SELECTION & LOCKING ---
+            for (int i = 0; i < n; i++) {
                 JSONObject sample = samples.getJSONObject(i);
                 times[i] = sample.optLong("t", 0);
                 JSONArray faces = sample.getJSONArray("faces");
 
                 if (faces.length() == 0) {
-                    rawX[i] = lastX; rawY[i] = lastY; rawSize[i] = lastSize;
+                    lockedX[i] = lastX;
+                    lockedY[i] = lastY;
+                    lockedSize[i] = lastSize;
+                } else if (faces.length() == 1) {
+                    JSONObject f0 = faces.getJSONObject(0);
+                    float x = (float) f0.optDouble("x", lastX);
+                    float y = (float) f0.optDouble("y", lastY);
+                    float size = (float) f0.optDouble("size", lastSize);
+
+                    lockedX[i] = x;
+                    lockedY[i] = y;
+                    lockedSize[i] = size;
+
+                    lastX = x; lastY = y; lastSize = size;
+                    currentSide = (x < 0.5f) ? "LEFT" : "RIGHT";
+                    pendingSide = currentSide;
+                    sideCounter = 0;
+                    hasEverHadFace = true;
                 } else {
-                    JSONObject best = faces.getJSONObject(0);
-                    float bestSize = (float) best.optDouble("size", 0);
-                    for (int f = 1; f < faces.length(); f++) {
+                    JSONObject leftFace = null;
+                    JSONObject rightFace = null;
+                    float minX = 2f, maxX = -1f;
+
+                    for (int f = 0; f < faces.length(); f++) {
                         JSONObject cand = faces.getJSONObject(f);
-                        float candSize = (float) cand.optDouble("size", 0);
-                        if (candSize > bestSize) { best = cand; bestSize = candSize; }
+                        float cx = (float) cand.optDouble("x", 0.5f);
+                        if (cx < minX) { minX = cx; leftFace = cand; }
+                        if (cx > maxX) { maxX = cx; rightFace = cand; }
                     }
-                    rawX[i] = (float) best.optDouble("x", lastX);
-                    rawY[i] = (float) best.optDouble("y", lastY);
-                    rawSize[i] = (float) best.optDouble("size", lastSize);
-                    lastX = rawX[i]; lastY = rawY[i]; lastSize = rawSize[i];
+
+                    String targetSide = currentSide;
+                    JSONObject chosenFace = ("RIGHT".equals(currentSide)) ? rightFace : leftFace;
+
+                    if (leftFace != null && rightFace != null) {
+                        float lx = (float) leftFace.optDouble("x", 0.3f);
+                        float rx = (float) rightFace.optDouble("x", 0.7f);
+                        
+                        String detectedSide = (Math.abs(lx - lastX) < Math.abs(rx - lastX)) ? "LEFT" : "RIGHT";
+                        
+                        if (!detectedSide.equals(pendingSide)) {
+                            pendingSide = detectedSide;
+                            sideCounter = 1;
+                        } else {
+                            sideCounter++;
+                        }
+
+                        if (sideCounter >= HYSTERESIS_THRESHOLD) {
+                            currentSide = pendingSide;
+                        }
+                        
+                        targetSide = currentSide;
+                        chosenFace = ("RIGHT".equals(targetSide)) ? rightFace : leftFace;
+                    } else if (leftFace != null) {
+                        chosenFace = leftFace;
+                    } else if (rightFace != null) {
+                        chosenFace = rightFace;
+                    }
+
+                    float x = (float) chosenFace.optDouble("x", lastX);
+                    float y = (float) chosenFace.optDouble("y", lastY);
+                    float size = (float) chosenFace.optDouble("size", lastSize);
+
+                    if (x >= CENTER_MIN && x <= CENTER_MAX) {
+                        x = ("LEFT".equals(targetSide)) ? 0.30f : 0.70f;
+                    }
+
+                    lockedX[i] = x;
+                    lockedY[i] = y;
+                    lockedSize[i] = size;
+
+                    lastX = x; lastY = y; lastSize = size;
                     hasEverHadFace = true;
                 }
-
-                Log.i(TAG, "t=" + times[i]
-                        + " faces=" + faces.length()
-                        + " targetX=" + rawX[i]
-                        + " targetSize=" + rawSize[i]);
             }
 
             if (!hasEverHadFace) {
-                for (int i = 0; i < rawX.length; i++) { rawX[i] = 0.5f; rawY[i] = 0.4f; rawSize[i] = 0.3f; }
+                for (int i = 0; i < n; i++) {
+                    lockedX[i] = 0.5f; lockedY[i] = 0.4f; lockedSize[i] = 0.3f;
+                }
                 Log.w(TAG, "Shot " + shot.optInt("shotId") + ": tidak ada wajah sama sekali, fallback center.");
             }
 
-            for (int i = 0; i < rawX.length; i++) {
-                float sumX = 0, sumY = 0, sumSize = 0, weightSum = 0;
-                int lo = Math.max(0, i - SMOOTH_WINDOW);
-                int hi = Math.min(rawX.length - 1, i + SMOOTH_WINDOW);
-                for (int j = lo; j <= hi; j++) {
-                    float weight = 1f / (1 + Math.abs(i - j));
-                    sumX += rawX[j] * weight;
-                    sumY += rawY[j] * weight;
-                    sumSize += rawSize[j] * weight;
-                    weightSum += weight;
+            // --- TAHAP 2: CAMERA MOTION SMOOTHING (EMA pada Target Ter-lock) ---
+            float smoothX = lockedX[0];
+            float smoothY = lockedY[0];
+            float smoothSize = lockedSize[0];
+            float alpha = 0.4f; 
+
+            for (int i = 0; i < n; i++) {
+                if (i > 0) {
+                    smoothX = smoothX + alpha * (lockedX[i] - smoothX);
+                    smoothY = smoothY + alpha * (lockedY[i] - smoothY);
+                    smoothSize = smoothSize + alpha * (lockedSize[i] - smoothSize);
                 }
+
                 JSONObject faceObj = new JSONObject();
                 faceObj.put("t", times[i]);
-                faceObj.put("x", sumX / weightSum);
-                faceObj.put("y", sumY / weightSum);
-                faceObj.put("size", sumSize / weightSum);
+                faceObj.put("x", (double) smoothX);
+                faceObj.put("y", (double) smoothY);
+                faceObj.put("size", (double) smoothSize);
                 finalFaces.put(faceObj);
             }
         }
@@ -102,6 +176,6 @@ public class Pass2Optimizer {
             fos.write(outputRoot.toString().getBytes());
         }
 
-        Log.i(TAG, "Pass 2 selesai, " + shots.length() + " shot diproses -> " + trajectoryFile.getAbsolutePath());
+        Log.i(TAG, "Pass 2 V3 (Target Lock + Hysteresis + Anti-Center) selesai -> " + trajectoryFile.getAbsolutePath());
     }
 }
