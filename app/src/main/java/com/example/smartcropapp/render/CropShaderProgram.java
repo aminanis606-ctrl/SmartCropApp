@@ -58,13 +58,23 @@ public class CropShaderProgram {
                       float cropWidthNorm, float cropHeightNorm) {
         GLES20.glUseProgram(program);
 
+        // KUNCI UTAMA: Batasi ukuran crop agar tidak melebihi dimensi tekstur sumber (0.0 s.d 1.0)
+        float clampedW = Math.max(0.1f, Math.min(1.0f, cropWidthNorm));
+        float clampedH = Math.max(0.1f, Math.min(1.0f, cropHeightNorm));
+
+        // Kunci posisi pusat agar area sampling tidak keluar dari rentang [0, 1]
+        float halfW = clampedW / 2f;
+        float halfH = clampedH / 2f;
+        float safeCenterX = Math.max(halfW, Math.min(1.0f - halfW, cropCenterX));
+        float safeCenterY = Math.max(halfH, Math.min(1.0f - halfH, cropCenterY));
+
         float[] mvpMatrix = new float[16];
         Matrix.setIdentityM(mvpMatrix, 0);
 
         float[] cropMatrix = new float[16];
         Matrix.setIdentityM(cropMatrix, 0);
-        Matrix.translateM(cropMatrix, 0, cropCenterX - cropWidthNorm / 2f, cropCenterY - cropHeightNorm / 2f, 0);
-        Matrix.scaleM(cropMatrix, 0, cropWidthNorm, cropHeightNorm, 1f);
+        Matrix.translateM(cropMatrix, 0, safeCenterX - halfW, safeCenterY - halfH, 0);
+        Matrix.scaleM(cropMatrix, 0, clampedW, clampedH, 1f);
 
         float[] combinedST = new float[16];
         Matrix.multiplyMM(combinedST, 0, stMatrix, 0, cropMatrix, 0);
