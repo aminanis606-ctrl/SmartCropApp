@@ -15,7 +15,7 @@ jobs:
       uses: actions/checkout@v4
 
     - name: Set up JDK 17
-      uses: actions/setup-java@v5
+      uses: actions/setup-java@v4
       with:
         distribution: 'temurin'
         java-version: '17'
@@ -33,9 +33,9 @@ jobs:
       run: |
         gradle assembleDebug --no-daemon -Dorg.gradle.jvmargs="-Xmx3g" || {
           echo "=========================================="
-          echo "MENAMPILKAN STACKTRACE ERROR GRADLE:"
+          echo "MENCARI PESAN 'What went wrong:':"
           echo "=========================================="
-          gradle assembleDebug --no-daemon --stacktrace -Dorg.gradle.jvmargs="-Xmx3g"
+          find ~/.gradle -name "*.log" -exec grep -A 10 "What went wrong:" {} + 2>/dev/null || true
           exit 1
         }
 
