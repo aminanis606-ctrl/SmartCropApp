@@ -14,6 +14,7 @@ import android.view.Surface;
 
 import com.example.smartcropapp.render.CropShaderProgram;
 import com.example.smartcropapp.render.GlRenderContext;
+import com.example.smartcropapp.core.TrajectoryReader;
 
 import java.io.File;
 import java.nio.ByteBuffer;
