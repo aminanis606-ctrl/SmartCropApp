@@ -33,7 +33,7 @@ public class Pass1Extractor {
         MediaMetadataRetriever retriever = new MediaMetadataRetriever();
 
         try {
-            Log.i(TAG, "Memulai Pass 1: MediaPipe FaceLandmarker (real detection)...");
+            Log.i(TAG, "Memulai Pass 1: Multi-Face Extraction (setNumFaces = 2)...");
             retriever.setDataSource(context, sourceVideoUri);
 
             long durationMs = 0;
@@ -42,30 +42,29 @@ public class Pass1Extractor {
             long durationUs = durationMs * 1000L;
             if (durationUs <= 0) durationUs = 10_000_000L; // fallback aman
 
-            // --- Setup MediaPipe FaceLandmarker (mode IMAGE, sinkron per-frame) ---
             BaseOptions baseOptions = BaseOptions.builder()
                     .setModelAssetPath(MODEL_ASSET)
                     .build();
 
+            // Set numFaces ke 2 untuk menangkap wide shot (dua orang sisi kiri/kanan)
             FaceLandmarker.FaceLandmarkerOptions options = FaceLandmarker.FaceLandmarkerOptions.builder()
                     .setBaseOptions(baseOptions)
                     .setRunningMode(RunningMode.IMAGE)
-                    .setNumFaces(1)
+                    .setNumFaces(2)
                     .build();
 
             faceLandmarker = FaceLandmarker.createFromOptions(context, options);
 
-            JSONArray facesArray = new JSONArray();
+            JSONArray framesArray = new JSONArray();
             long currentTimeUs = 0;
-            int detectedCount = 0;
             int sampleCount = 0;
+            int multiFaceDetectedCount = 0;
 
             while (currentTimeUs <= durationUs) {
                 Bitmap rawBitmap = retriever.getFrameAtTime(currentTimeUs, MediaMetadataRetriever.OPTION_CLOSEST_SYNC);
                 sampleCount++;
 
                 if (rawBitmap != null) {
-                    // KONVERSI WAJIB: Pastikan format Bitmap ARGB_8888 sesuai standar MediaPipe
                     Bitmap argbBitmap = rawBitmap;
                     if (rawBitmap.getConfig() != Bitmap.Config.ARGB_8888) {
                         argbBitmap = rawBitmap.copy(Bitmap.Config.ARGB_8888, true);
@@ -76,18 +75,29 @@ public class Pass1Extractor {
                         MPImage mpImage = new BitmapImageBuilder(argbBitmap).build();
                         FaceLandmarkerResult result = faceLandmarker.detect(mpImage);
 
-                        if (result != null && !result.faceLandmarks().isEmpty()) {
-                            List<NormalizedLandmark> landmarks = result.faceLandmarks().get(0);
-                            float[] bbox = computeBoundingBox(landmarks);
+                        JSONObject frameObj = new JSONObject();
+                        frameObj.put("t", currentTimeUs / 1000);
 
-                            JSONObject faceObj = new JSONObject();
-                            faceObj.put("t", currentTimeUs / 1000);
-                            faceObj.put("x", bbox[0]);
-                            faceObj.put("y", bbox[1]);
-                            faceObj.put("size", bbox[2]);
-                            facesArray.put(faceObj);
-                            detectedCount++;
+                        JSONArray candidatesArray = new JSONArray();
+
+                        if (result != null && result.faceLandmarks() != null && !result.faceLandmarks().isEmpty()) {
+                            if (result.faceLandmarks().size() > 1) {
+                                multiFaceDetectedCount++;
+                            }
+
+                            // Loop semua wajah yang terdeteksi dalam frame ini (maksimal 2)
+                            for (List<NormalizedLandmark> landmarks : result.faceLandmarks()) {
+                                float[] bbox = computeBoundingBox(landmarks);
+                                JSONObject faceObj = new JSONObject();
+                                faceObj.put("x", bbox[0]);
+                                faceObj.put("y", bbox[1]);
+                                faceObj.put("size", bbox[2]);
+                                candidatesArray.put(faceObj);
+                            }
                         }
+
+                        frameObj.put("candidates", candidatesArray);
+                        framesArray.put(frameObj);
                         argbBitmap.recycle();
                     }
                 }
@@ -95,40 +105,27 @@ public class Pass1Extractor {
                 currentTimeUs += INTERVAL_US;
             }
 
-            Log.i(TAG, "Deteksi wajah: " + detectedCount + " dari " + sampleCount + " sample.");
+            Log.i(TAG, "Pass 1 Selesai. Total sample: " + sampleCount + ", Frame dengan multi-wajah (>1): " + multiFaceDetectedCount);
 
-            if (facesArray.length() == 0) {
-                Log.w(TAG, "TIDAK ADA wajah terdeteksi sama sekali -- fallback ke titik tengah statis.");
-                JSONObject fallback = new JSONObject();
-                fallback.put("t", 0);
-                fallback.put("x", 0.5f);
-                fallback.put("y", 0.4f);
-                fallback.put("size", 0.3f);
-                facesArray.put(fallback);
-            }
-
+            // Bungkus dalam root JSON terstruktur baru
             JSONObject root = new JSONObject();
-            root.put("faces", facesArray);
+            root.put("frames", framesArray);
 
             try (FileOutputStream fos = new FileOutputStream(outputFile)) {
                 fos.write(root.toString().getBytes());
             }
 
-            Log.i(TAG, "Pass 1 selesai: " + outputFile.getAbsolutePath());
+            Log.i(TAG, "Trajectory multi-wajah tersimpan di: " + outputFile.getAbsolutePath());
             return outputFile;
 
         } catch (Exception e) {
-            Log.e(TAG, "Gagal pada Pass 1", e);
+            Log.e(TAG, "Gagal pada Pass 1 Multi-Face", e);
             throw new RuntimeException("Pass 1 gagal: " + e.getMessage(), e);
         } finally {
             if (faceLandmarker != null) {
-                try {
-                    faceLandmarker.close();
-                } catch (Exception ignored) {}
+                try { faceLandmarker.close(); } catch (Exception ignored) {}
             }
-            try {
-                retriever.release();
-            } catch (Exception ignored) {}
+            try { retriever.release(); } catch (Exception ignored) {}
         }
     }
 
