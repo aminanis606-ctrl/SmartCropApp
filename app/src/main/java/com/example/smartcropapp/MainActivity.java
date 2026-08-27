@@ -8,12 +8,14 @@ import android.os.Build;
 import android.os.Bundle;
 import android.widget.Button;
 import android.widget.TextView;
+import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import com.example.smartcropapp.core.Pass1Extractor;
+import com.example.smartcropapp.core.Pass2Optimizer;
 import java.io.File;
 
 public class MainActivity extends AppCompatActivity {
@@ -50,14 +52,13 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Override
-    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions,
-                                            @NonNull int[] grantResults) {
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == PERMISSION_REQUEST_CODE) {
             if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                 openVideoPicker();
             } else {
-                tvStatus.setText("Izin akses video ditolak. Tidak bisa memilih video.");
+                tvStatus.setText("Izin akses video ditolak.");
             }
         }
     }
@@ -74,14 +75,26 @@ public class MainActivity extends AppCompatActivity {
         if (requestCode == PICK_VIDEO_REQUEST && resultCode == RESULT_OK && data != null) {
             Uri videoUri = data.getData();
             if (videoUri != null) {
-                tvStatus.setText("Memproses ekstraksi Pass 1...");
-                File outputFile = new File(getFilesDir(), "analysis.json");
+                tvStatus.setText("Menjalankan Pass 1 & Pass 2 (Skeleton)...");
+                
+                File analysisFile = new File(getFilesDir(), "analysis.json");
+                File trajectoryFile = new File(getFilesDir(), "trajectory.json");
 
                 new Thread(() -> {
                     try {
-                        Pass1Extractor.extract(getApplicationContext(), videoUri, outputFile);
-                        runOnUiThread(() ->
-                            tvStatus.setText("Sukses! Berkas tersimpan di:\n" + outputFile.getAbsolutePath()));
+                        // 1. Eksekusi Pass 1 (Ekstraksi Hulu)
+                        Pass1Extractor.extract(getApplicationContext(), videoUri, analysisFile);
+                        
+                        // 2. Eksekusi Pass 2 (Skeleton Optimization)
+                        Pass2Optimizer.optimize(analysisFile, trajectoryFile);
+
+                        // 3. Laporkan hasil secara jujur sesuai realitas MVP saat ini
+                        runOnUiThread(() -> {
+                            tvStatus.setText("PASS 1 & 2 SUKSES (Skeleton)!\n" +
+                                    "Analysis: analysis.json\n" +
+                                    "Trajectory: trajectory.json\n" +
+                                    "(Menunggu Pass 3 untuk Render Video)");
+                        });
                     } catch (Exception e) {
                         runOnUiThread(() -> tvStatus.setText("Gagal: " + e.getMessage()));
                     }
