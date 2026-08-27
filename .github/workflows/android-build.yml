@@ -33,8 +33,9 @@ jobs:
       run: |
         gradle assembleDebug --no-daemon -Dorg.gradle.jvmargs="-Xmx3g -Dfile.encoding=UTF-8" --stacktrace || {
           echo "=========================================="
-          echo "GRACEFUL ERROR CAPTURE: BUILD FAILED"
+          echo "DUMPING RECENT GRADLE LOGS:"
           echo "=========================================="
+          find ~/.gradle -name "*.log" -exec cat {} + 2>/dev/null || true
           exit 1
         }
 
