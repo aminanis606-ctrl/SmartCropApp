@@ -31,7 +31,13 @@ jobs:
 
     - name: Build Debug APK
       run: |
-        gradle assembleDebug --no-daemon -Dorg.gradle.jvmargs="-Xmx3g"
+        gradle assembleDebug --no-daemon -Dorg.gradle.jvmargs="-Xmx3g" || {
+          echo "=========================================="
+          echo "MENAMPILKAN STACKTRACE ERROR GRADLE:"
+          echo "=========================================="
+          gradle assembleDebug --no-daemon --stacktrace -Dorg.gradle.jvmargs="-Xmx3g"
+          exit 1
+        }
 
     - name: Upload APK Artifact
       if: success()
