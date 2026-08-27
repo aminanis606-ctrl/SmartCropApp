@@ -94,13 +94,12 @@ public class MainActivity extends AppCompatActivity {
                         Pass2Optimizer.optimize(analysisFile, trajectoryFile);
                         Pass3Renderer.render(getApplicationContext(), videoUri, trajectoryFile, outputVideoFile);
 
-                        // Tangkap alasan error export secara spesifik
                         String exportError = exportToGallery(outputVideoFile);
                         long finalSize = outputVideoFile.exists() ? outputVideoFile.length() : 0;
                         
                         runOnUiThread(() -> {
                             String msg = (exportError == null)
-                                    ? "RENDER + EXPORT SUKSES!\n"
+                                    ? "RENDER + EXPORT SUKSES!\nCek folder Movies/SmartReframe\n"
                                     : "Render OK, GAGAL export:\n" + (exportError.length() > 400 ? exportError.substring(0, 400) + "..." : exportError) + "\n";
                             tvStatus.setText(msg + "Ukuran: " + finalSize + " bytes");
                         });
@@ -123,11 +122,12 @@ public class MainActivity extends AppCompatActivity {
             ContentValues values = new ContentValues();
             values.put(MediaStore.Video.Media.DISPLAY_NAME, "SmartReframe_" + System.currentTimeMillis() + ".mp4");
             values.put(MediaStore.Video.Media.MIME_TYPE, "video/mp4");
-            values.put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/SmartReframe");
+            // Diubah ke DIRECTORY_MOVIES karena Android melarang DIRECTORY_DOWNLOADS untuk Video.Media
+            values.put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/SmartReframe");
 
             Uri collection = MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY);
             Uri itemUri = getContentResolver().insert(collection, values);
-            if (itemUri == null) return "insert() mengembalikan null (kemungkinan izin atau path tidak diizinkan)";
+            if (itemUri == null) return "insert() mengembalikan null";
 
             try (OutputStream out = getContentResolver().openOutputStream(itemUri);
                  FileInputStream in = new FileInputStream(sourceFile)) {
@@ -139,9 +139,7 @@ public class MainActivity extends AppCompatActivity {
                 }
                 out.flush();
             }
-            
-            // Tandai selesai jika pakai IS_PENDING, atau biarkan selesai otomatis
-            return null; // null = sukses tanpa error
+            return null; // Sukses tanpa error
         } catch (Exception e) {
             Log.e(TAG, "Gagal ekspor ke MediaStore", e);
             return Log.getStackTraceString(e);
