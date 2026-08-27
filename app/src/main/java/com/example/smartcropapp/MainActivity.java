@@ -9,6 +9,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.provider.MediaStore;
+import android.util.Log;
 import android.widget.Button;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
@@ -24,6 +25,7 @@ import java.io.FileInputStream;
 import java.io.OutputStream;
 
 public class MainActivity extends AppCompatActivity {
+    private static final String TAG = "MainActivity";
     private static final int PICK_VIDEO_REQUEST = 101;
     private static final int PERMISSION_REQUEST_CODE = 202;
     private TextView tvStatus;
@@ -80,7 +82,7 @@ public class MainActivity extends AppCompatActivity {
         if (requestCode == PICK_VIDEO_REQUEST && resultCode == RESULT_OK && data != null) {
             Uri videoUri = data.getData();
             if (videoUri != null) {
-                tvStatus.setText("Menjalankan Pipeline End-to-End (Pass 1 -> 2 -> 3)...");
+                tvStatus.setText("Menjalankan Pipeline End-to-End...");
                 
                 File analysisFile = new File(getFilesDir(), "analysis.json");
                 File trajectoryFile = new File(getFilesDir(), "trajectory.json");
@@ -97,21 +99,30 @@ public class MainActivity extends AppCompatActivity {
                         // 3. Pass 3 (Real OpenGL Crop Rendering)
                         Pass3Renderer.render(getApplicationContext(), videoUri, trajectoryFile, outputVideoFile);
 
-                        // 4. Salin ke MediaStore Public (Agar muncul di Galeri)
-                        exportToGallery(outputVideoFile);
+                        // 4. Salin ke MediaStore Public dengan pelaporan status jujur
+                        boolean exported = exportToGallery(outputVideoFile);
 
+                        long finalSize = outputVideoFile.exists() ? outputVideoFile.length() : 0;
                         runOnUiThread(() -> {
-                            tvStatus.setText("RENDER SUKSES SELESAI!\nDisimpan ke Galeri / Downloads/SmartReframe");
+                            tvStatus.setText((exported ? "RENDER + EXPORT SUKSES!\n" : "Render OK, TAPI GAGAL export ke galeri.\n")
+                                    + "Ukuran: " + finalSize + " bytes\nPath: " + outputVideoFile.getAbsolutePath());
                         });
                     } catch (Exception e) {
-                        runOnUiThread(() -> tvStatus.setText("Render Gagal: " + e.getMessage()));
+                        Log.e(TAG, "Pipeline Gagal", e);
+                        String fullTrace = Log.getStackTraceString(e);
+                        // Perbaikan: gunakan .length() bukan .length
+                        if (fullTrace.length() > 500) {
+                            fullTrace = fullTrace.substring(0, 500) + "...";
+                        }
+                        String finalTrace = fullTrace;
+                        runOnUiThread(() -> tvStatus.setText("GAGAL:\n" + finalTrace));
                     }
                 }).start();
             }
         }
     }
 
-    private void exportToGallery(File sourceFile) {
+    private boolean exportToGallery(File sourceFile) {
         try {
             ContentValues values = new ContentValues();
             values.put(MediaStore.Video.Media.DISPLAY_NAME, "SmartReframe_" + System.currentTimeMillis() + ".mp4");
@@ -120,20 +131,21 @@ public class MainActivity extends AppCompatActivity {
 
             Uri collection = MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY);
             Uri itemUri = getContentResolver().insert(collection, values);
+            if (itemUri == null) throw new RuntimeException("MediaStore insert() mengembalikan null");
 
-            if (itemUri != null) {
-                try (OutputStream out = getContentResolver().openOutputStream(itemUri);
-                     FileInputStream in = new FileInputStream(sourceFile)) {
-                    byte[] buffer = new byte[8192];
-                    int read;
-                    while ((read = in.read(buffer)) != -1) {
-                        out.write(buffer, 0, read);
-                    }
-                    out.flush();
+            try (OutputStream out = getContentResolver().openOutputStream(itemUri);
+                 FileInputStream in = new FileInputStream(sourceFile)) {
+                byte[] buffer = new byte[8192];
+                int read;
+                while ((read = in.read(buffer)) != -1) {
+                    out.write(buffer, 0, read);
                 }
+                out.flush();
             }
+            return true;
         } catch (Exception e) {
-            e.printStackTrace();
+            Log.e(TAG, "Gagal ekspor ke MediaStore", e);
+            return false;
         }
     }
 }
