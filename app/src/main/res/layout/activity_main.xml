@@ -18,7 +18,7 @@
         android:id="@+id/btnSelectVideo"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Pilih Video & Ekstrak Metadata"
+        android:text="Pilih Video &amp; Ekstrak Metadata"
         android:layout_marginTop="24dp"/>
 
     <TextView
