@@ -2,6 +2,8 @@ package com.example.smartcropapp.core;
 
 import android.content.Context;
 import android.graphics.Bitmap;
+import android.media.MediaExtractor;
+import android.media.MediaFormat;
 import android.media.MediaMetadataRetriever;
 import android.net.Uri;
 import android.util.Log;
@@ -23,7 +25,7 @@ import java.util.List;
 
 public class Pass1Extractor {
     private static final String TAG = "Pass1Extractor";
-    private static final long INTERVAL_US = 500_000L;
+    private static final long INTERVAL_US = 500_000L; // sample tiap 500ms
     private static final String MODEL_ASSET = "face_landmarker.task";
 
     public static File extract(Context context, Uri sourceVideoUri, File outputFile) {
@@ -38,8 +40,9 @@ public class Pass1Extractor {
             String durationStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION);
             if (durationStr != null) durationMs = Long.parseLong(durationStr);
             long durationUs = durationMs * 1000L;
-            if (durationUs <= 0) durationUs = 10_000_000L;
+            if (durationUs <= 0) durationUs = 10_000_000L; // fallback aman
 
+            // --- Setup MediaPipe FaceLandmarker (mode IMAGE, sinkron per-frame) ---
             BaseOptions baseOptions = BaseOptions.builder()
                     .setModelAssetPath(MODEL_ASSET)
                     .build();
@@ -58,26 +61,35 @@ public class Pass1Extractor {
             int sampleCount = 0;
 
             while (currentTimeUs <= durationUs) {
-                Bitmap frameBitmap = retriever.getFrameAtTime(currentTimeUs, MediaMetadataRetriever.OPTION_CLOSEST_SYNC);
+                Bitmap rawBitmap = retriever.getFrameAtTime(currentTimeUs, MediaMetadataRetriever.OPTION_CLOSEST_SYNC);
                 sampleCount++;
 
-                if (frameBitmap != null) {
-                    MPImage mpImage = new BitmapImageBuilder(frameBitmap).build();
-                    FaceLandmarkerResult result = faceLandmarker.detect(mpImage);
-
-                    if (result != null && !result.faceLandmarks().isEmpty()) {
-                        List<NormalizedLandmark> landmarks = result.faceLandmarks().get(0);
-                        float[] bbox = computeBoundingBox(landmarks);
-
-                        JSONObject faceObj = new JSONObject();
-                        faceObj.put("t", currentTimeUs / 1000);
-                        faceObj.put("x", bbox[0]);
-                        faceObj.put("y", bbox[1]);
-                        faceObj.put("size", bbox[2]);
-                        facesArray.put(faceObj);
-                        detectedCount++;
+                if (rawBitmap != null) {
+                    // KONVERSI WAJIB: Pastikan format Bitmap ARGB_8888 sesuai standar MediaPipe
+                    Bitmap argbBitmap = rawBitmap;
+                    if (rawBitmap.getConfig() != Bitmap.Config.ARGB_8888) {
+                        argbBitmap = rawBitmap.copy(Bitmap.Config.ARGB_8888, true);
+                        rawBitmap.recycle();
                     }
-                    frameBitmap.recycle();
+
+                    if (argbBitmap != null) {
+                        MPImage mpImage = new BitmapImageBuilder(argbBitmap).build();
+                        FaceLandmarkerResult result = faceLandmarker.detect(mpImage);
+
+                        if (result != null && !result.faceLandmarks().isEmpty()) {
+                            List<NormalizedLandmark> landmarks = result.faceLandmarks().get(0);
+                            float[] bbox = computeBoundingBox(landmarks);
+
+                            JSONObject faceObj = new JSONObject();
+                            faceObj.put("t", currentTimeUs / 1000);
+                            faceObj.put("x", bbox[0]);
+                            faceObj.put("y", bbox[1]);
+                            faceObj.put("size", bbox[2]);
+                            facesArray.put(faceObj);
+                            detectedCount++;
+                        }
+                        argbBitmap.recycle();
+                    }
                 }
 
                 currentTimeUs += INTERVAL_US;
@@ -86,7 +98,7 @@ public class Pass1Extractor {
             Log.i(TAG, "Deteksi wajah: " + detectedCount + " dari " + sampleCount + " sample.");
 
             if (facesArray.length() == 0) {
-                Log.w(TAG, "TIDAK ADA wajah terdeteksi -- fallback ke titik tengah statis.");
+                Log.w(TAG, "TIDAK ADA wajah terdeteksi sama sekali -- fallback ke titik tengah statis.");
                 JSONObject fallback = new JSONObject();
                 fallback.put("t", 0);
                 fallback.put("x", 0.5f);
@@ -109,12 +121,14 @@ public class Pass1Extractor {
             Log.e(TAG, "Gagal pada Pass 1", e);
             throw new RuntimeException("Pass 1 gagal: " + e.getMessage(), e);
         } finally {
-            if (faceLandmarker != null) faceLandmarker.close();
+            if (faceLandmarker != null) {
+                try {
+                    faceLandmarker.close();
+                } catch (Exception ignored) {}
+            }
             try {
                 retriever.release();
-            } catch (Exception ignored) {
-                // release() bisa throw IOException di beberapa versi API, aman diabaikan saat cleanup
-            }
+            } catch (Exception ignored) {}
         }
     }
 
