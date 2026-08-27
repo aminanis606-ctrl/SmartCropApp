@@ -31,11 +31,11 @@ jobs:
 
     - name: Build Debug APK
       run: |
-        gradle assembleDebug --no-daemon -Dorg.gradle.jvmargs="-Xmx3g -Dfile.encoding=UTF-8" --stacktrace || {
+        gradle assembleDebug --no-daemon -Dorg.gradle.jvmargs="-Xmx3g" || {
           echo "=========================================="
-          echo "DUMPING RECENT GRADLE LOGS:"
+          echo "MENCARI PENYEBAB UTAMA ERROR (FAILURE):"
           echo "=========================================="
-          find ~/.gradle -name "*.log" -exec cat {} + 2>/dev/null || true
+          find ~/.gradle -name "*.log" -exec grep -C 3 "FAILURE:" {} + 2>/dev/null || true
           exit 1
         }
 
