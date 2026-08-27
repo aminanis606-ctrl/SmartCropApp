@@ -31,13 +31,7 @@ jobs:
 
     - name: Build Debug APK
       run: |
-        gradle assembleDebug --no-daemon -Dorg.gradle.jvmargs="-Xmx3g" || {
-          echo "=========================================="
-          echo "MENCARI PENYEBAB UTAMA ERROR (FAILURE):"
-          echo "=========================================="
-          find ~/.gradle -name "*.log" -exec grep -C 3 "FAILURE:" {} + 2>/dev/null || true
-          exit 1
-        }
+        gradle assembleDebug --no-daemon -Dorg.gradle.jvmargs="-Xmx3g"
 
     - name: Upload APK Artifact
       if: success()
