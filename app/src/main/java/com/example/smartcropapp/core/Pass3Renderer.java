@@ -163,8 +163,8 @@ public class Pass3Renderer {
                         GLES20.glClearColor(0f, 0f, 0f, 1f);
 
                         if ("split".equals(shotResult.layout)
-                                && shotResult.top != null
-                                && shotResult.bottom != null) {
+                                && shotResult.bottom != null
+                                && shotResult.top != null) {
 
                             /*
                              * SPLIT MODE
