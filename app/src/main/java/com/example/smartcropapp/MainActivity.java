@@ -149,29 +149,58 @@ public class MainActivity extends AppCompatActivity {
     }
     private void exportDiagnostics(File analysisFile, File trajectoryFile) {
         try {
-            File dir = new File(
-                    android.os.Environment.getExternalStoragePublicDirectory(
-                            android.os.Environment.DIRECTORY_MOVIES),
-                    "SmartReframe"
-            );
+            exportJsonToMediaStore(analysisFile, "analysis.json");
+            exportJsonToMediaStore(trajectoryFile, "trajectory.json");
 
-            if (!dir.exists()) dir.mkdirs();
-
-            copyFile(analysisFile, new File(dir, "analysis.json"));
-            copyFile(trajectoryFile, new File(dir, "trajectory.json"));
-
-            Log.i("SmartCropApp",
-                    "DIAGNOSTIC EXPORTED: " + dir.getAbsolutePath());
+            Log.i(TAG, "DIAGNOSTIC EXPORTED TO Movies/SmartReframe");
 
         } catch (Exception e) {
-            Log.e("SmartCropApp",
-                    "DIAGNOSTIC EXPORT FAILED", e);
+            Log.e(TAG, "DIAGNOSTIC EXPORT FAILED", e);
         }
     }
 
-    private void copyFile(File source, File target) throws Exception {
-        try (FileInputStream in = new FileInputStream(source);
-             FileOutputStream out = new FileOutputStream(target)) {
+    private void exportJsonToMediaStore(File sourceFile, String displayName)
+            throws Exception {
+
+        android.content.ContentValues values =
+                new android.content.ContentValues();
+
+        values.put(
+                android.provider.MediaStore.Files.FileColumns.DISPLAY_NAME,
+                displayName);
+
+        values.put(
+                android.provider.MediaStore.Files.FileColumns.MIME_TYPE,
+                "application/json");
+
+        if (android.os.Build.VERSION.SDK_INT >= 29) {
+            values.put(
+                    android.provider.MediaStore.Files.FileColumns.RELATIVE_PATH,
+                    android.os.Environment.DIRECTORY_MOVIES
+                            + "/SmartReframe");
+            values.put(
+                    android.provider.MediaStore.Files.FileColumns.IS_PENDING,
+                    1);
+        }
+
+        android.net.Uri uri =
+                getContentResolver().insert(
+                        android.provider.MediaStore.Files.getContentUri("external"),
+                        values);
+
+        if (uri == null) {
+            throw new Exception("MediaStore gagal membuat file: " + displayName);
+        }
+
+        try (
+                java.io.InputStream in =
+                        new java.io.FileInputStream(sourceFile);
+                java.io.OutputStream out =
+                        getContentResolver().openOutputStream(uri)
+        ) {
+            if (out == null) {
+                throw new Exception("OutputStream null: " + displayName);
+            }
 
             byte[] buffer = new byte[8192];
             int len;
@@ -181,6 +210,18 @@ public class MainActivity extends AppCompatActivity {
             }
 
             out.flush();
+
+        } finally {
+            if (android.os.Build.VERSION.SDK_INT >= 29) {
+                android.content.ContentValues done =
+                        new android.content.ContentValues();
+
+                done.put(
+                        android.provider.MediaStore.Files.FileColumns.IS_PENDING,
+                        0);
+
+                getContentResolver().update(uri, done, null, null);
+            }
         }
     }
 
