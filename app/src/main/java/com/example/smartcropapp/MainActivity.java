@@ -21,6 +21,7 @@ import com.example.smartcropapp.core.Pass1Extractor;
 import com.example.smartcropapp.core.Pass2Optimizer;
 import com.example.smartcropapp.core.Pass3Renderer;
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.FileInputStream;
 import java.io.OutputStream;
 
