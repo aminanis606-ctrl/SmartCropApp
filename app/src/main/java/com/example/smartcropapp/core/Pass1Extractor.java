@@ -24,7 +24,7 @@ public class Pass1Extractor {
     private static final int GRID_Y = 8;
     private static final int PIXEL_STEP = 4;
 
-    private static final float CUT_THRESHOLD = 0.18f;
+    private static final float CUT_THRESHOLD = 0.12f;
 
     private static final float WINDOW_START = 0.20f;
     private static final float WINDOW_END = 0.80f;
