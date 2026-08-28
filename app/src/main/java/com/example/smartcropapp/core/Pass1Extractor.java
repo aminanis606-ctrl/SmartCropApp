@@ -105,7 +105,7 @@ public class Pass1Extractor {
                         retriever.getFrameAtTime(
                                 timeUs,
                                 MediaMetadataRetriever
-                                        .OPTION_CLOSEST_SYNC);
+                                        .OPTION_CLOSEST);
 
                 if (bitmap == null) {
                     continue;
