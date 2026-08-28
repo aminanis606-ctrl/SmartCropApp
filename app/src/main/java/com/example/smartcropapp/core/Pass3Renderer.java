@@ -227,18 +227,8 @@ public class Pass3Renderer {
                                     glContext
                                             .getDecoderTextureId(),
                                     stMatrix,
-                                    clamp(
-                                            shotResult
-                                                    .top
-                                                    .x,
-                                            0.05f,
-                                            0.95f),
-                                    clamp(
-                                            shotResult
-                                                    .top
-                                                    .y,
-                                            0.05f,
-                                            0.95f),
+                                    0.25f,
+                                    0.50f,
                                     cropWidthNorm,
                                     cropHeightNorm);
 
@@ -258,18 +248,8 @@ public class Pass3Renderer {
                                     glContext
                                             .getDecoderTextureId(),
                                     stMatrix,
-                                    clamp(
-                                            shotResult
-                                                    .bottom
-                                                    .x,
-                                            0.05f,
-                                            0.95f),
-                                    clamp(
-                                            shotResult
-                                                    .bottom
-                                                    .y,
-                                            0.05f,
-                                            0.95f),
+                                    0.75f,
+                                    0.50f,
                                     cropWidthNorm,
                                     cropHeightNorm);
 
