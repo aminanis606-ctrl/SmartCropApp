@@ -136,7 +136,7 @@ public class MainActivity extends AppCompatActivity {
             }
 
             ContentValues values = new ContentValues();
-            values.put(MediaStore.Video.Media.DISPLAY_NAME, "SmartReframe_" + layoutLabel + "_" + System.currentTimeMillis() + ".mp4");
+            values.put(MediaStore.Video.Media.DISPLAY_NAME, layoutLabel + "_" + System.currentTimeMillis() + ".mp4");
             values.put(MediaStore.Video.Media.MIME_TYPE, "video/mp4");
             // Diubah ke DIRECTORY_MOVIES karena Android melarang DIRECTORY_DOWNLOADS untuk Video.Media
             values.put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/SmartReframe");
