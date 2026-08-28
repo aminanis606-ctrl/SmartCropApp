@@ -870,6 +870,41 @@ public class Pass1Extractor {
             return "single";
         }
 
+        /*
+         * BILATERAL SPLIT OVERRIDE
+         *
+         * Jika kedua sisi sama-sama aktif, cukup seimbang,
+         * stabil, dan secara relatif jauh lebih bertekstur
+         * daripada center, jangan biarkan center membatalkan
+         * deteksi dua-orang.
+         *
+         * Ini penting untuk wide shot:
+         *
+         *      PERSON        EMPTY        PERSON
+         *        L             C             R
+         *
+         * Center kosong bukan alasan untuk memilih center.
+         */
+
+        boolean bilateralEvidence =
+                leftStrong &&
+                rightStrong &&
+                balance >= 0.30f &&
+                stableEnough &&
+                separation >= 1.15f;
+
+        if (bilateralEvidence) {
+
+            Log.i(
+                    TAG,
+                    "BILATERAL_OVERRIDE => SPLIT" +
+                    " separation=" + separation +
+                    " balance=" + balance +
+                    " stability=" + stability);
+
+            return "split";
+        }
+
         if (!centerNotDominant) {
 
             Log.i(
