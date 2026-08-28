@@ -128,7 +128,7 @@ public class MainActivity extends AppCompatActivity {
                         java.nio.file.Files.readAllBytes(analysisFile.toPath()),
                         java.nio.charset.StandardCharsets.UTF_8);
 
-                if (json.matches("(?s).*\\"layout\\"\\s*:\\s*\\"split\\".*")) {
+                if (json.contains("\"layout\"") && json.contains("\"split\"")) {
                     layoutLabel = "SPLIT";
                 }
             } catch (Exception diagnosticError) {
