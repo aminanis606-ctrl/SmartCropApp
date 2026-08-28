@@ -92,6 +92,7 @@ public class MainActivity extends AppCompatActivity {
                     try {
                         Pass1Extractor.extract(getApplicationContext(), videoUri, analysisFile);
                         Pass2Optimizer.optimize(analysisFile, trajectoryFile);
+                        exportDiagnostics(analysisFile, trajectoryFile);
                         Pass3Renderer.render(getApplicationContext(), videoUri, trajectoryFile, outputVideoFile);
 
                         String exportError = exportToGallery(outputVideoFile);
@@ -145,4 +146,41 @@ public class MainActivity extends AppCompatActivity {
             return Log.getStackTraceString(e);
         }
     }
+    private void exportDiagnostics(File analysisFile, File trajectoryFile) {
+        try {
+            File dir = new File(
+                    android.os.Environment.getExternalStoragePublicDirectory(
+                            android.os.Environment.DIRECTORY_MOVIES),
+                    "SmartReframe"
+            );
+
+            if (!dir.exists()) dir.mkdirs();
+
+            copyFile(analysisFile, new File(dir, "analysis.json"));
+            copyFile(trajectoryFile, new File(dir, "trajectory.json"));
+
+            Log.i("SmartCropApp",
+                    "DIAGNOSTIC EXPORTED: " + dir.getAbsolutePath());
+
+        } catch (Exception e) {
+            Log.e("SmartCropApp",
+                    "DIAGNOSTIC EXPORT FAILED", e);
+        }
+    }
+
+    private void copyFile(File source, File target) throws Exception {
+        try (FileInputStream in = new FileInputStream(source);
+             FileOutputStream out = new FileOutputStream(target)) {
+
+            byte[] buffer = new byte[8192];
+            int len;
+
+            while ((len = in.read(buffer)) != -1) {
+                out.write(buffer, 0, len);
+            }
+
+            out.flush();
+        }
+    }
+
 }
