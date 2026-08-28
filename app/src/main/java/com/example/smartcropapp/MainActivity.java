@@ -96,7 +96,7 @@ public class MainActivity extends AppCompatActivity {
                         exportDiagnostics(analysisFile, trajectoryFile);
                         Pass3Renderer.render(getApplicationContext(), videoUri, trajectoryFile, outputVideoFile);
 
-                        String exportError = exportToGallery(outputVideoFile);
+                        String exportError = exportToGallery(outputVideoFile, analysisFile);
                         long finalSize = outputVideoFile.exists() ? outputVideoFile.length() : 0;
                         
                         runOnUiThread(() -> {
@@ -119,10 +119,24 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private String exportToGallery(File sourceFile) {
+    private String exportToGallery(File sourceFile, File analysisFile) {
         try {
+            String layoutLabel = "SINGLE";
+
+            try {
+                String json = new String(
+                        java.nio.file.Files.readAllBytes(analysisFile.toPath()),
+                        java.nio.charset.StandardCharsets.UTF_8);
+
+                if (json.matches("(?s).*\\"layout\\"\\s*:\\s*\\"split\\".*")) {
+                    layoutLabel = "SPLIT";
+                }
+            } catch (Exception diagnosticError) {
+                Log.w(TAG, "Gagal membaca layout diagnostic", diagnosticError);
+            }
+
             ContentValues values = new ContentValues();
-            values.put(MediaStore.Video.Media.DISPLAY_NAME, "SmartReframe_" + System.currentTimeMillis() + ".mp4");
+            values.put(MediaStore.Video.Media.DISPLAY_NAME, "SmartReframe_" + layoutLabel + "_" + System.currentTimeMillis() + ".mp4");
             values.put(MediaStore.Video.Media.MIME_TYPE, "video/mp4");
             // Diubah ke DIRECTORY_MOVIES karena Android melarang DIRECTORY_DOWNLOADS untuk Video.Media
             values.put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/SmartReframe");
