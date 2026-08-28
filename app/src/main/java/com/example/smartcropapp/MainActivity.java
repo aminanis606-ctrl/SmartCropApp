@@ -122,17 +122,56 @@ public class MainActivity extends AppCompatActivity {
     private String exportToGallery(File sourceFile, File analysisFile) {
         try {
             String layoutLabel = "SINGLE";
+            int shotCount = 0;
+            int splitCount = 0;
+            int singleCount = 0;
 
             try {
                 String json = new String(
                         java.nio.file.Files.readAllBytes(analysisFile.toPath()),
                         java.nio.charset.StandardCharsets.UTF_8);
 
-                if (json.contains("\"layout\"") && json.contains("\"split\"")) {
-                    layoutLabel = "SPLIT";
+                org.json.JSONObject root =
+                        new org.json.JSONObject(json);
+
+                org.json.JSONArray shots =
+                        root.optJSONArray("shots");
+
+                if (shots != null) {
+                    shotCount = shots.length();
+
+                    for (int i = 0; i < shots.length(); i++) {
+                        org.json.JSONObject shot = shots.optJSONObject(i);
+
+                        if (shot == null) continue;
+
+                        String layout =
+                                shot.optString("layout", "single");
+
+                        if ("split".equalsIgnoreCase(layout)) {
+                            splitCount++;
+                        } else {
+                            singleCount++;
+                        }
+                    }
                 }
+
+                if (splitCount > 0) {
+                    layoutLabel =
+                            "SHOTS" + shotCount +
+                            "_SPLIT" + splitCount +
+                            "_SINGLE" + singleCount;
+                } else {
+                    layoutLabel =
+                            "SHOTS" + shotCount +
+                            "_SINGLE" + singleCount;
+                }
+
             } catch (Exception diagnosticError) {
-                Log.w(TAG, "Gagal membaca layout diagnostic", diagnosticError);
+                Log.w(
+                        TAG,
+                        "Gagal membaca shot diagnostic",
+                        diagnosticError);
             }
 
             ContentValues values = new ContentValues();
