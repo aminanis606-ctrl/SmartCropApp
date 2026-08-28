@@ -91,6 +91,27 @@ public class Pass2Optimizer {
                     "startMs",
                     startMs);
 
+            /*
+             * PASS2 SPLIT VALIDATION
+             *
+             * Pass1 boleh mendeteksi kandidat SPLIT,
+             * tetapi Pass2 harus memastikan bahwa shot
+             * benar-benar mempunyai DUA WAJAH yang terpisah.
+             *
+             * Ini mencegah close-up satu orang menjadi SPLIT
+             * hanya karena texture/activity kiri-kanan tinggi.
+             */
+            if ("split".equals(layout) &&
+                    !hasSeparatedTwoFaces(shot)) {
+
+                Log.i(
+                        TAG,
+                        "PASS2 SPLIT REJECT -> SINGLE: " +
+                        "tidak ada dua wajah yang cukup terpisah");
+
+                layout = "single";
+            }
+
             output.put(
                     "layout",
                     layout);
@@ -190,38 +211,19 @@ public class Pass2Optimizer {
                 trajectoryFile.getAbsolutePath());
     }
 
-    private static float[] calibrateSplitShot(
+    private static boolean hasSeparatedTwoFaces(
             JSONObject shot)
             throws Exception {
 
         JSONArray samples =
                 shot.optJSONArray("samples");
 
-        /*
-         * Fallback konservatif.
-         */
-        float fallbackLeftX = 0.25f;
-        float fallbackRightX = 0.75f;
-
         if (samples == null ||
                 samples.length() == 0) {
-
-            return new float[]{
-                    fallbackLeftX,
-                    0.50f,
-                    fallbackRightX,
-                    0.50f
-            };
+            return false;
         }
 
-        double leftXSum = 0.0;
-        double rightXSum = 0.0;
-
-        double leftYSum = 0.0;
-        double rightYSum = 0.0;
-
-        double leftWeight = 0.0;
-        double rightWeight = 0.0;
+        int validSamples = 0;
 
         for (int i = 0;
              i < samples.length();
@@ -230,122 +232,285 @@ public class Pass2Optimizer {
             JSONObject sample =
                     samples.getJSONObject(i);
 
-            JSONArray texture =
-                    sample.optJSONArray("texture");
+            JSONArray faces =
+                    sample.optJSONArray("faces");
 
-            if (texture == null ||
-                    texture.length() == 0) {
+            if (faces == null ||
+                    faces.length() < 2) {
+                continue;
+            }
+
+            float leftX =
+                    Float.MAX_VALUE;
+
+            float rightX =
+                    -Float.MAX_VALUE;
+
+            for (int f = 0;
+                 f < faces.length();
+                 f++) {
+
+                JSONObject face =
+                        faces.getJSONObject(f);
+
+                float x =
+                        (float)
+                        face.optDouble(
+                                "x",
+                                0.5f);
+
+                leftX =
+                        Math.min(
+                                leftX,
+                                x);
+
+                rightX =
+                        Math.max(
+                                rightX,
+                                x);
+            }
+
+            /*
+             * Dua wajah harus mempunyai jarak horizontal
+             * minimal 0.25 frame.
+             */
+            if (rightX - leftX >= 0.25f) {
+                validSamples++;
+            }
+        }
+
+        /*
+         * Tidak cukup hanya satu frame.
+         *
+         * Minimal 2 sample harus menunjukkan
+         * dua wajah yang terpisah supaya SPLIT stabil.
+         */
+        return validSamples >= 2;
+    }
+
+    private static float[] calibrateSplitShot(
+            JSONObject shot)
+            throws Exception {
+
+        JSONArray samples =
+                shot.optJSONArray("samples");
+
+        /*
+         * Fallback konservatif:
+         * LEFT  = 0.25
+         * RIGHT = 0.75
+         */
+        float fallbackLeftX = 0.25f;
+        float fallbackRightX = 0.75f;
+
+        if (samples == null ||
+                samples.length() == 0) {
+
+            return new float[]{
+                    fallbackRightX,
+                    0.50f,
+                    fallbackLeftX,
+                    0.50f
+            };
+        }
+
+        double leftXSum = 0.0;
+        double leftYSum = 0.0;
+        double leftWeight = 0.0;
+
+        double rightXSum = 0.0;
+        double rightYSum = 0.0;
+        double rightWeight = 0.0;
+
+        int validTwoFaceSamples = 0;
+
+        /*
+         * IMPORTANT:
+         *
+         * SPLIT calibration sekarang memakai FACE,
+         * bukan texture activity.
+         *
+         * Ini mencegah:
+         * - close-up satu orang
+         * - tangan
+         * - meja
+         * - background
+         * - objek lain
+         *
+         * menjadi pasangan kiri/kanan palsu.
+         */
+        for (int i = 0;
+             i < samples.length();
+             i++) {
+
+            JSONObject sample =
+                    samples.getJSONObject(i);
+
+            JSONArray faces =
+                    sample.optJSONArray("faces");
+
+            if (faces == null ||
+                    faces.length() < 2) {
+                continue;
+            }
+
+            JSONObject leftFace = null;
+            JSONObject rightFace = null;
+
+            float minX = Float.MAX_VALUE;
+            float maxX = -Float.MAX_VALUE;
+
+            for (int f = 0;
+                 f < faces.length();
+                 f++) {
+
+                JSONObject face =
+                        faces.getJSONObject(f);
+
+                float x =
+                        (float)
+                        face.optDouble(
+                                "x",
+                                0.5f);
+
+                if (x < minX) {
+                    minX = x;
+                    leftFace = face;
+                }
+
+                if (x > maxX) {
+                    maxX = x;
+                    rightFace = face;
+                }
+            }
+
+            if (leftFace == null ||
+                    rightFace == null ||
+                    leftFace == rightFace) {
+                continue;
+            }
+
+            float lx =
+                    (float)
+                    leftFace.optDouble(
+                            "x",
+                            0.25f);
+
+            float ly =
+                    (float)
+                    leftFace.optDouble(
+                            "y",
+                            0.50f);
+
+            float ls =
+                    (float)
+                    leftFace.optDouble(
+                            "size",
+                            0.30f);
+
+            float rx =
+                    (float)
+                    rightFace.optDouble(
+                            "x",
+                            0.75f);
+
+            float ry =
+                    (float)
+                    rightFace.optDouble(
+                            "y",
+                            0.50f);
+
+            float rs =
+                    (float)
+                    rightFace.optDouble(
+                            "size",
+                            0.30f);
+
+            /*
+             * Dua wajah harus benar-benar terpisah.
+             *
+             * Jarak minimum 0.25 mencegah satu close-up
+             * atau dua deteksi yang terlalu berdekatan
+             * menghasilkan SPLIT.
+             */
+            if (rx - lx < 0.25f) {
                 continue;
             }
 
             /*
-             * GRID_X = 12
-             * GRID_Y = 8
-             *
-             * Hanya memakai area tengah vertikal.
-             * Tujuannya menghindari meja/lantai/langit
-             * sebagai sumber pusat aktivitas.
+             * Bobot berdasarkan ukuran wajah.
+             * Wajah yang lebih jelas mendapat bobot lebih besar,
+             * tetapi tidak boleh mendominasi terlalu ekstrem.
              */
+            double lw =
+                    Math.max(
+                            0.10,
+                            Math.min(
+                                    1.0,
+                                    ls));
 
-            for (int y = 1;
-                 y < 7;
-                 y++) {
+            double rw =
+                    Math.max(
+                            0.10,
+                            Math.min(
+                                    1.0,
+                                    rs));
 
-                for (int x = 0;
-                     x < 12;
-                     x++) {
+            leftXSum += lx * lw;
+            leftYSum += ly * lw;
+            leftWeight += lw;
 
-                    int index =
-                            y * 12 + x;
+            rightXSum += rx * rw;
+            rightYSum += ry * rw;
+            rightWeight += rw;
 
-                    if (index >= texture.length()) {
-                        continue;
-                    }
+            validTwoFaceSamples++;
+        }
 
-                    float activity =
-                            (float)
-                            texture.optDouble(
-                                    index,
-                                    0.0);
+        /*
+         * Tidak ada bukti dua wajah:
+         *
+         * Jangan memaksakan posisi berdasarkan texture.
+         * Fallback tetap simetris.
+         */
+        if (validTwoFaceSamples == 0) {
 
-                    /*
-                     * Non-linear boost:
-                     * aktivitas tinggi lebih berpengaruh
-                     * daripada noise kecil.
-                     */
-                    double weight =
-                            activity * activity;
+            Log.w(
+                    TAG,
+                    "SPLIT calibration: tidak ditemukan dua wajah terpisah -> fallback");
 
-                    if (weight <= 0.000001) {
-                        continue;
-                    }
-
-                    float normalizedX =
-                            (x + 0.5f) / 12f;
-
-                    float normalizedY =
-                            (y + 0.5f) / 8f;
-
-                    /*
-                     * Tengah frame sengaja tidak dipakai
-                     * untuk menentukan pusat panel.
-                     */
-                    if (normalizedX < 0.42f) {
-
-                        leftXSum +=
-                                normalizedX * weight;
-
-                        leftYSum +=
-                                normalizedY * weight;
-
-                        leftWeight +=
-                                weight;
-
-                    } else if (normalizedX > 0.58f) {
-
-                        rightXSum +=
-                                normalizedX * weight;
-
-                        rightYSum +=
-                                normalizedY * weight;
-
-                        rightWeight +=
-                                weight;
-                    }
-                }
-            }
+            /*
+             * RETURN ORDER:
+             *
+             * [TOP_X, TOP_Y, BOTTOM_X, BOTTOM_Y]
+             *
+             * TOP    = RIGHT
+             * BOTTOM = LEFT
+             */
+            return new float[]{
+                    fallbackRightX,
+                    0.50f,
+                    fallbackLeftX,
+                    0.50f
+            };
         }
 
         float leftX =
-                leftWeight > 0.0001
-                        ? (float)
-                          (leftXSum / leftWeight)
-                        : fallbackLeftX;
+                (float)
+                (leftXSum / leftWeight);
 
         float leftY =
-                leftWeight > 0.0001
-                        ? (float)
-                          (leftYSum / leftWeight)
-                        : 0.50f;
+                (float)
+                (leftYSum / leftWeight);
 
         float rightX =
-                rightWeight > 0.0001
-                        ? (float)
-                          (rightXSum / rightWeight)
-                        : fallbackRightX;
+                (float)
+                (rightXSum / rightWeight);
 
         float rightY =
-                rightWeight > 0.0001
-                        ? (float)
-                          (rightYSum / rightWeight)
-                        : 0.50f;
+                (float)
+                (rightYSum / rightWeight);
 
-        /*
-         * Safety limits.
-         *
-         * Jangan biarkan calibration masuk
-         * terlalu dekat ke tengah.
-         */
         leftX =
                 clamp(
                         leftX,
@@ -361,37 +526,54 @@ public class Pass2Optimizer {
         leftY =
                 clamp(
                         leftY,
-                        0.30f,
-                        0.70f);
+                        0.25f,
+                        0.75f);
 
         rightY =
                 clamp(
                         rightY,
-                        0.30f,
-                        0.70f);
+                        0.25f,
+                        0.75f);
 
         /*
-         * Jika kedua pusat terlalu dekat,
-         * gunakan fallback simetris.
+         * Final separation guard.
          */
         if (rightX - leftX < 0.25f) {
 
-            leftX = 0.25f;
-            rightX = 0.75f;
-
-            leftY = 0.50f;
-            rightY = 0.50f;
-
             Log.w(
                     TAG,
-                    "Split calibration terlalu dekat -> fallback");
+                    "SPLIT calibration: separation gagal -> fallback");
+
+            rightX = fallbackRightX;
+            rightY = 0.50f;
+
+            leftX = fallbackLeftX;
+            leftY = 0.50f;
         }
 
+        Log.i(
+                TAG,
+                "SPLIT FACE CALIBRATION: " +
+                "RIGHT->TOP x=" + rightX +
+                " y=" + rightY +
+                " | LEFT->BOTTOM x=" + leftX +
+                " y=" + leftY +
+                " | twoFaceSamples=" +
+                validTwoFaceSamples);
+
+        /*
+         * RETURN:
+         *
+         * index 0 = TOP X    = RIGHT
+         * index 1 = TOP Y    = RIGHT
+         * index 2 = BOTTOM X = LEFT
+         * index 3 = BOTTOM Y = LEFT
+         */
         return new float[]{
-                leftX,
-                leftY,
                 rightX,
-                rightY
+                rightY,
+                leftX,
+                leftY
         };
     }
 
