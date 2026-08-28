@@ -126,10 +126,10 @@ public class MainActivity extends AppCompatActivity {
             values.put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/SmartReframe");
 
             Uri collection = MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY);
-            Uri itemUri = getContentResolver().insert(collection, values);
+            Uri itemUri = MainActivity.this.getContentResolver().insert(collection, values);
             if (itemUri == null) return "insert() mengembalikan null";
 
-            try (OutputStream out = getContentResolver().openOutputStream(itemUri);
+            try (OutputStream out = MainActivity.this.getContentResolver().openOutputStream(itemUri);
                  FileInputStream in = new FileInputStream(sourceFile)) {
                 if (out == null) return "openOutputStream() null untuk uri: " + itemUri;
                 byte[] buffer = new byte[8192];
