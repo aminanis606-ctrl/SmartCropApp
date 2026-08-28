@@ -91,27 +91,6 @@ public class Pass2Optimizer {
                     "startMs",
                     startMs);
 
-            /*
-             * PASS2 SPLIT VALIDATION
-             *
-             * Pass1 boleh mendeteksi kandidat SPLIT,
-             * tetapi Pass2 harus memastikan bahwa shot
-             * benar-benar mempunyai DUA WAJAH yang terpisah.
-             *
-             * Ini mencegah close-up satu orang menjadi SPLIT
-             * hanya karena texture/activity kiri-kanan tinggi.
-             */
-            if ("split".equals(layout) &&
-                    !hasSeparatedTwoFaces(shot)) {
-
-                Log.i(
-                        TAG,
-                        "PASS2 SPLIT REJECT -> SINGLE: " +
-                        "tidak ada dua wajah yang cukup terpisah");
-
-                layout = "single";
-            }
-
             output.put(
                     "layout",
                     layout);
@@ -209,83 +188,6 @@ public class Pass2Optimizer {
                 TAG,
                 "PASS2 DONE -> " +
                 trajectoryFile.getAbsolutePath());
-    }
-
-    private static boolean hasSeparatedTwoFaces(
-            JSONObject shot)
-            throws Exception {
-
-        JSONArray samples =
-                shot.optJSONArray("samples");
-
-        if (samples == null ||
-                samples.length() == 0) {
-            return false;
-        }
-
-        int validSamples = 0;
-
-        for (int i = 0;
-             i < samples.length();
-             i++) {
-
-            JSONObject sample =
-                    samples.getJSONObject(i);
-
-            JSONArray faces =
-                    sample.optJSONArray("faces");
-
-            if (faces == null ||
-                    faces.length() < 2) {
-                continue;
-            }
-
-            float leftX =
-                    Float.MAX_VALUE;
-
-            float rightX =
-                    -Float.MAX_VALUE;
-
-            for (int f = 0;
-                 f < faces.length();
-                 f++) {
-
-                JSONObject face =
-                        faces.getJSONObject(f);
-
-                float x =
-                        (float)
-                        face.optDouble(
-                                "x",
-                                0.5f);
-
-                leftX =
-                        Math.min(
-                                leftX,
-                                x);
-
-                rightX =
-                        Math.max(
-                                rightX,
-                                x);
-            }
-
-            /*
-             * Dua wajah harus mempunyai jarak horizontal
-             * minimal 0.25 frame.
-             */
-            if (rightX - leftX >= 0.25f) {
-                validSamples++;
-            }
-        }
-
-        /*
-         * Tidak cukup hanya satu frame.
-         *
-         * Minimal 2 sample harus menunjukkan
-         * dua wajah yang terpisah supaya SPLIT stabil.
-         */
-        return validSamples >= 2;
     }
 
     private static float[] calibrateSplitShot(
