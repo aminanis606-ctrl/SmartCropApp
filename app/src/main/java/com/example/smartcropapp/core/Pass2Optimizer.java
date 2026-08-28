@@ -24,37 +24,30 @@ public class Pass2Optimizer {
     private static final int HYSTERESIS_THRESHOLD =
             3;
 
-    private static final float EMA_ALPHA =
-            0.40f;
-
     public static void optimize(
             File analysisFile,
             File trajectoryFile)
             throws Exception {
 
-        byte[] data;
+        String content;
 
         try (FileInputStream fis =
-                     new FileInputStream(
-                             analysisFile)) {
+                     new FileInputStream(analysisFile)) {
 
-            data =
-                    new byte[
-                            (int) analysisFile.length()];
+            byte[] data =
+                    new byte[(int)
+                            analysisFile.length()];
 
             int read =
                     fis.read(data);
 
-            if (read <= 0) {
-                throw new RuntimeException(
-                        "Analysis file kosong");
-            }
+            content =
+                    new String(
+                            data,
+                            0,
+                            read,
+                            StandardCharsets.UTF_8);
         }
-
-        String content =
-                new String(
-                        data,
-                        StandardCharsets.UTF_8);
 
         JSONObject root =
                 new JSONObject(content);
@@ -65,80 +58,87 @@ public class Pass2Optimizer {
         JSONArray outputShots =
                 new JSONArray();
 
-        for (int i = 0;
-             i < shots.length();
-             i++) {
+        for (int s = 0;
+             s < shots.length();
+             s++) {
 
             JSONObject shot =
-                    shots.getJSONObject(i);
-
-            int shotId =
-                    shot.optInt(
-                            "shotId",
-                            i);
-
-            long startMs =
-                    shot.optLong(
-                            "startMs",
-                            0);
+                    shots.getJSONObject(s);
 
             String layout =
                     shot.optString(
                             "layout",
                             "single");
 
-            JSONObject out =
+            int shotId =
+                    shot.optInt(
+                            "shotId",
+                            s);
+
+            long startMs =
+                    shot.optLong(
+                            "startMs",
+                            0);
+
+            JSONObject output =
                     new JSONObject();
 
-            out.put("shotId", shotId);
-            out.put("startMs", startMs);
-            out.put("layout", layout);
+            output.put(
+                    "shotId",
+                    shotId);
+
+            output.put(
+                    "startMs",
+                    startMs);
+
+            output.put(
+                    "layout",
+                    layout);
 
             if ("split".equals(layout)) {
 
                 /*
-                 * SPLIT sengaja tidak tracking.
+                 * SPLIT CALIBRATION
                  *
-                 * Prinsip:
-                 * satu shot = dua anchor stabil.
+                 * Tidak tracking.
+                 * Kita hanya mencari pusat aktivitas
+                 * kiri dan kanan SATU KALI per shot.
                  *
-                 * Kita beri sedikit margin dari
-                 * tepi agar crop tidak terlalu ekstrem.
+                 * Hasil kemudian dibekukan sepanjang shot.
                  */
-                out.put(
+
+                float[] calibration =
+                        calibrateSplitShot(shot);
+
+                output.put(
                         "topX",
-                        0.25f);
+                        calibration[0]);
 
-                out.put(
+                output.put(
                         "topY",
-                        0.50f);
+                        calibration[1]);
 
-                out.put(
+                output.put(
                         "bottomX",
-                        0.75f);
+                        calibration[2]);
 
-                out.put(
+                output.put(
                         "bottomY",
-                        0.50f);
-
-                /*
-                 * Informasi diagnostik.
-                 */
-                out.put(
-                        "topSize",
-                        0.50f);
-
-                out.put(
-                        "bottomSize",
-                        0.50f);
+                        calibration[3]);
 
                 Log.i(
                         TAG,
-                        "Shot "
-                                + shotId
-                                + " SPLIT: "
-                                + "left=0.25 "
-                                + "right=0.75");
+                        "Shot " + shotId +
+                        " SPLIT CALIBRATED:" +
+                        " left=" + calibration[0] +
+                        "," + calibration[1] +
+                        " right=" + calibration[2] +
+                        "," + calibration[3]);
+
+                Log.i(
+                        TAG,
+                        "Shot " + shotId +
+                        " SPLIT");
 
             } else {
 
@@ -151,18 +151,23 @@ public class Pass2Optimizer {
                             new JSONArray();
                 }
 
-                out.put(
+                output.put(
                         "track",
                         processSingleShot(
                                 shotId,
                                 samples));
             }
 
-            outputShots.put(out);
+            outputShots.put(
+                    output);
         }
 
         JSONObject outputRoot =
                 new JSONObject();
+
+        outputRoot.put(
+                "version",
+                2);
 
         outputRoot.put(
                 "shots",
@@ -181,9 +186,213 @@ public class Pass2Optimizer {
 
         Log.i(
                 TAG,
-                "Pass 2 selesai -> "
-                        + trajectoryFile
-                        .getAbsolutePath());
+                "PASS2 DONE -> " +
+                trajectoryFile.getAbsolutePath());
+    }
+
+    private static float[] calibrateSplitShot(
+            JSONObject shot)
+            throws Exception {
+
+        JSONArray samples =
+                shot.optJSONArray("samples");
+
+        /*
+         * Fallback konservatif.
+         */
+        float fallbackLeftX = 0.25f;
+        float fallbackRightX = 0.75f;
+
+        if (samples == null ||
+                samples.length() == 0) {
+
+            return new float[]{
+                    fallbackLeftX,
+                    0.50f,
+                    fallbackRightX,
+                    0.50f
+            };
+        }
+
+        double leftXSum = 0.0;
+        double rightXSum = 0.0;
+
+        double leftYSum = 0.0;
+        double rightYSum = 0.0;
+
+        double leftWeight = 0.0;
+        double rightWeight = 0.0;
+
+        for (int i = 0;
+             i < samples.length();
+             i++) {
+
+            JSONObject sample =
+                    samples.getJSONObject(i);
+
+            JSONArray texture =
+                    sample.optJSONArray("texture");
+
+            if (texture == null ||
+                    texture.length() == 0) {
+                continue;
+            }
+
+            /*
+             * GRID_X = 12
+             * GRID_Y = 8
+             *
+             * Hanya memakai area tengah vertikal.
+             * Tujuannya menghindari meja/lantai/langit
+             * sebagai sumber pusat aktivitas.
+             */
+
+            for (int y = 1;
+                 y < 7;
+                 y++) {
+
+                for (int x = 0;
+                     x < 12;
+                     x++) {
+
+                    int index =
+                            y * 12 + x;
+
+                    if (index >= texture.length()) {
+                        continue;
+                    }
+
+                    float activity =
+                            (float)
+                            texture.optDouble(
+                                    index,
+                                    0.0);
+
+                    /*
+                     * Non-linear boost:
+                     * aktivitas tinggi lebih berpengaruh
+                     * daripada noise kecil.
+                     */
+                    double weight =
+                            activity * activity;
+
+                    if (weight <= 0.000001) {
+                        continue;
+                    }
+
+                    float normalizedX =
+                            (x + 0.5f) / 12f;
+
+                    float normalizedY =
+                            (y + 0.5f) / 8f;
+
+                    /*
+                     * Tengah frame sengaja tidak dipakai
+                     * untuk menentukan pusat panel.
+                     */
+                    if (normalizedX < 0.42f) {
+
+                        leftXSum +=
+                                normalizedX * weight;
+
+                        leftYSum +=
+                                normalizedY * weight;
+
+                        leftWeight +=
+                                weight;
+
+                    } else if (normalizedX > 0.58f) {
+
+                        rightXSum +=
+                                normalizedX * weight;
+
+                        rightYSum +=
+                                normalizedY * weight;
+
+                        rightWeight +=
+                                weight;
+                    }
+                }
+            }
+        }
+
+        float leftX =
+                leftWeight > 0.0001
+                        ? (float)
+                          (leftXSum / leftWeight)
+                        : fallbackLeftX;
+
+        float leftY =
+                leftWeight > 0.0001
+                        ? (float)
+                          (leftYSum / leftWeight)
+                        : 0.50f;
+
+        float rightX =
+                rightWeight > 0.0001
+                        ? (float)
+                          (rightXSum / rightWeight)
+                        : fallbackRightX;
+
+        float rightY =
+                rightWeight > 0.0001
+                        ? (float)
+                          (rightYSum / rightWeight)
+                        : 0.50f;
+
+        /*
+         * Safety limits.
+         *
+         * Jangan biarkan calibration masuk
+         * terlalu dekat ke tengah.
+         */
+        leftX =
+                clamp(
+                        leftX,
+                        0.16f,
+                        0.42f);
+
+        rightX =
+                clamp(
+                        rightX,
+                        0.58f,
+                        0.84f);
+
+        leftY =
+                clamp(
+                        leftY,
+                        0.30f,
+                        0.70f);
+
+        rightY =
+                clamp(
+                        rightY,
+                        0.30f,
+                        0.70f);
+
+        /*
+         * Jika kedua pusat terlalu dekat,
+         * gunakan fallback simetris.
+         */
+        if (rightX - leftX < 0.25f) {
+
+            leftX = 0.25f;
+            rightX = 0.75f;
+
+            leftY = 0.50f;
+            rightY = 0.50f;
+
+            Log.w(
+                    TAG,
+                    "Split calibration terlalu dekat -> fallback");
+        }
+
+        return new float[]{
+                leftX,
+                leftY,
+                rightX,
+                rightY
+        };
     }
 
     private static JSONArray processSingleShot(
@@ -191,11 +400,11 @@ public class Pass2Optimizer {
             JSONArray samples)
             throws Exception {
 
-        int n =
-                samples.length();
-
         JSONArray track =
                 new JSONArray();
+
+        int n =
+                samples.length();
 
         if (n == 0) {
             return track;
@@ -213,11 +422,16 @@ public class Pass2Optimizer {
         long[] times =
                 new long[n];
 
-        float lastX = 0.30f;
-        float lastY = 0.40f;
-        float lastSize = 0.30f;
+        float lastX =
+                0.30f;
 
-        boolean hasEverHadFace =
+        float lastY =
+                0.40f;
+
+        float lastSize =
+                0.30f;
+
+        boolean hasFace =
                 false;
 
         String currentSide =
@@ -226,7 +440,8 @@ public class Pass2Optimizer {
         String pendingSide =
                 "LEFT";
 
-        int sideCounter = 0;
+        int sideCounter =
+                0;
 
         for (int i = 0;
              i < n;
@@ -244,44 +459,52 @@ public class Pass2Optimizer {
                     sample.optJSONArray(
                             "faces");
 
-            if (faces == null) {
-                faces = new JSONArray();
+            if (faces == null ||
+                    faces.length() == 0) {
+
+                lockedX[i] =
+                        lastX;
+
+                lockedY[i] =
+                        lastY;
+
+                lockedSize[i] =
+                        lastSize;
+
+                continue;
             }
 
-            if (faces.length() == 0) {
-
-                /*
-                 * Target Lock:
-                 * jangan pindah ke center
-                 * hanya karena detector kosong.
-                 */
-                lockedX[i] = lastX;
-                lockedY[i] = lastY;
-                lockedSize[i] = lastSize;
-
-            } else if (faces.length() == 1) {
+            if (faces.length() == 1) {
 
                 JSONObject face =
                         faces.getJSONObject(0);
 
                 float x =
-                        (float) face.optDouble(
+                        (float)
+                        face.optDouble(
                                 "x",
                                 lastX);
 
                 float y =
-                        (float) face.optDouble(
+                        (float)
+                        face.optDouble(
                                 "y",
                                 lastY);
 
                 float size =
-                        (float) face.optDouble(
+                        (float)
+                        face.optDouble(
                                 "size",
                                 lastSize);
 
-                lockedX[i] = x;
-                lockedY[i] = y;
-                lockedSize[i] = size;
+                lockedX[i] =
+                        x;
+
+                lockedY[i] =
+                        y;
+
+                lockedSize[i] =
+                        size;
 
                 lastX = x;
                 lastY = y;
@@ -295,267 +518,234 @@ public class Pass2Optimizer {
                 pendingSide =
                         currentSide;
 
-                sideCounter = 0;
+                sideCounter =
+                        0;
 
-                hasEverHadFace =
+                hasFace =
                         true;
 
-            } else {
+                continue;
+            }
 
-                /*
-                 * Multi-face logic dilanjutkan
-                 * pada bagian berikutnya.
-                 */
-                MultiFaceResult result =
-                        chooseMultiFace(
-                                faces,
-                                currentSide,
-                                pendingSide,
-                                sideCounter,
-                                lastX);
+            JSONObject leftFace =
+                    null;
 
-                currentSide =
-                        result.currentSide;
+            JSONObject rightFace =
+                    null;
 
-                pendingSide =
-                        result.pendingSide;
+            float minX =
+                    Float.MAX_VALUE;
 
-                sideCounter =
-                        result.sideCounter;
+            float maxX =
+                    -Float.MAX_VALUE;
 
-                JSONObject chosenFace =
-                        result.face;
+            for (int f = 0;
+                 f < faces.length();
+                 f++) {
+
+                JSONObject candidate =
+                        faces.getJSONObject(f);
 
                 float x =
-                        (float) chosenFace.optDouble(
+                        (float)
+                        candidate.optDouble(
                                 "x",
-                                lastX);
+                                0.5f);
 
-                float y =
-                        (float) chosenFace.optDouble(
-                                "y",
-                                lastY);
-
-                float size =
-                        (float) chosenFace.optDouble(
-                                "size",
-                                lastSize);
-
-                /*
-                 * SMART CENTER GUARD.
-                 *
-                 * Jika kandidat jatuh di tengah,
-                 * jangan langsung menggeser kamera
-                 * ke ruang kosong.
-                 */
-                if (x >= CENTER_MIN
-                        && x <= CENTER_MAX) {
-
-                    x =
-                            "LEFT".equals(
-                                    currentSide)
-                                    ? 0.30f
-                                    : 0.70f;
+                if (x < minX) {
+                    minX = x;
+                    leftFace =
+                            candidate;
                 }
 
-                lockedX[i] = x;
-                lockedY[i] = y;
-                lockedSize[i] = size;
-
-                lastX = x;
-                lastY = y;
-                lastSize = size;
-
-                hasEverHadFace =
-                        true;
-            }
-        }
-
-        if (!hasEverHadFace) {
-
-            /*
-             * Fallback hanya jika benar-benar
-             * tidak ada kandidat sepanjang shot.
-             */
-            for (int i = 0;
-                 i < n;
-                 i++) {
-
-                lockedX[i] = 0.50f;
-                lockedY[i] = 0.40f;
-                lockedSize[i] = 0.30f;
+                if (x > maxX) {
+                    maxX = x;
+                    rightFace =
+                            candidate;
+                }
             }
 
-            Log.w(
-                    TAG,
-                    "Shot "
-                            + shotId
-                            + ": no target -> center");
-        }
-
-        return applyEMA(
-                times,
-                lockedX,
-                lockedY,
-                lockedSize);
-    }
-
-    private static class MultiFaceResult {
-
-        JSONObject face;
-
-        String currentSide;
-        String pendingSide;
-
-        int sideCounter;
-    }
-
-    private static MultiFaceResult chooseMultiFace(
-            JSONArray faces,
-            String currentSide,
-            String pendingSide,
-            int sideCounter,
-            float lastX)
-            throws Exception {
-
-        JSONObject leftFace = null;
-        JSONObject rightFace = null;
-
-        float minX = 2f;
-        float maxX = -1f;
-
-        for (int i = 0;
-             i < faces.length();
-             i++) {
-
-            JSONObject candidate =
-                    faces.getJSONObject(i);
-
-            float x =
-                    (float) candidate.optDouble(
-                            "x",
-                            0.5f);
-
-            if (x < minX) {
-                minX = x;
-                leftFace = candidate;
-            }
-
-            if (x > maxX) {
-                maxX = x;
-                rightFace = candidate;
-            }
-        }
-
-        JSONObject chosen;
-
-        if (leftFace == null
-                && rightFace == null) {
-
-            chosen =
-                    new JSONObject();
-
-        } else if (leftFace == null) {
-
-            chosen = rightFace;
-
-        } else if (rightFace == null) {
-
-            chosen = leftFace;
-
-        } else {
-
-            float lx =
-                    (float) leftFace.optDouble(
-                            "x",
-                            0.3f);
-
-            float rx =
-                    (float) rightFace.optDouble(
-                            "x",
-                            0.7f);
-
-            String detectedSide =
-                    Math.abs(lx - lastX)
-                            <= Math.abs(rx - lastX)
-                            ? "LEFT"
-                            : "RIGHT";
-
-            if (!detectedSide.equals(
-                    pendingSide)) {
-
-                pendingSide =
-                        detectedSide;
-
-                sideCounter = 1;
-
-            } else {
-
-                sideCounter++;
-            }
-
-            if (sideCounter
-                    >= HYSTERESIS_THRESHOLD) {
-
-                currentSide =
-                        pendingSide;
-            }
-
-            chosen =
+            JSONObject chosen =
                     "RIGHT".equals(
                             currentSide)
                             ? rightFace
                             : leftFace;
+
+            String detectedSide =
+                    currentSide;
+
+            if (leftFace != null &&
+                    rightFace != null) {
+
+                float lx =
+                        (float)
+                        leftFace.optDouble(
+                                "x",
+                                0.3f);
+
+                float rx =
+                        (float)
+                        rightFace.optDouble(
+                                "x",
+                                0.7f);
+
+                detectedSide =
+                        Math.abs(
+                                lx - lastX)
+                                <
+                                Math.abs(
+                                        rx - lastX)
+                                ? "LEFT"
+                                : "RIGHT";
+
+                if (!detectedSide.equals(
+                        pendingSide)) {
+
+                    pendingSide =
+                            detectedSide;
+
+                    sideCounter =
+                            1;
+
+                } else {
+
+                    sideCounter++;
+                }
+
+                if (sideCounter >=
+                        HYSTERESIS_THRESHOLD) {
+
+                    currentSide =
+                            pendingSide;
+                }
+
+                chosen =
+                        "RIGHT".equals(
+                                currentSide)
+                                ? rightFace
+                                : leftFace;
+            }
+
+            if (chosen == null) {
+                chosen =
+                        leftFace != null
+                                ? leftFace
+                                : rightFace;
+            }
+
+            if (chosen == null) {
+
+                lockedX[i] =
+                        lastX;
+
+                lockedY[i] =
+                        lastY;
+
+                lockedSize[i] =
+                        lastSize;
+
+                continue;
+            }
+
+            float x =
+                    (float)
+                    chosen.optDouble(
+                            "x",
+                            lastX);
+
+            float y =
+                    (float)
+                    chosen.optDouble(
+                            "y",
+                            lastY);
+
+            float size =
+                    (float)
+                    chosen.optDouble(
+                            "size",
+                            lastSize);
+
+            if (x >= CENTER_MIN &&
+                    x <= CENTER_MAX) {
+
+                x =
+                        "LEFT".equals(
+                                currentSide)
+                                ? 0.30f
+                                : 0.70f;
+            }
+
+            lockedX[i] =
+                    x;
+
+            lockedY[i] =
+                    y;
+
+            lockedSize[i] =
+                    size;
+
+            lastX = x;
+            lastY = y;
+            lastSize = size;
+
+            hasFace =
+                    true;
         }
 
-        MultiFaceResult result =
-                new MultiFaceResult();
+        if (!hasFace) {
 
-        result.face = chosen;
-        result.currentSide =
-                currentSide;
-        result.pendingSide =
-                pendingSide;
-        result.sideCounter =
-                sideCounter;
+            Log.w(
+                    TAG,
+                    "Shot " + shotId +
+                    ": no face -> center");
 
-        return result;
-    }
+            for (int i = 0;
+                 i < n;
+                 i++) {
 
-    private static JSONArray applyEMA(
-            long[] times,
-            float[] xs,
-            float[] ys,
-            float[] sizes)
-            throws Exception {
+                lockedX[i] =
+                        0.50f;
 
-        JSONArray track =
-                new JSONArray();
+                lockedY[i] =
+                        0.40f;
 
-        float smoothX = xs[0];
-        float smoothY = ys[0];
-        float smoothSize = sizes[0];
+                lockedSize[i] =
+                        0.30f;
+            }
+        }
+
+        float smoothX =
+                lockedX[0];
+
+        float smoothY =
+                lockedY[0];
+
+        float smoothSize =
+                lockedSize[0];
+
+        final float alpha =
+                0.40f;
 
         for (int i = 0;
-             i < xs.length;
+             i < n;
              i++) {
 
             if (i > 0) {
 
                 smoothX +=
-                        EMA_ALPHA
-                                * (xs[i]
-                                - smoothX);
+                        alpha *
+                        (lockedX[i] -
+                                smoothX);
 
                 smoothY +=
-                        EMA_ALPHA
-                                * (ys[i]
-                                - smoothY);
+                        alpha *
+                        (lockedY[i] -
+                                smoothY);
 
                 smoothSize +=
-                        EMA_ALPHA
-                                * (sizes[i]
-                                - smoothSize);
+                        alpha *
+                        (lockedSize[i] -
+                                smoothSize);
             }
 
             JSONObject point =

@@ -48,7 +48,27 @@ public class Pass3Renderer {
         int videoTrackIndex = selectTrack(extractor, "video/");
         if (videoTrackIndex < 0) throw new RuntimeException("Tidak ada video track di sumber");
         extractor.selectTrack(videoTrackIndex);
-        MediaFormat inputFormat = extractor.getTrackFormat(videoTrackIndex);
+
+        int audioTrackIndex =
+                selectTrack(extractor, "audio/");
+
+        MediaFormat inputFormat =
+                extractor.getTrackFormat(videoTrackIndex);
+
+        MediaFormat audioFormat = null;
+
+        if (audioTrackIndex >= 0) {
+            audioFormat =
+                    extractor.getTrackFormat(audioTrackIndex);
+
+            Log.i(TAG,
+                    "Audio track ditemukan: " +
+                    audioFormat.getString(
+                            MediaFormat.KEY_MIME));
+        } else {
+            Log.w(TAG,
+                    "Audio track tidak ditemukan");
+        }
         String inputMime = inputFormat.getString(MediaFormat.KEY_MIME);
         int srcWidth = inputFormat.containsKey(MediaFormat.KEY_WIDTH) ? inputFormat.getInteger(MediaFormat.KEY_WIDTH) : OUTPUT_WIDTH;
         int srcHeight = inputFormat.containsKey(MediaFormat.KEY_HEIGHT) ? inputFormat.getInteger(MediaFormat.KEY_HEIGHT) : OUTPUT_HEIGHT;
@@ -83,7 +103,22 @@ public class Pass3Renderer {
 
         MediaMuxer muxer = new MediaMuxer(outputVideoFile.getAbsolutePath(), MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
         int muxerVideoTrack = -1;
+        int muxerAudioTrack = -1;
         boolean muxerStarted = false;
+
+        MediaExtractor audioExtractor = null;
+
+        if (audioTrackIndex >= 0) {
+            audioExtractor = new MediaExtractor();
+            audioExtractor.setDataSource(
+                    context,
+                    sourceVideoUri,
+                    null);
+            audioExtractor.selectTrack(audioTrackIndex);
+
+            Log.i(TAG,
+                    "Audio extractor siap");
+        }
 
         MediaCodec.BufferInfo decoderInfo = new MediaCodec.BufferInfo();
         MediaCodec.BufferInfo encoderInfo = new MediaCodec.BufferInfo();
@@ -127,21 +162,117 @@ public class Pass3Renderer {
 
                         GLES20.glClearColor(0f, 0f, 0f, 1f);
 
-                        if ("split".equals(shotResult.layout)) {
-                            int panelH = OUTPUT_HEIGHT / 2;
-                            float cropWidthNorm = 0.5f;
-                            float cropHeightNorm = clamp(
-                                    cropWidthNorm * (panelH / (float) OUTPUT_WIDTH) * (srcWidth / (float) srcHeight),
-                                    0.1f, 1f);
+                        if ("split".equals(shotResult.layout)
+                                && shotResult.top != null
+                                && shotResult.bottom != null) {
 
-                            GLES20.glViewport(0, panelH, OUTPUT_WIDTH, panelH);
-                            GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
-                            shader.draw(glContext.getDecoderTextureId(), stMatrix,
-                                    shotResult.top.x, shotResult.top.y, cropWidthNorm, cropHeightNorm);
+                            /*
+                             * SPLIT MODE
+                             *
+                             * Output:
+                             *
+                             * ┌──────────────────────┐
+                             * │       PERSON A       │
+                             * │       LEFT            │
+                             * ├──────────────────────┤
+                             * │       PERSON B       │
+                             * │       RIGHT           │
+                             * └──────────────────────┘
+                             *
+                             * Kedua panel berasal dari frame
+                             * yang sama tetapi mempunyai crop
+                             * center berbeda.
+                             */
 
-                            GLES20.glViewport(0, 0, OUTPUT_WIDTH, panelH);
-                            shader.draw(glContext.getDecoderTextureId(), stMatrix,
-                                    shotResult.bottom.x, shotResult.bottom.y, cropWidthNorm, cropHeightNorm);
+                            final int panelH =
+                                    OUTPUT_HEIGHT / 2;
+
+                            final float panelAspect =
+                                    OUTPUT_WIDTH /
+                                    (float) panelH;
+
+                            /*
+                             * Setengah frame horizontal sebagai
+                             * sumber crop. Ini menjaga kedua orang
+                             * tetap terlihat tanpa tracking.
+                             */
+                            final float cropWidthNorm =
+                                    0.50f;
+
+                            float cropHeightNorm =
+                                    cropWidthNorm *
+                                    panelAspect *
+                                    (srcWidth /
+                                            (float) srcHeight);
+
+                            cropHeightNorm =
+                                    clamp(
+                                            cropHeightNorm,
+                                            0.10f,
+                                            1.0f);
+
+                            /*
+                             * Panel atas = titik kiri.
+                             */
+                            GLES20.glViewport(
+                                    0,
+                                    panelH,
+                                    OUTPUT_WIDTH,
+                                    panelH);
+
+                            GLES20.glClear(
+                                    GLES20.GL_COLOR_BUFFER_BIT);
+
+                            shader.draw(
+                                    glContext
+                                            .getDecoderTextureId(),
+                                    stMatrix,
+                                    clamp(
+                                            shotResult
+                                                    .top
+                                                    .x,
+                                            0.05f,
+                                            0.95f),
+                                    clamp(
+                                            shotResult
+                                                    .top
+                                                    .y,
+                                            0.05f,
+                                            0.95f),
+                                    cropWidthNorm,
+                                    cropHeightNorm);
+
+                            /*
+                             * Panel bawah = titik kanan.
+                             */
+                            GLES20.glViewport(
+                                    0,
+                                    0,
+                                    OUTPUT_WIDTH,
+                                    panelH);
+
+                            GLES20.glClear(
+                                    GLES20.GL_COLOR_BUFFER_BIT);
+
+                            shader.draw(
+                                    glContext
+                                            .getDecoderTextureId(),
+                                    stMatrix,
+                                    clamp(
+                                            shotResult
+                                                    .bottom
+                                                    .x,
+                                            0.05f,
+                                            0.95f),
+                                    clamp(
+                                            shotResult
+                                                    .bottom
+                                                    .y,
+                                            0.05f,
+                                            0.95f),
+                                    cropWidthNorm,
+                                    cropHeightNorm);
+
                         } else {
                             float cropHeightNorm = 1.0f;
                             float cropWidthNorm = clamp(
@@ -165,9 +296,81 @@ public class Pass3Renderer {
 
             int encOutIndex = encoder.dequeueOutputBuffer(encoderInfo, TIMEOUT_US);
             if (encOutIndex == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
-                muxerVideoTrack = muxer.addTrack(encoder.getOutputFormat());
+
+                muxerVideoTrack =
+                        muxer.addTrack(
+                                encoder.getOutputFormat());
+
+                if (audioFormat != null) {
+                    muxerAudioTrack =
+                            muxer.addTrack(
+                                    audioFormat);
+
+                    Log.i(TAG,
+                            "Audio mux track ditambahkan");
+                }
+
                 muxer.start();
                 muxerStarted = true;
+
+                /*
+                 * Copy compressed audio asli.
+                 * Tidak decode/re-encode.
+                 */
+                if (audioExtractor != null &&
+                        muxerAudioTrack >= 0) {
+
+                    ByteBuffer audioBuffer =
+                            ByteBuffer.allocate(
+                                    1024 * 1024);
+
+                    MediaCodec.BufferInfo audioInfo =
+                            new MediaCodec.BufferInfo();
+
+                    while (true) {
+
+                        int size =
+                                audioExtractor
+                                        .readSampleData(
+                                                audioBuffer,
+                                                0);
+
+                        if (size < 0) {
+                            break;
+                        }
+
+                        long pts =
+                                audioExtractor
+                                        .getSampleTime();
+
+                        int flags =
+                                audioExtractor
+                                        .getSampleFlags();
+
+                        audioInfo.set(
+                                0,
+                                size,
+                                pts,
+                                flags);
+
+                        audioBuffer.position(0);
+                        audioBuffer.limit(size);
+
+                        muxer.writeSampleData(
+                                muxerAudioTrack,
+                                audioBuffer,
+                                audioInfo);
+
+                        audioExtractor.advance();
+                    }
+
+                    audioExtractor.release();
+                    audioExtractor = null;
+
+                    Log.i(TAG,
+                            "Audio copy selesai");
+                }
+
             } else if (encOutIndex >= 0) {
                 ByteBuffer encodedData = encoder.getOutputBuffer(encOutIndex);
                 if ((encoderInfo.flags & MediaCodec.BUFFER_FLAG_CODEC_CONFIG) != 0) encoderInfo.size = 0;
@@ -191,8 +394,16 @@ public class Pass3Renderer {
         Log.i(TAG, "Pass 3 selesai (video-only, shot-aware split/single): " + outputVideoFile.getAbsolutePath());
     }
 
-    private static float clamp(float v, float min, float max) {
-        return Math.max(min, Math.min(max, v));
+    private static float clamp(
+            float v,
+            float min,
+            float max) {
+
+        return Math.max(
+                min,
+                Math.min(
+                        max,
+                        v));
     }
 
     private static int selectTrack(MediaExtractor extractor, String mimePrefix) {

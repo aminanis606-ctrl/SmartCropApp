@@ -12,16 +12,11 @@ import java.util.List;
 public class TrajectoryReader {
 
     public static class Point {
-
         public final float x;
         public final float y;
         public final float size;
 
-        Point(
-                float x,
-                float y,
-                float size) {
-
+        Point(float x, float y, float size) {
             this.x = x;
             this.y = y;
             this.size = size;
@@ -29,13 +24,9 @@ public class TrajectoryReader {
     }
 
     public static class ShotResult {
-
         public final String layout;
-
         public final Point single;
-
         public final Point top;
-
         public final Point bottom;
 
         ShotResult(
@@ -57,14 +48,13 @@ public class TrajectoryReader {
 
         String layout;
 
-        List<Long> times =
+        final List<Long> times =
                 new ArrayList<>();
 
-        List<Point> points =
+        final List<Point> points =
                 new ArrayList<>();
 
         Point topPoint;
-
         Point bottomPoint;
     }
 
@@ -98,61 +88,77 @@ public class TrajectoryReader {
              i < shotsArr.length();
              i++) {
 
-            JSONObject obj =
+            JSONObject shotObj =
                     shotsArr.getJSONObject(i);
 
             ShotData sd =
                     new ShotData();
 
             sd.startMs =
-                    obj.optLong(
+                    shotObj.optLong(
                             "startMs",
                             0);
 
             sd.layout =
-                    obj.optString(
-                            "layout",
-                            "single");
+                    normalizeLayout(
+                            shotObj.optString(
+                                    "layout",
+                                    "single"));
 
-            if ("split".equals(
-                    sd.layout)) {
+            if ("split".equals(sd.layout)) {
 
                 float topX =
-                        (float) obj.optDouble(
-                                "topX",
-                                0.25);
+                        clamp(
+                                (float)
+                                shotObj.optDouble(
+                                        "topX",
+                                        0.25),
+                                0.05f,
+                                0.95f);
 
                 float topY =
-                        (float) obj.optDouble(
-                                "topY",
-                                0.50);
+                        clamp(
+                                (float)
+                                shotObj.optDouble(
+                                        "topY",
+                                        0.50),
+                                0.05f,
+                                0.95f);
 
                 float bottomX =
-                        (float) obj.optDouble(
-                                "bottomX",
-                                0.75);
+                        clamp(
+                                (float)
+                                shotObj.optDouble(
+                                        "bottomX",
+                                        0.75),
+                                0.05f,
+                                0.95f);
 
                 float bottomY =
-                        (float) obj.optDouble(
-                                "bottomY",
-                                0.50);
+                        clamp(
+                                (float)
+                                shotObj.optDouble(
+                                        "bottomY",
+                                        0.50),
+                                0.05f,
+                                0.95f);
 
                 sd.topPoint =
                         new Point(
                                 topX,
                                 topY,
-                                0.50f);
+                                0.5f);
 
                 sd.bottomPoint =
                         new Point(
                                 bottomX,
                                 bottomY,
-                                0.50f);
+                                0.5f);
 
             } else {
 
                 JSONArray track =
-                        obj.optJSONArray(
+                        shotObj.optJSONArray(
                                 "track");
 
                 if (track != null) {
@@ -171,17 +177,29 @@ public class TrajectoryReader {
 
                         sd.points.add(
                                 new Point(
-                                        (float) p.optDouble(
-                                                "x",
-                                                0.5),
+                                        clamp(
+                                                (float)
+                                                p.optDouble(
+                                                        "x",
+                                                        0.5),
+                                                0f,
+                                                1f),
 
-                                        (float) p.optDouble(
-                                                "y",
-                                                0.4),
+                                        clamp(
+                                                (float)
+                                                p.optDouble(
+                                                        "y",
+                                                        0.4),
+                                                0f,
+                                                1f),
 
-                                        (float) p.optDouble(
-                                                "size",
-                                                0.3)));
+                                        clamp(
+                                                (float)
+                                                p.optDouble(
+                                                        "size",
+                                                        0.3),
+                                                0.05f,
+                                                1f)));
                     }
                 }
 
@@ -206,7 +224,8 @@ public class TrajectoryReader {
                     new ShotData();
 
             fallback.startMs = 0;
-            fallback.layout = "single";
+            fallback.layout =
+                    "single";
 
             fallback.times.add(0L);
 
@@ -235,11 +254,8 @@ public class TrajectoryReader {
         for (ShotData sd : shots) {
 
             if (sd.startMs <= timeMs) {
-
                 active = sd;
-
             } else {
-
                 break;
             }
         }
@@ -247,11 +263,27 @@ public class TrajectoryReader {
         if ("split".equals(
                 active.layout)) {
 
+            Point top =
+                    active.topPoint != null
+                            ? active.topPoint
+                            : new Point(
+                                    0.25f,
+                                    0.5f,
+                                    0.5f);
+
+            Point bottom =
+                    active.bottomPoint != null
+                            ? active.bottomPoint
+                            : new Point(
+                                    0.75f,
+                                    0.5f,
+                                    0.5f);
+
             return new ShotResult(
                     "split",
                     null,
-                    active.topPoint,
-                    active.bottomPoint);
+                    top,
+                    bottom);
         }
 
         Point point =
@@ -270,77 +302,99 @@ public class TrajectoryReader {
             ShotData sd,
             long timeMs) {
 
+        if (sd.points.isEmpty()) {
+
+            return new Point(
+                    0.5f,
+                    0.4f,
+                    0.3f);
+        }
+
         if (sd.points.size() == 1) {
             return sd.points.get(0);
         }
 
-        Point previous =
+        Point prev =
                 sd.points.get(0);
 
-        long previousTime =
+        long prevT =
                 sd.times.get(0);
 
         for (int i = 0;
              i < sd.points.size();
              i++) {
 
-            long currentTime =
+            long t =
                     sd.times.get(i);
 
-            Point current =
+            Point p =
                     sd.points.get(i);
 
-            if (currentTime >= timeMs) {
+            if (t >= timeMs) {
 
                 if (i == 0) {
-                    return current;
+                    return p;
                 }
 
                 long span =
-                        currentTime
-                                - previousTime;
+                        t - prevT;
 
                 float ratio =
                         span <= 0
                                 ? 0f
                                 : (float)
-                                (timeMs
-                                        - previousTime)
-                                / span;
+                                  (timeMs - prevT)
+                                  / span;
 
                 ratio =
-                        Math.max(
+                        clamp(
+                                ratio,
                                 0f,
-                                Math.min(
-                                        1f,
-                                        ratio));
+                                1f);
 
                 return new Point(
-
-                        previous.x
-                                + (current.x
-                                - previous.x)
+                        prev.x +
+                                (p.x - prev.x)
                                 * ratio,
 
-                        previous.y
-                                + (current.y
-                                - previous.y)
+                        prev.y +
+                                (p.y - prev.y)
                                 * ratio,
 
-                        previous.size
-                                + (current.size
-                                - previous.size)
+                        prev.size +
+                                (p.size - prev.size)
                                 * ratio);
             }
 
-            previous =
-                    current;
-
-            previousTime =
-                    currentTime;
+            prev = p;
+            prevT = t;
         }
 
         return sd.points.get(
                 sd.points.size() - 1);
+    }
+
+    private static String normalizeLayout(
+            String layout) {
+
+        if ("split".equalsIgnoreCase(
+                layout)) {
+
+            return "split";
+        }
+
+        return "single";
+    }
+
+    private static float clamp(
+            float value,
+            float min,
+            float max) {
+
+        return Math.max(
+                min,
+                Math.min(
+                        max,
+                        value));
     }
 }
