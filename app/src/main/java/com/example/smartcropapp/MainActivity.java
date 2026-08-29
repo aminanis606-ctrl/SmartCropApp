@@ -220,6 +220,10 @@ public class MainActivity extends AppCompatActivity {
                         analysisFile,
                         trajectoryFile);
 
+                exportDiagnostics(
+                        analysisFile,
+                        trajectoryFile);
+
                 runOnUiThread(() ->
                         tvStatus.setText(
                                 "PASS 3: Auto Render..."));
