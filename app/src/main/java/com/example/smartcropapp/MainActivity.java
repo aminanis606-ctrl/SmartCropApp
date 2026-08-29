@@ -114,20 +114,9 @@ public class MainActivity extends AppCompatActivity {
                         getFilesDir(),
                         "trajectory.json");
 
-        File moviesDir =
+        File outputVideoFile =
                 new File(
-                        Environment.getExternalStoragePublicDirectory(
-                                Environment.DIRECTORY_MOVIES),
-                        "SmartReframe");
-
-if (!moviesDir.exists() && !moviesDir.mkdirs()) {
-    throw new RuntimeException(
-            "Gagal membuat folder Movies/SmartReframe");
-}
-
-File outputVideoFile =
-                new File(
-                        moviesDir,
+                        getFilesDir(),
                         "output_final.mp4");
 
         new Thread(() -> {
@@ -247,16 +236,20 @@ File outputVideoFile =
                         trajectoryFile,
                         outputVideoFile);
 
+                        File exportedVideo =
+                                exportVideoToMovies(
+                                        outputVideoFile);
+
                 runOnUiThread(() -> {
 
                     tvStatus.setText(
                             "SELESAI: Auto Reframe\n" +
-                            outputVideoFile.getAbsolutePath());
+                            exportedVideo.getAbsolutePath());
 
                     Log.i(
                             TAG,
                             "AUTO REFRAFRAME DONE: " +
-                            outputVideoFile.getAbsolutePath());
+                            exportedVideo.getAbsolutePath());
                 });
 
             } catch (Exception e) {
@@ -295,6 +288,114 @@ File outputVideoFile =
 
         } catch (Exception e) {
             Log.e(TAG, "DIAGNOSTIC EXPORT FAILED", e);
+        }
+    }
+
+    private File exportVideoToMovies(
+            File sourceFile) throws Exception {
+
+        if (sourceFile == null || !sourceFile.exists()) {
+            throw new Exception(
+                    "File hasil render tidak ditemukan: " +
+                    sourceFile);
+        }
+
+        String displayName =
+                "output_final_" +
+                System.currentTimeMillis() +
+                ".mp4";
+
+        android.content.ContentValues values =
+                new android.content.ContentValues();
+
+        values.put(
+                MediaStore.Video.Media.DISPLAY_NAME,
+                displayName);
+
+        values.put(
+                MediaStore.Video.Media.MIME_TYPE,
+                "video/mp4");
+
+        values.put(
+                MediaStore.Video.Media.RELATIVE_PATH,
+                Environment.DIRECTORY_MOVIES +
+                        "/SmartReframe");
+
+        values.put(
+                MediaStore.Video.Media.IS_PENDING,
+                1);
+
+        android.content.ContentResolver resolver =
+                getContentResolver();
+
+        android.net.Uri collection =
+                MediaStore.Video.Media.getContentUri(
+                        MediaStore.VOLUME_EXTERNAL_PRIMARY);
+
+        android.net.Uri uri =
+                resolver.insert(
+                        collection,
+                        values);
+
+        if (uri == null) {
+            throw new Exception(
+                    "MediaStore gagal membuat output video.");
+        }
+
+        boolean success = false;
+
+        try {
+            try (
+                    java.io.InputStream in =
+                            new java.io.FileInputStream(sourceFile);
+
+                    java.io.OutputStream out =
+                            resolver.openOutputStream(uri)
+            ) {
+                if (out == null) {
+                    throw new Exception(
+                            "MediaStore gagal membuka output stream.");
+                }
+
+                byte[] buffer = new byte[1024 * 1024];
+                int count;
+
+                while ((count = in.read(buffer)) != -1) {
+                    out.write(buffer, 0, count);
+                }
+
+                out.flush();
+            }
+
+            android.content.ContentValues ready =
+                    new android.content.ContentValues();
+
+            ready.put(
+                    MediaStore.Video.Media.IS_PENDING,
+                    0);
+
+            resolver.update(
+                    uri,
+                    ready,
+                    null,
+                    null);
+
+            success = true;
+
+            Log.i(
+                    TAG,
+                    "VIDEO EXPORTED TO Movies/SmartReframe: " +
+                    displayName);
+
+            return new File(
+                    Environment.getExternalStoragePublicDirectory(
+                            Environment.DIRECTORY_MOVIES),
+                    "SmartReframe/" + displayName);
+
+        } finally {
+            if (!success) {
+                resolver.delete(uri, null, null);
+            }
         }
     }
 
