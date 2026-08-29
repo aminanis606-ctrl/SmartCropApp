@@ -578,331 +578,290 @@ public class Pass2Optimizer {
             JSONArray samples)
             throws Exception {
 
-        JSONArray track =
-                new JSONArray();
-
-        int n =
-                samples.length();
+        JSONArray track = new JSONArray();
+        int n = samples.length();
 
         if (n == 0) {
             return track;
         }
 
-        float[] lockedX =
-                new float[n];
+        float[] lockedX = new float[n];
+        float[] lockedY = new float[n];
+        float[] lockedSize = new float[n];
+        long[] times = new long[n];
 
-        float[] lockedY =
-                new float[n];
+        final float DEFAULT_X = 0.50f;
+        final float DEFAULT_Y = 0.40f;
+        final float DEFAULT_SIZE = 0.30f;
 
-        float[] lockedSize =
-                new float[n];
+        final float MIN_SIZE = 0.20f;
+        final float MAX_SIZE = 0.45f;
 
-        long[] times =
-                new long[n];
+        final float EDGE_LEFT = 0.20f;
+        final float EDGE_RIGHT = 0.80f;
 
-        float lastX =
-                0.30f;
+        float previousX = DEFAULT_X;
+        float previousY = DEFAULT_Y;
+        float previousSize = DEFAULT_SIZE;
 
-        float lastY =
-                0.40f;
+        boolean hasValidSubject = false;
 
-        float lastSize =
-                0.30f;
-
-        boolean hasFace =
-                false;
-
-        String currentSide =
-                "LEFT";
-
-        String pendingSide =
-                "LEFT";
-
-        int sideCounter =
-                0;
-
-        for (int i = 0;
-             i < n;
-             i++) {
+        for (int i = 0; i < n; i++) {
 
             JSONObject sample =
                     samples.getJSONObject(i);
 
             times[i] =
-                    sample.optLong(
-                            "t",
-                            0);
+                    sample.optLong("t", 0);
 
             JSONArray faces =
-                    sample.optJSONArray(
-                            "faces");
+                    sample.optJSONArray("faces");
 
+            /*
+             * No face:
+             * fallback ke center.
+             */
             if (faces == null ||
                     faces.length() == 0) {
 
-                lockedX[i] =
-                        lastX;
+                lockedX[i] = DEFAULT_X;
+                lockedY[i] = DEFAULT_Y;
+                lockedSize[i] = DEFAULT_SIZE;
 
-                lockedY[i] =
-                        lastY;
+                previousX = DEFAULT_X;
+                previousY = DEFAULT_Y;
+                previousSize = DEFAULT_SIZE;
 
-                lockedSize[i] =
-                        lastSize;
-
+                hasValidSubject = false;
                 continue;
             }
 
+            JSONObject chosen = null;
+
+            /*
+             * SINGLE dengan satu wajah:
+             * gunakan langsung.
+             */
             if (faces.length() == 1) {
 
-                JSONObject face =
+                chosen =
                         faces.getJSONObject(0);
 
-                float x =
-                        (float)
-                        face.optDouble(
-                                "x",
-                                lastX);
+            } else {
 
-                float y =
-                        (float)
-                        face.optDouble(
-                                "y",
-                                lastY);
+                /*
+                 * Multi-face SINGLE:
+                 *
+                 * Jangan menebak speaker.
+                 *
+                 * Score =
+                 * ukuran + kedekatan center + kestabilan.
+                 */
+                float bestScore =
+                        -Float.MAX_VALUE;
 
-                float size =
-                        (float)
-                        face.optDouble(
-                                "size",
-                                lastSize);
+                for (int f = 0;
+                     f < faces.length();
+                     f++) {
 
-                lockedX[i] =
-                        x;
+                    JSONObject candidate =
+                            faces.getJSONObject(f);
 
-                lockedY[i] =
-                        y;
+                    float x =
+                            (float)
+                            candidate.optDouble(
+                                    "x",
+                                    DEFAULT_X);
 
-                lockedSize[i] =
-                        size;
+                    float y =
+                            (float)
+                            candidate.optDouble(
+                                    "y",
+                                    DEFAULT_Y);
 
-                lastX = x;
-                lastY = y;
-                lastSize = size;
+                    float size =
+                            (float)
+                            candidate.optDouble(
+                                    "size",
+                                    DEFAULT_SIZE);
 
-                currentSide =
-                        x < 0.5f
-                                ? "LEFT"
-                                : "RIGHT";
+                    if (x < 0.0f ||
+                            x > 1.0f ||
+                            y < 0.0f ||
+                            y > 1.0f) {
+                        continue;
+                    }
 
-                pendingSide =
-                        currentSide;
+                    size =
+                            clamp(
+                                    size,
+                                    MIN_SIZE,
+                                    MAX_SIZE);
 
-                sideCounter =
-                        0;
+                    float sizeScore =
+                            clamp(
+                                    size,
+                                    0.0f,
+                                    1.0f);
 
-                hasFace =
-                        true;
+                    float centerDistance =
+                            Math.abs(x - 0.50f);
 
+                    float centerScore =
+                            1.0f -
+                            clamp(
+                                    centerDistance * 2.0f,
+                                    0.0f,
+                                    1.0f);
+
+                    float movement =
+                            Math.abs(
+                                    x - previousX);
+
+                    float stabilityScore =
+                            1.0f -
+                            clamp(
+                                    movement * 2.0f,
+                                    0.0f,
+                                    1.0f);
+
+                    float score =
+                            (sizeScore * 0.35f) +
+                            (centerScore * 0.30f) +
+                            (stabilityScore * 0.35f);
+
+                    if (score > bestScore) {
+                        bestScore = score;
+                        chosen = candidate;
+                    }
+                }
+            }
+
+            /*
+             * Tidak ada kandidat valid.
+             */
+            if (chosen == null) {
+
+                lockedX[i] = DEFAULT_X;
+                lockedY[i] = DEFAULT_Y;
+                lockedSize[i] = DEFAULT_SIZE;
+
+                previousX = DEFAULT_X;
+                previousY = DEFAULT_Y;
+                previousSize = DEFAULT_SIZE;
+
+                hasValidSubject = false;
                 continue;
             }
 
-            JSONObject leftFace =
-                    null;
-
-            JSONObject rightFace =
-                    null;
-
-            float minX =
-                    Float.MAX_VALUE;
-
-            float maxX =
-                    -Float.MAX_VALUE;
-
-            for (int f = 0;
-                 f < faces.length();
-                 f++) {
-
-                JSONObject candidate =
-                        faces.getJSONObject(f);
-
-                float x =
-                        (float)
-                        candidate.optDouble(
-                                "x",
-                                0.5f);
-
-                if (x < minX) {
-                    minX = x;
-                    leftFace =
-                            candidate;
-                }
-
-                if (x > maxX) {
-                    maxX = x;
-                    rightFace =
-                            candidate;
-                }
-            }
-
-            JSONObject chosen =
-                    "RIGHT".equals(
-                            currentSide)
-                            ? rightFace
-                            : leftFace;
-
-            String detectedSide =
-                    currentSide;
-
-            if (leftFace != null &&
-                    rightFace != null) {
-
-                float lx =
-                        (float)
-                        leftFace.optDouble(
-                                "x",
-                                0.3f);
-
-                float rx =
-                        (float)
-                        rightFace.optDouble(
-                                "x",
-                                0.7f);
-
-                detectedSide =
-                        Math.abs(
-                                lx - lastX)
-                                <
-                                Math.abs(
-                                        rx - lastX)
-                                ? "LEFT"
-                                : "RIGHT";
-
-                if (!detectedSide.equals(
-                        pendingSide)) {
-
-                    pendingSide =
-                            detectedSide;
-
-                    sideCounter =
-                            1;
-
-                } else {
-
-                    sideCounter++;
-                }
-
-                if (sideCounter >=
-                        HYSTERESIS_THRESHOLD) {
-
-                    currentSide =
-                            pendingSide;
-                }
-
-                chosen =
-                        "RIGHT".equals(
-                                currentSide)
-                                ? rightFace
-                                : leftFace;
-            }
-
-            if (chosen == null) {
-                chosen =
-                        leftFace != null
-                                ? leftFace
-                                : rightFace;
-            }
-
-            if (chosen == null) {
-
-                lockedX[i] =
-                        lastX;
-
-                lockedY[i] =
-                        lastY;
-
-                lockedSize[i] =
-                        lastSize;
-
-                continue;
-            }
-
-            float x =
+            float detectedX =
                     (float)
                     chosen.optDouble(
                             "x",
-                            lastX);
+                            DEFAULT_X);
 
-            float y =
+            float detectedY =
                     (float)
                     chosen.optDouble(
                             "y",
-                            lastY);
+                            DEFAULT_Y);
 
-            float size =
+            float detectedSize =
                     (float)
                     chosen.optDouble(
                             "size",
-                            lastSize);
+                            DEFAULT_SIZE);
 
-            if (x >= CENTER_MIN &&
-                    x <= CENTER_MAX) {
+            detectedX =
+                    clamp(
+                            detectedX,
+                            0.05f,
+                            0.95f);
 
-                x =
-                        "LEFT".equals(
-                                currentSide)
-                                ? 0.30f
-                                : 0.70f;
+            detectedY =
+                    clamp(
+                            detectedY,
+                            0.15f,
+                            0.85f);
+
+            detectedSize =
+                    clamp(
+                            detectedSize,
+                            MIN_SIZE,
+                            MAX_SIZE);
+
+            /*
+             * Normal:
+             * center.
+             *
+             * Jika subjek terlalu dekat edge:
+             * mulai ikuti.
+             */
+            float targetX;
+
+            if (detectedX >= EDGE_LEFT &&
+                    detectedX <= EDGE_RIGHT) {
+
+                targetX = DEFAULT_X;
+
+            } else {
+
+                targetX = detectedX;
             }
 
-            lockedX[i] =
-                    x;
+            /*
+             * Y:
+             * prioritaskan upper-middle.
+             */
+            float targetY =
+                    detectedY;
 
-            lockedY[i] =
-                    y;
+            if (targetY >= 0.25f &&
+                    targetY <= 0.60f) {
 
-            lockedSize[i] =
-                    size;
-
-            lastX = x;
-            lastY = y;
-            lastSize = size;
-
-            hasFace =
-                    true;
-        }
-
-        if (!hasFace) {
-
-            Log.w(
-                    TAG,
-                    "Shot " + shotId +
-                    ": no face -> center");
-
-            for (int i = 0;
-                 i < n;
-                 i++) {
-
-                lockedX[i] =
-                        0.50f;
-
-                lockedY[i] =
-                        0.40f;
-
-                lockedSize[i] =
-                        0.30f;
+                targetY = DEFAULT_Y;
             }
+
+            /*
+             * Size:
+             * perubahan kecil jangan dikejar.
+             */
+            float targetSize =
+                    detectedSize;
+
+            if (hasValidSubject) {
+
+                float sizeDelta =
+                        Math.abs(
+                                targetSize -
+                                previousSize);
+
+                if (sizeDelta < 0.05f) {
+                    targetSize =
+                            previousSize;
+                }
+            }
+
+            lockedX[i] = targetX;
+            lockedY[i] = targetY;
+            lockedSize[i] = targetSize;
+
+            previousX = targetX;
+            previousY = targetY;
+            previousSize = targetSize;
+
+            hasValidSubject = true;
         }
 
-        float smoothX =
-                lockedX[0];
-
-        float smoothY =
-                lockedY[0];
-
-        float smoothSize =
-                lockedSize[0];
-
-        final float alpha =
-                0.40f;
+        /*
+         * Adaptive smoothing.
+         *
+         * Perpindahan kecil = lambat.
+         * Perpindahan besar = lebih cepat.
+         */
+        float smoothX = lockedX[0];
+        float smoothY = lockedY[0];
+        float smoothSize = lockedSize[0];
 
         for (int i = 0;
              i < n;
@@ -910,18 +869,37 @@ public class Pass2Optimizer {
 
             if (i > 0) {
 
+                float distanceX =
+                        Math.abs(
+                                lockedX[i] -
+                                smoothX);
+
+                float alphaX;
+
+                if (distanceX < 0.10f) {
+                    alphaX = 0.20f;
+                } else if (distanceX < 0.25f) {
+                    alphaX = 0.35f;
+                } else {
+                    alphaX = 0.60f;
+                }
+
                 smoothX +=
-                        alpha *
+                        alphaX *
                         (lockedX[i] -
                                 smoothX);
 
+                final float alphaY = 0.25f;
+
                 smoothY +=
-                        alpha *
+                        alphaY *
                         (lockedY[i] -
                                 smoothY);
 
+                final float alphaSize = 0.15f;
+
                 smoothSize +=
-                        alpha *
+                        alphaSize *
                         (lockedSize[i] -
                                 smoothSize);
             }
@@ -935,21 +913,39 @@ public class Pass2Optimizer {
 
             point.put(
                     "x",
-                    (double) smoothX);
+                    (double)
+                    clamp(
+                            smoothX,
+                            0.05f,
+                            0.95f));
 
             point.put(
                     "y",
-                    (double) smoothY);
+                    (double)
+                    clamp(
+                            smoothY,
+                            0.15f,
+                            0.85f));
 
             point.put(
                     "size",
-                    (double) smoothSize);
+                    (double)
+                    clamp(
+                            smoothSize,
+                            MIN_SIZE,
+                            MAX_SIZE));
 
             track.put(point);
         }
 
+        Log.i(
+                TAG,
+                "Shot " + shotId +
+                " SINGLE: adaptive subject tracking");
+
         return track;
     }
+
     private static float clamp(float value, float min, float max) {
         return Math.max(min, Math.min(max, value));
     }
