@@ -189,447 +189,92 @@ public class MainActivity extends AppCompatActivity {
      *      ↓
      * Pass3Renderer
      */
+    /*
+     * ============================================================
+     * AUTO REFRAFRAME FLOW
+     * ============================================================
+     *
+     * Manual Layout Shot dihapus dari jalur normal.
+     *
+     * Pass 1 -> analysis.json
+     * Pass 2 -> AUTO SINGLE/SPLIT -> trajectory.json
+     * Pass 3 -> render
+     */
     private void showManualLayoutEditor(
             File analysisFile,
             File trajectoryFile,
             File outputVideoFile,
             Uri videoUri) {
 
-        try {
+        tvStatus.setText("PASS 2: Auto Layout + Optimasi...");
 
-            String json =
-                    new String(
-                            java.nio.file.Files.readAllBytes(
-                                    analysisFile.toPath()),
-                            java.nio.charset.StandardCharsets.UTF_8);
-
-            org.json.JSONObject root =
-                    new org.json.JSONObject(json);
-
-            org.json.JSONArray shots =
-                    root.optJSONArray("shots");
-
-            if (shots == null ||
-                    shots.length() == 0) {
-
-                tvStatus.setText(
-                        "GAGAL: tidak ada shot.");
-
-                return;
-            }
-
-            android.widget.LinearLayout container =
-                    new android.widget.LinearLayout(
-                            this);
-
-            container.setOrientation(
-                    android.widget.LinearLayout.VERTICAL);
-
-            int pad =
-                    (int) (
-                            16 *
-                            getResources()
-                                    .getDisplayMetrics()
-                                    .density);
-
-            container.setPadding(
-                    pad,
-                    pad,
-                    pad,
-                    pad);
-
-            android.widget.TextView info =
-                    new android.widget.TextView(
-                            this);
-
-            info.setText(
-                    "Pilih layout setiap shot.\n\n"
-                            + "SINGLE = satu pembicara / close-up\n"
-                            + "SPLIT = dua pembicara kiri + kanan\n\n"
-                            + "Default semua shot: SINGLE");
-
-            info.setTextSize(16);
-
-            info.setPadding(
-                    0,
-                    0,
-                    0,
-                    pad);
-
-            container.addView(info);
-
-            java.util.ArrayList<
-                    android.widget.RadioGroup> groups =
-                    new java.util.ArrayList<>();
-
-            for (int i = 0;
-                 i < shots.length();
-                 i++) {
-
-                org.json.JSONObject shot =
-                        shots.optJSONObject(i);
-
-                if (shot == null) {
-                    continue;
-                }
-
-                int shotId =
-                        shot.optInt(
-                                "shotId",
-                                i);
-
-                long startMs =
-                        shot.optLong(
-                                "startMs",
-                                0);
-
-                android.widget.TextView label =
-                        new android.widget.TextView(
-                                this);
-
-                label.setText(
-                        "SHOT "
-                                + shotId
-                                + "   "
-                                + String.format(
-                                        java.util.Locale.US,
-                                        "%.2f s",
-                                        startMs / 1000.0));
-
-                label.setTextSize(18);
-
-                label.setPadding(
-                        0,
-                        pad / 2,
-                        0,
-                        0);
-
-                container.addView(label);
-
-                android.widget.RadioGroup group =
-                        new android.widget.RadioGroup(
-                                this);
-
-                group.setOrientation(
-                        android.widget.RadioGroup.HORIZONTAL);
-
-                android.widget.RadioButton single =
-                        new android.widget.RadioButton(
-                                this);
-
-                single.setText("SINGLE");
-                single.setTextSize(16);
-
-                single.setId(
-                        android.view.View.generateViewId());
-
-                android.widget.RadioButton split =
-                        new android.widget.RadioButton(
-                                this);
-
-                split.setText("SPLIT");
-                split.setTextSize(16);
-
-                split.setId(
-                        android.view.View.generateViewId());
-
-                group.addView(single);
-                group.addView(split);
-
-                /*
-                 * HARD SAFE DEFAULT.
-                 *
-                 * Jangan mewarisi layout lama.
-                 */
-                single.setChecked(true);
-
-                container.addView(group);
-
-                groups.add(group);
-            }
-
-            android.widget.ScrollView scroll =
-                    new android.widget.ScrollView(
-                            this);
-
-            scroll.addView(container);
-
-            android.widget.Button apply =
-                    new android.widget.Button(
-                            this);
-
-            apply.setText(
-                    "TERAPKAN & RENDER");
-
-            container.addView(
-                    apply);
-
-            android.app.AlertDialog dialog =
-                    new android.app.AlertDialog.Builder(
-                            this)
-                            .setTitle(
-                                    "Manual Layout Shot")
-                            .setView(scroll)
-                            .setCancelable(false)
-                            .create();
-
-            apply.setOnClickListener(v -> {
-
-                /*
-                 * Simpan pilihan user.
-                 */
-                for (int i = 0;
-                     i < shots.length() &&
-                     i < groups.size();
-                     i++) {
-
-                    try {
-
-                        org.json.JSONObject shot =
-                                shots.getJSONObject(i);
-
-                        android.widget.RadioGroup group =
-                                groups.get(i);
-
-                        int checkedId =
-                                group.getCheckedRadioButtonId();
-
-                        android.widget.RadioButton selected =
-                                group.findViewById(
-                                        checkedId);
-
-                        String layout =
-                                "single";
-
-                        if (selected != null &&
-                                "SPLIT".equalsIgnoreCase(
-                                        selected.getText()
-                                                .toString())) {
-
-                            layout = "split";
-                        }
-
-                        shot.put(
-                                "layout",
-                                layout);
-
-                    } catch (Exception e) {
-
-                        Log.e(
-                                TAG,
-                                "Gagal menyimpan layout shot "
-                                        + i,
-                                e);
-                    }
-                }
-
-                dialog.dismiss();
-
-                new Thread(() -> {
-
-                    try {
-
-                        /*
-                         * Tulis analysis.json yang sudah
-                         * berisi pilihan manual.
-                         */
-                        java.nio.file.Files.write(
-                                analysisFile.toPath(),
-                                root.toString()
-                                        .getBytes(
-                                                java.nio.charset.StandardCharsets.UTF_8));
-
-                        runOnUiThread(() ->
-                                tvStatus.setText(
-                                        "PASS 2: Optimasi..."));
-
-                        Pass2Optimizer.optimize(
-                                analysisFile,
-                                trajectoryFile);
-
-                        exportDiagnostics(
-                                analysisFile,
-                                trajectoryFile);
-
-                        runOnUiThread(() ->
-                                tvStatus.setText(
-                                        "PASS 3: Rendering..."));
-
-                        Pass3Renderer.render(
-                                getApplicationContext(),
-                                videoUri,
-                                trajectoryFile,
-                                outputVideoFile);
-
-                        String exportError =
-                                exportToGallery(
-                                        outputVideoFile,
-                                        analysisFile);
-
-                        long finalSize =
-                                outputVideoFile.exists()
-                                        ? outputVideoFile.length()
-                                        : 0;
-
-                        runOnUiThread(() -> {
-
-                            String msg;
-
-                            if (exportError == null) {
-
-                                msg =
-                                        "RENDER + EXPORT SUKSES!\n"
-                                                + "Cek folder Movies/SmartReframe\n";
-
-                            } else {
-
-                                String error =
-                                        exportError.length() > 400
-                                                ? exportError.substring(
-                                                        0,
-                                                        400)
-                                                        + "..."
-                                                : exportError;
-
-                                msg =
-                                        "Render OK, GAGAL export:\n"
-                                                + error
-                                                + "\n";
-                            }
-
-                            tvStatus.setText(
-                                    msg
-                                            + "Ukuran: "
-                                            + finalSize
-                                            + " bytes");
-                        });
-
-                    } catch (Exception e) {
-
-                        Log.e(
-                                TAG,
-                                "Manual pipeline gagal",
-                                e);
-
-                        String trace =
-                                Log.getStackTraceString(e);
-
-                        if (trace.length() > 500) {
-                            trace =
-                                    trace.substring(
-                                            0,
-                                            500)
-                                            + "...";
-                        }
-
-                        String finalTrace = trace;
-
-                        runOnUiThread(() ->
-                                tvStatus.setText(
-                                        "GAGAL:\n"
-                                                + finalTrace));
-                    }
-
-                }).start();
-            });
-
-            dialog.show();
-
-        } catch (Exception e) {
-
-            Log.e(
-                    TAG,
-                    "Manual Layout Editor gagal",
-                    e);
-
-            tvStatus.setText(
-                    "GAGAL membuka editor:\n"
-                            + e.getMessage());
-        }
-    }
-
-
-    private String exportToGallery(File sourceFile, File analysisFile) {
-        try {
-            String layoutLabel = "SINGLE";
-            int shotCount = 0;
-            int splitCount = 0;
-            int singleCount = 0;
+        new Thread(() -> {
 
             try {
-                String json = new String(
-                        java.nio.file.Files.readAllBytes(analysisFile.toPath()),
-                        java.nio.charset.StandardCharsets.UTF_8);
 
-                org.json.JSONObject root =
-                        new org.json.JSONObject(json);
+                /*
+                 * Pass2Optimizer sekarang menentukan layout
+                 * secara otomatis per-shot.
+                 */
+                Pass2Optimizer.optimize(
+                        analysisFile,
+                        trajectoryFile);
 
-                org.json.JSONArray shots =
-                        root.optJSONArray("shots");
+                runOnUiThread(() ->
+                        tvStatus.setText(
+                                "PASS 3: Auto Render..."));
 
-                if (shots != null) {
-                    shotCount = shots.length();
+                /*
+                 * Gunakan pipeline renderer yang sudah ada.
+                 *
+                 * Signature Pass3Renderer dipertahankan dari
+                 * pipeline aplikasi saat ini.
+                 */
+                Pass3Renderer.render(
+                        this,
+                        videoUri,
+                        trajectoryFile,
+                        outputVideoFile);
 
-                    for (int i = 0; i < shots.length(); i++) {
-                        org.json.JSONObject shot = shots.optJSONObject(i);
+                runOnUiThread(() -> {
 
-                        if (shot == null) continue;
+                    tvStatus.setText(
+                            "SELESAI: Auto Reframe\n" +
+                            outputVideoFile.getAbsolutePath());
 
-                        String layout =
-                                shot.optString("layout", "single");
+                    Log.i(
+                            TAG,
+                            "AUTO REFRAFRAME DONE: " +
+                            outputVideoFile.getAbsolutePath());
+                });
 
-                        if ("split".equalsIgnoreCase(layout)) {
-                            splitCount++;
-                        } else {
-                            singleCount++;
-                        }
-                    }
-                }
+            } catch (Exception e) {
 
-                if (splitCount > 0) {
-                    layoutLabel =
-                            "SHOTS" + shotCount +
-                            "_SPLIT" + splitCount +
-                            "_SINGLE" + singleCount;
-                } else {
-                    layoutLabel =
-                            "SHOTS" + shotCount +
-                            "_SINGLE" + singleCount;
-                }
-
-            } catch (Exception diagnosticError) {
-                Log.w(
+                Log.e(
                         TAG,
-                        "Gagal membaca shot diagnostic",
-                        diagnosticError);
-            }
+                        "AUTO REFRAFRAME FAILED",
+                        e);
 
-            ContentValues values = new ContentValues();
-            values.put(MediaStore.Video.Media.DISPLAY_NAME, layoutLabel + "_" + System.currentTimeMillis() + ".mp4");
-            values.put(MediaStore.Video.Media.MIME_TYPE, "video/mp4");
-            // Diubah ke DIRECTORY_MOVIES karena Android melarang DIRECTORY_DOWNLOADS untuk Video.Media
-            values.put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/SmartReframe");
+                String trace =
+                        Log.getStackTraceString(e);
 
-            Uri collection = MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY);
-            Uri itemUri = MainActivity.this.getContentResolver().insert(collection, values);
-            if (itemUri == null) return "insert() mengembalikan null";
-
-            try (OutputStream out = MainActivity.this.getContentResolver().openOutputStream(itemUri);
-                 FileInputStream in = new FileInputStream(sourceFile)) {
-                if (out == null) return "openOutputStream() null untuk uri: " + itemUri;
-                byte[] buffer = new byte[8192];
-                int read;
-                while ((read = in.read(buffer)) != -1) {
-                    out.write(buffer, 0, read);
+                if (trace.length() > 1000) {
+                    trace =
+                            trace.substring(0, 1000)
+                                    + "...";
                 }
-                out.flush();
+
+                String finalTrace = trace;
+
+                runOnUiThread(() ->
+                        tvStatus.setText(
+                                "GAGAL AUTO REFRAFRAME:\n" +
+                                finalTrace));
             }
-            return null; // Sukses tanpa error
-        } catch (Exception e) {
-            Log.e(TAG, "Gagal ekspor ke MediaStore", e);
-            return Log.getStackTraceString(e);
-        }
+
+        }).start();
     }
+
     private void exportDiagnostics(File analysisFile, File trajectoryFile) {
         try {
             exportJsonToMediaStore(analysisFile, "analysis.json");
