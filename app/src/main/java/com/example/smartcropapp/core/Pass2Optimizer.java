@@ -113,8 +113,8 @@ public class Pass2Optimizer {
                  * Hasil kemudian dibekukan sepanjang shot.
                  */
 
-                float[] calibration =
-                        float[] splitPosition = calibrateSplitShot(shot);
+                float[] splitPosition =
+                        calibrateSplitShot(shot);
 
                         /*
                          * Persist SPLIT calibration into analysis.json.
