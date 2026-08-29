@@ -294,21 +294,7 @@ public class Pass2Optimizer {
                 return "single";
             }
 
-            int validSamples = 0;
             int twoFaceSamples = 0;
-
-            /*
-             * Dua wajah dianggap benar-benar terpisah
-             * bila posisi horizontalnya cukup jauh.
-             */
-            final float MIN_HORIZONTAL_SEPARATION = 0.16f;
-
-            /*
-             * Tidak perlu menunggu 35% sample.
-             * Satu bukti kuat dua wajah yang konsisten
-             * sudah cukup untuk mengaktifkan SPLIT.
-             */
-            final int MIN_TWO_FACE_SAMPLES = 2;
 
             for (int i = 0;
                     i < samples.length();
@@ -329,11 +315,6 @@ public class Pass2Optimizer {
                     continue;
                 }
 
-                validSamples++;
-
-                float minX = Float.MAX_VALUE;
-                float maxX = -Float.MAX_VALUE;
-
                 int usableFaces = 0;
 
                 for (int f = 0;
@@ -347,92 +328,40 @@ public class Pass2Optimizer {
                         continue;
                     }
 
-                    double rawX =
-                            face.optDouble(
-                                    "x",
-                                    Double.NaN);
+                    double x =
+                            face.optDouble("x", Double.NaN);
 
-                    double rawSize =
-                            face.optDouble(
-                                    "size",
-                                    Double.NaN);
+                    double size =
+                            face.optDouble("size", Double.NaN);
 
-                    if (Double.isNaN(rawX) ||
-                            Double.isNaN(rawSize)) {
-                        continue;
+                    if (!Double.isNaN(x) &&
+                            !Double.isNaN(size) &&
+                            x >= 0.0 &&
+                            x <= 1.0 &&
+                            size > 0.0) {
+
+                        usableFaces++;
                     }
-
-                    float x = (float) rawX;
-                    float size = (float) rawSize;
-
-                    if (x < 0.0f ||
-                            x > 1.0f ||
-                            size <= 0.0f) {
-                        continue;
-                    }
-
-                    minX = Math.min(minX, x);
-                    maxX = Math.max(maxX, x);
-
-                    usableFaces++;
                 }
 
-                if (usableFaces >= 2 &&
-                        (maxX - minX) >=
-                                MIN_HORIZONTAL_SEPARATION) {
-
+                if (usableFaces >= 2) {
                     twoFaceSamples++;
                 }
             }
 
-            /*
-             * Tidak ada bukti dua wajah.
-             */
-            if (twoFaceSamples == 0) {
-
-                Log.i(
-                        TAG,
-                        "AUTO LAYOUT shot=" +
-                                shot.optInt("shotId", -1) +
-                                " -> SINGLE (no two-face evidence)");
-
-                return "single";
-            }
+            Log.i(
+                    TAG,
+                    "FORCE-SPLIT TEST shot=" +
+                            shot.optInt("shotId", -1) +
+                            " twoFaceSamples=" +
+                            twoFaceSamples);
 
             /*
-             * Dua sample atau lebih = SPLIT.
-             *
-             * Ini sengaja dibuat agresif agar wide shot
-             * dua pembicara tidak jatuh ke tengah kosong.
+             * TEST:
+             * Jika minimal satu sample benar-benar mempunyai
+             * dua wajah valid, paksa SPLIT.
              */
-            if (twoFaceSamples >=
-                    MIN_TWO_FACE_SAMPLES) {
-
-                Log.i(
-                        TAG,
-                        "AUTO LAYOUT shot=" +
-                                shot.optInt("shotId", -1) +
-                                " twoFaceSamples=" +
-                                twoFaceSamples +
-                                " -> SPLIT");
-
-                return "split";
-            }
-
-            /*
-             * Satu bukti saja:
-             * tetap SPLIT bila pemisahan sangat besar.
-             */
-            if (validSamples > 0) {
-
-                Log.i(
-                        TAG,
-                        "AUTO LAYOUT shot=" +
-                                shot.optInt("shotId", -1) +
-                                " twoFaceSamples=" +
-                                twoFaceSamples +
-                                " -> SPLIT (strong evidence)");
-
+            if (twoFaceSamples >= 1) {
                 return "split";
             }
 
@@ -442,7 +371,7 @@ public class Pass2Optimizer {
 
             Log.w(
                     TAG,
-                    "AUTO LAYOUT failed -> SINGLE",
+                    "FORCE-SPLIT TEST failed -> SINGLE",
                     e);
 
             return "single";
