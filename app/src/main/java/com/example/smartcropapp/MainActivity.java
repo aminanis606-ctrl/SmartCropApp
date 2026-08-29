@@ -114,9 +114,20 @@ public class MainActivity extends AppCompatActivity {
                         getFilesDir(),
                         "trajectory.json");
 
-        File outputVideoFile =
+        File moviesDir =
                 new File(
-                        getFilesDir(),
+                        Environment.getExternalStoragePublicDirectory(
+                                Environment.DIRECTORY_MOVIES),
+                        "SmartReframe");
+
+if (!moviesDir.exists() && !moviesDir.mkdirs()) {
+    throw new RuntimeException(
+            "Gagal membuat folder Movies/SmartReframe");
+}
+
+File outputVideoFile =
+                new File(
+                        moviesDir,
                         "output_final.mp4");
 
         new Thread(() -> {
