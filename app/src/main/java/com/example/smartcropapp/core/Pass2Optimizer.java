@@ -68,7 +68,21 @@ public class Pass2Optimizer {
             String layout =
                     shot.optString(
                             "layout",
-                            "single");
+                            "unclassified");
+
+            /*
+             * MANUAL LAYOUT MODE
+             *
+             * Pass 1 sekarang hanya menentukan shot boundary.
+             * Layout SPLIT/SINGLE harus diberikan oleh UI/manual
+             * sebelum Pass 2 dipakai untuk rendering.
+             *
+             * Jangan mengubah UNCLASSIFIED menjadi SINGLE di sini.
+             */
+
+            if ("".equals(layout.trim())) {
+                layout = "unclassified";
+            }
 
             int shotId =
                     shot.optInt(
@@ -188,6 +202,86 @@ public class Pass2Optimizer {
                 TAG,
                 "PASS2 DONE -> " +
                 trajectoryFile.getAbsolutePath());
+    }
+
+    private static boolean hasStableTwoFaceEvidence(
+            JSONObject shot)
+            throws Exception {
+
+        JSONArray samples =
+                shot.optJSONArray("samples");
+
+        if (samples == null ||
+                samples.length() == 0) {
+            return false;
+        }
+
+        int validSamples = 0;
+
+        for (int i = 0;
+             i < samples.length();
+             i++) {
+
+            JSONObject sample =
+                    samples.getJSONObject(i);
+
+            JSONArray faces =
+                    sample.optJSONArray("faces");
+
+            if (faces == null ||
+                    faces.length() < 2) {
+                continue;
+            }
+
+            float minX =
+                    Float.MAX_VALUE;
+
+            float maxX =
+                    -Float.MAX_VALUE;
+
+            for (int f = 0;
+                 f < faces.length();
+                 f++) {
+
+                JSONObject face =
+                        faces.getJSONObject(f);
+
+                float x =
+                        (float)
+                        face.optDouble(
+                                "x",
+                                0.5f);
+
+                if (x < minX) {
+                    minX = x;
+                }
+
+                if (x > maxX) {
+                    maxX = x;
+                }
+            }
+
+            /*
+             * Dua wajah harus benar-benar terpisah.
+             *
+             * 0.25 = jarak horizontal minimum.
+             * Close-up satu wajah dengan beberapa deteksi
+             * berdekatan tidak lolos.
+             */
+            if (maxX - minX >= 0.25f) {
+                validSamples++;
+            }
+        }
+
+        /*
+         * Minimal 2 sample berbeda harus mendukung
+         * keberadaan dua wajah.
+         *
+         * Karena Pass1 sampling sekitar 500 ms,
+         * ini cukup kuat untuk menolak false-positive
+         * satu frame.
+         */
+        return validSamples >= 2;
     }
 
     private static float[] calibrateSplitShot(

@@ -78,46 +78,476 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Override
-    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode == PICK_VIDEO_REQUEST && resultCode == RESULT_OK && data != null) {
-            Uri videoUri = data.getData();
-            if (videoUri != null) {
-                tvStatus.setText("Menjalankan Pipeline End-to-End...");
-                
-                File analysisFile = new File(getFilesDir(), "analysis.json");
-                File trajectoryFile = new File(getFilesDir(), "trajectory.json");
-                File outputVideoFile = new File(getFilesDir(), "output_final.mp4");
+    protected void onActivityResult(
+            int requestCode,
+            int resultCode,
+            @Nullable Intent data) {
+
+        super.onActivityResult(
+                requestCode,
+                resultCode,
+                data);
+
+        if (requestCode != PICK_VIDEO_REQUEST ||
+                resultCode != RESULT_OK ||
+                data == null) {
+            return;
+        }
+
+        Uri videoUri =
+                data.getData();
+
+        if (videoUri == null) {
+            return;
+        }
+
+        tvStatus.setText(
+                "PASS 1: Mendeteksi shot...");
+
+        File analysisFile =
+                new File(
+                        getFilesDir(),
+                        "analysis.json");
+
+        File trajectoryFile =
+                new File(
+                        getFilesDir(),
+                        "trajectory.json");
+
+        File outputVideoFile =
+                new File(
+                        getFilesDir(),
+                        "output_final.mp4");
+
+        new Thread(() -> {
+
+            try {
+
+                /*
+                 * PASS 1
+                 *
+                 * Hanya mencari batas shot.
+                 * Layout otomatis sudah dimatikan.
+                 */
+                Pass1Extractor.extract(
+                        getApplicationContext(),
+                        videoUri,
+                        analysisFile);
+
+                runOnUiThread(() ->
+                        showManualLayoutEditor(
+                                analysisFile,
+                                trajectoryFile,
+                                outputVideoFile,
+                                videoUri));
+
+            } catch (Exception e) {
+
+                Log.e(
+                        TAG,
+                        "PASS 1 Gagal",
+                        e);
+
+                String trace =
+                        Log.getStackTraceString(e);
+
+                if (trace.length() > 500) {
+                    trace =
+                            trace.substring(0, 500)
+                                    + "...";
+                }
+
+                String finalTrace = trace;
+
+                runOnUiThread(() ->
+                        tvStatus.setText(
+                                "GAGAL PASS 1:\n"
+                                        + finalTrace));
+            }
+
+        }).start();
+    }
+
+
+    /*
+     * ============================================================
+     * MANUAL SHOT LAYOUT EDITOR
+     * ============================================================
+     *
+     * Semua shot dimulai sebagai SINGLE.
+     *
+     * User dapat memilih SPLIT secara manual
+     * hanya pada shot yang benar-benar membutuhkan split.
+     *
+     * Setelah TERAPKAN:
+     *
+     * analysis.json
+     *      ↓
+     * Pass2Optimizer
+     *      ↓
+     * trajectory.json
+     *      ↓
+     * Pass3Renderer
+     */
+    private void showManualLayoutEditor(
+            File analysisFile,
+            File trajectoryFile,
+            File outputVideoFile,
+            Uri videoUri) {
+
+        try {
+
+            String json =
+                    new String(
+                            java.nio.file.Files.readAllBytes(
+                                    analysisFile.toPath()),
+                            java.nio.charset.StandardCharsets.UTF_8);
+
+            org.json.JSONObject root =
+                    new org.json.JSONObject(json);
+
+            org.json.JSONArray shots =
+                    root.optJSONArray("shots");
+
+            if (shots == null ||
+                    shots.length() == 0) {
+
+                tvStatus.setText(
+                        "GAGAL: tidak ada shot.");
+
+                return;
+            }
+
+            android.widget.LinearLayout container =
+                    new android.widget.LinearLayout(
+                            this);
+
+            container.setOrientation(
+                    android.widget.LinearLayout.VERTICAL);
+
+            int pad =
+                    (int) (
+                            16 *
+                            getResources()
+                                    .getDisplayMetrics()
+                                    .density);
+
+            container.setPadding(
+                    pad,
+                    pad,
+                    pad,
+                    pad);
+
+            android.widget.TextView info =
+                    new android.widget.TextView(
+                            this);
+
+            info.setText(
+                    "Pilih layout setiap shot.\n\n"
+                            + "SINGLE = satu pembicara / close-up\n"
+                            + "SPLIT = dua pembicara kiri + kanan\n\n"
+                            + "Default semua shot: SINGLE");
+
+            info.setTextSize(16);
+
+            info.setPadding(
+                    0,
+                    0,
+                    0,
+                    pad);
+
+            container.addView(info);
+
+            java.util.ArrayList<
+                    android.widget.RadioGroup> groups =
+                    new java.util.ArrayList<>();
+
+            for (int i = 0;
+                 i < shots.length();
+                 i++) {
+
+                org.json.JSONObject shot =
+                        shots.optJSONObject(i);
+
+                if (shot == null) {
+                    continue;
+                }
+
+                int shotId =
+                        shot.optInt(
+                                "shotId",
+                                i);
+
+                long startMs =
+                        shot.optLong(
+                                "startMs",
+                                0);
+
+                android.widget.TextView label =
+                        new android.widget.TextView(
+                                this);
+
+                label.setText(
+                        "SHOT "
+                                + shotId
+                                + "   "
+                                + String.format(
+                                        java.util.Locale.US,
+                                        "%.2f s",
+                                        startMs / 1000.0));
+
+                label.setTextSize(18);
+
+                label.setPadding(
+                        0,
+                        pad / 2,
+                        0,
+                        0);
+
+                container.addView(label);
+
+                android.widget.RadioGroup group =
+                        new android.widget.RadioGroup(
+                                this);
+
+                group.setOrientation(
+                        android.widget.RadioGroup.HORIZONTAL);
+
+                android.widget.RadioButton single =
+                        new android.widget.RadioButton(
+                                this);
+
+                single.setText("SINGLE");
+                single.setTextSize(16);
+
+                single.setId(
+                        android.view.View.generateViewId());
+
+                android.widget.RadioButton split =
+                        new android.widget.RadioButton(
+                                this);
+
+                split.setText("SPLIT");
+                split.setTextSize(16);
+
+                split.setId(
+                        android.view.View.generateViewId());
+
+                group.addView(single);
+                group.addView(split);
+
+                /*
+                 * HARD SAFE DEFAULT.
+                 *
+                 * Jangan mewarisi layout lama.
+                 */
+                single.setChecked(true);
+
+                container.addView(group);
+
+                groups.add(group);
+            }
+
+            android.widget.ScrollView scroll =
+                    new android.widget.ScrollView(
+                            this);
+
+            scroll.addView(container);
+
+            android.widget.Button apply =
+                    new android.widget.Button(
+                            this);
+
+            apply.setText(
+                    "TERAPKAN & RENDER");
+
+            container.addView(
+                    apply);
+
+            android.app.AlertDialog dialog =
+                    new android.app.AlertDialog.Builder(
+                            this)
+                            .setTitle(
+                                    "Manual Layout Shot")
+                            .setView(scroll)
+                            .setCancelable(false)
+                            .create();
+
+            apply.setOnClickListener(v -> {
+
+                /*
+                 * Simpan pilihan user.
+                 */
+                for (int i = 0;
+                     i < shots.length() &&
+                     i < groups.size();
+                     i++) {
+
+                    try {
+
+                        org.json.JSONObject shot =
+                                shots.getJSONObject(i);
+
+                        android.widget.RadioGroup group =
+                                groups.get(i);
+
+                        int checkedId =
+                                group.getCheckedRadioButtonId();
+
+                        android.widget.RadioButton selected =
+                                group.findViewById(
+                                        checkedId);
+
+                        String layout =
+                                "single";
+
+                        if (selected != null &&
+                                "SPLIT".equalsIgnoreCase(
+                                        selected.getText()
+                                                .toString())) {
+
+                            layout = "split";
+                        }
+
+                        shot.put(
+                                "layout",
+                                layout);
+
+                    } catch (Exception e) {
+
+                        Log.e(
+                                TAG,
+                                "Gagal menyimpan layout shot "
+                                        + i,
+                                e);
+                    }
+                }
+
+                dialog.dismiss();
 
                 new Thread(() -> {
-                    try {
-                        Pass1Extractor.extract(getApplicationContext(), videoUri, analysisFile);
-                        Pass2Optimizer.optimize(analysisFile, trajectoryFile);
-                        exportDiagnostics(analysisFile, trajectoryFile);
-                        Pass3Renderer.render(getApplicationContext(), videoUri, trajectoryFile, outputVideoFile);
 
-                        String exportError = exportToGallery(outputVideoFile, analysisFile);
-                        long finalSize = outputVideoFile.exists() ? outputVideoFile.length() : 0;
-                        
+                    try {
+
+                        /*
+                         * Tulis analysis.json yang sudah
+                         * berisi pilihan manual.
+                         */
+                        java.nio.file.Files.write(
+                                analysisFile.toPath(),
+                                root.toString()
+                                        .getBytes(
+                                                java.nio.charset.StandardCharsets.UTF_8));
+
+                        runOnUiThread(() ->
+                                tvStatus.setText(
+                                        "PASS 2: Optimasi..."));
+
+                        Pass2Optimizer.optimize(
+                                analysisFile,
+                                trajectoryFile);
+
+                        exportDiagnostics(
+                                analysisFile,
+                                trajectoryFile);
+
+                        runOnUiThread(() ->
+                                tvStatus.setText(
+                                        "PASS 3: Rendering..."));
+
+                        Pass3Renderer.render(
+                                getApplicationContext(),
+                                videoUri,
+                                trajectoryFile,
+                                outputVideoFile);
+
+                        String exportError =
+                                exportToGallery(
+                                        outputVideoFile,
+                                        analysisFile);
+
+                        long finalSize =
+                                outputVideoFile.exists()
+                                        ? outputVideoFile.length()
+                                        : 0;
+
                         runOnUiThread(() -> {
-                            String msg = (exportError == null)
-                                    ? "RENDER + EXPORT SUKSES!\nCek folder Movies/SmartReframe\n"
-                                    : "Render OK, GAGAL export:\n" + (exportError.length() > 400 ? exportError.substring(0, 400) + "..." : exportError) + "\n";
-                            tvStatus.setText(msg + "Ukuran: " + finalSize + " bytes");
+
+                            String msg;
+
+                            if (exportError == null) {
+
+                                msg =
+                                        "RENDER + EXPORT SUKSES!\n"
+                                                + "Cek folder Movies/SmartReframe\n";
+
+                            } else {
+
+                                String error =
+                                        exportError.length() > 400
+                                                ? exportError.substring(
+                                                        0,
+                                                        400)
+                                                        + "..."
+                                                : exportError;
+
+                                msg =
+                                        "Render OK, GAGAL export:\n"
+                                                + error
+                                                + "\n";
+                            }
+
+                            tvStatus.setText(
+                                    msg
+                                            + "Ukuran: "
+                                            + finalSize
+                                            + " bytes");
                         });
+
                     } catch (Exception e) {
-                        Log.e(TAG, "Pipeline Gagal", e);
-                        String fullTrace = Log.getStackTraceString(e);
-                        if (fullTrace.length() > 400) {
-                            fullTrace = fullTrace.substring(0, 400) + "...";
+
+                        Log.e(
+                                TAG,
+                                "Manual pipeline gagal",
+                                e);
+
+                        String trace =
+                                Log.getStackTraceString(e);
+
+                        if (trace.length() > 500) {
+                            trace =
+                                    trace.substring(
+                                            0,
+                                            500)
+                                            + "...";
                         }
-                        String finalTrace = fullTrace;
-                        runOnUiThread(() -> tvStatus.setText("GAGAL:\n" + finalTrace));
+
+                        String finalTrace = trace;
+
+                        runOnUiThread(() ->
+                                tvStatus.setText(
+                                        "GAGAL:\n"
+                                                + finalTrace));
                     }
+
                 }).start();
-            }
+            });
+
+            dialog.show();
+
+        } catch (Exception e) {
+
+            Log.e(
+                    TAG,
+                    "Manual Layout Editor gagal",
+                    e);
+
+            tvStatus.setText(
+                    "GAGAL membuka editor:\n"
+                            + e.getMessage());
         }
     }
+
 
     private String exportToGallery(File sourceFile, File analysisFile) {
         try {

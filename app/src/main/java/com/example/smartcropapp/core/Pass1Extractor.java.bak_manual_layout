@@ -631,22 +631,308 @@ public class Pass1Extractor {
     private static String classifyLayout(
             ShotBuffer shot) {
 
+        int n =
+                shot.frames.size();
+
+        if (n < 2) {
+            Log.i(
+                    TAG,
+                    "Shot terlalu pendek -> SINGLE");
+
+            return "single";
+        }
+
+        int start =
+                Math.max(
+                        0,
+                        (int) (n * WINDOW_START));
+
+        int end =
+                Math.min(
+                        n,
+                        Math.max(
+                                start + 1,
+                                (int) (n * WINDOW_END)));
+
+        List<FrameFeature> window =
+                shot.frames.subList(
+                        start,
+                        end);
+
         /*
-         * AUTO SPLIT CLASSIFIER DISABLED.
+         * 12 kolom dibagi menjadi:
          *
-         * Shot detection tetap aktif.
-         * Layout akan ditentukan manual per-shot.
+         * LEFT   = 0..3
+         * CENTER = 4..7
+         * RIGHT  = 8..11
          *
-         * Jangan gunakan brightness/texture untuk
-         * menentukan SPLIT karena dapat menghasilkan
-         * false-positive pada close-up, pakaian gelap,
-         * bayangan, dan background.
+         * Kita sengaja memakai area tengah
+         * yang cukup lebar agar tidak tertipu
+         * oleh satu-dua piksel/objek.
+         */
+
+        float left =
+                spatialContrast(
+                        window,
+                        0,
+                        4);
+
+        float center =
+                spatialContrast(
+                        window,
+                        4,
+                        8);
+
+        float right =
+                spatialContrast(
+                        window,
+                        8,
+                        12);
+
+        float leftBright =
+                averageRegion(
+                        window,
+                        false,
+                        0,
+                        4);
+
+        float centerBright =
+                averageRegion(
+                        window,
+                        false,
+                        4,
+                        8);
+
+        float rightBright =
+                averageRegion(
+                        window,
+                        false,
+                        8,
+                        12);
+
+        float leftStable =
+                temporalConsistency(
+                        window,
+                        0,
+                        4);
+
+        float rightStable =
+                temporalConsistency(
+                        window,
+                        8,
+                        12);
+
+        float sideScore =
+                (left + right) * 0.5f;
+
+        /*
+         * IMPORTANT:
+         *
+         * Jangan menganggap background terang =
+         * subjek.
+         *
+         * Kita lebih tertarik pada PERBEDAAN
+         * struktur antar wilayah.
+         */
+
+        float centerRatio =
+                center /
+                Math.max(
+                        0.0001f,
+                        sideScore);
+
+        boolean sidesActive =
+                left >= MIN_SIDE_ACTIVITY &&
+                right >= MIN_SIDE_ACTIVITY;
+
+        boolean centerNotDominant =
+                centerRatio <=
+                MAX_CENTER_DOMINANCE;
+
+        float balance =
+                1f -
+                Math.min(
+                        1f,
+                        Math.abs(left - right) /
+                        Math.max(
+                                0.0001f,
+                                left + right));
+
+        float stability =
+                (leftStable +
+                 rightStable) * 0.5f;
+
+        /*
+         * Relative contrast.
+         *
+         * Ini membuat detector tidak terlalu
+         * bergantung pada warna/background global.
+         */
+
+        float leftVsCenter =
+                left /
+                Math.max(
+                        0.0001f,
+                        center);
+
+        float rightVsCenter =
+                right /
+                Math.max(
+                        0.0001f,
+                        center);
+
+        float separation =
+                Math.min(
+                        2f,
+                        (leftVsCenter +
+                         rightVsCenter) * 0.5f);
+
+        float splitScore =
+                sideScore * 2.0f
+                + balance * 0.30f
+                + stability * 0.35f
+                + separation * 0.15f
+                - Math.max(
+                        0f,
+                        centerRatio - 1f)
+                  * 0.60f;
+
+        Log.i(
+                TAG,
+                "Shot adaptive:" +
+                " sideScore=" + sideScore +
+                " centerRatio=" + centerRatio +
+                " separation=" + separation +
+                " sidesActive=" + sidesActive +
+                " centerOK=" + centerNotDominant);
+
+        boolean leftStrong =
+                left >= MIN_SIDE_ACTIVITY;
+
+        boolean rightStrong =
+                right >= MIN_SIDE_ACTIVITY;
+
+        boolean balancedEnough =
+                balance >= MIN_BALANCE;
+
+        boolean stableEnough =
+                stability >= MIN_STABILITY;
+
+        Log.i(
+                TAG,
+                "SHOT_DIAGNOSTIC " +
+                "start=" + shot.startMs +
+                " L=" + left +
+                " C=" + center +
+                " R=" + right +
+                " Lstrong=" + leftStrong +
+                " Rstrong=" + rightStrong +
+                " balance=" + balance +
+                " stable=" + stability +
+                " centerRatio=" + centerRatio +
+                " separation=" + separation +
+                " score=" + splitScore);
+
+        /*
+         * Background Guard:
+         *
+         * Background yang seragam biasanya mempunyai
+         * texture rendah dan relatif stabil.
+         *
+         * Jika kiri + kanan sama-sama tidak aktif,
+         * jangan pernah memaksakan SPLIT.
+         */
+
+        if (!leftStrong || !rightStrong) {
+
+            Log.i(
+                    TAG,
+                    "SPLIT_REJECT: side activity terlalu rendah");
+
+            return "single";
+        }
+
+        if (!balancedEnough) {
+
+            Log.i(
+                    TAG,
+                    "SPLIT_REJECT: kiri/kanan terlalu tidak seimbang");
+
+            return "single";
+        }
+
+        if (!stableEnough) {
+
+            Log.i(
+                    TAG,
+                    "SPLIT_REJECT: side activity tidak stabil");
+
+            return "single";
+        }
+
+        /*
+         * BILATERAL SPLIT OVERRIDE
+         *
+         * Jika kedua sisi sama-sama aktif, cukup seimbang,
+         * stabil, dan secara relatif jauh lebih bertekstur
+         * daripada center, jangan biarkan center membatalkan
+         * deteksi dua-orang.
+         *
+         * Ini penting untuk wide shot:
+         *
+         *      PERSON        EMPTY        PERSON
+         *        L             C             R
+         *
+         * Center kosong bukan alasan untuk memilih center.
+         */
+
+        boolean bilateralEvidence =
+                leftStrong &&
+                rightStrong &&
+                balance >= 0.30f &&
+                stableEnough &&
+                separation >= 1.15f;
+
+        if (bilateralEvidence) {
+
+            Log.i(
+                    TAG,
+                    "BILATERAL_OVERRIDE => SPLIT" +
+                    " separation=" + separation +
+                    " balance=" + balance +
+                    " stability=" + stability);
+
+            return "split";
+        }
+
+        if (!centerNotDominant) {
+
+            Log.i(
+                    TAG,
+                    "SPLIT_REJECT: center terlalu dominan");
+
+            return "single";
+        }
+
+        if (splitScore < SPLIT_THRESHOLD) {
+
+            Log.i(
+                    TAG,
+                    "SPLIT_REJECT: score di bawah threshold");
+
+            return "single";
+        }
+
+        /*
+         * Threshold sementara.
+         * Belum final — bagian 03 akan membuat
+         * scoring lebih adaptif terhadap shot.
          */
 
         Log.i(
                 TAG,
-                "Shot layout -> UNCLASSIFIED");
+                "LAYOUT => SPLIT");
 
-        return "unclassified";
+        return "split";
     }
 }
