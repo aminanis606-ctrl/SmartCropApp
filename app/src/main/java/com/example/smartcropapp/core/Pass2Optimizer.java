@@ -114,7 +114,48 @@ public class Pass2Optimizer {
                  */
 
                 float[] calibration =
-                        calibrateSplitShot(shot);
+                        float[] splitPosition = calibrateSplitShot(shot);
+
+                        /*
+                         * Persist SPLIT calibration into analysis.json.
+                         *
+                         * RETURN ORDER:
+                         * [TOP_X, TOP_Y, BOTTOM_X, BOTTOM_Y]
+                         */
+                        if (splitPosition != null &&
+                                splitPosition.length >= 4) {
+
+                            shot.put(
+                                    "topX",
+                                    splitPosition[0]);
+
+                            shot.put(
+                                    "topY",
+                                    splitPosition[1]);
+
+                            shot.put(
+                                    "bottomX",
+                                    splitPosition[2]);
+
+                            shot.put(
+                                    "bottomY",
+                                    splitPosition[3]);
+
+                            Log.i(
+                                    TAG,
+                                    "SPLIT POSITION SAVED shot=" +
+                                    shotId +
+                                    " TOP=(" +
+                                    splitPosition[0] +
+                                    "," +
+                                    splitPosition[1] +
+                                    ")" +
+                                    " BOTTOM=(" +
+                                    splitPosition[2] +
+                                    "," +
+                                    splitPosition[3] +
+                                    ")");
+                        }
 
                 output.put(
                         "topX",
