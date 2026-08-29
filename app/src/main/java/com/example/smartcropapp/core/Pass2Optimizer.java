@@ -65,24 +65,16 @@ public class Pass2Optimizer {
             JSONObject shot =
                     shots.getJSONObject(s);
 
-            String layout =
-                    shot.optString(
-                            "layout",
-                            "unclassified");
-
             /*
-             * MANUAL LAYOUT MODE
+             * AUTO LAYOUT
              *
-             * Pass 1 sekarang hanya menentukan shot boundary.
-             * Layout SPLIT/SINGLE harus diberikan oleh UI/manual
-             * sebelum Pass 2 dipakai untuk rendering.
+             * Pass 1 hanya menentukan shot boundary.
+             * Layout ditentukan otomatis di Pass 2.
              *
-             * Jangan mengubah UNCLASSIFIED menjadi SINGLE di sini.
+             * Pilihan SINGLE/SPLIT dari UI manual
+             * tidak digunakan pada jalur normal.
              */
-
-            if ("".equals(layout.trim())) {
-                layout = "unclassified";
-            }
+            String layout = autoClassifyLayout(shot);
 
             int shotId =
                     shot.optInt(
@@ -282,6 +274,160 @@ public class Pass2Optimizer {
          * satu frame.
          */
         return validSamples >= 2;
+    }
+
+
+    /*
+     * ============================================================
+     * AUTO LAYOUT CLASSIFIER
+     * ============================================================
+     */
+    private static String autoClassifyLayout(
+            JSONObject shot) {
+
+        try {
+
+            JSONArray samples =
+                    shot.optJSONArray("samples");
+
+            if (samples == null ||
+                    samples.length() == 0) {
+
+                return "single";
+            }
+
+            int validSamples = 0;
+            int twoFaceSamples = 0;
+
+            final float MIN_HORIZONTAL_SEPARATION = 0.18f;
+
+            for (int i = 0;
+                 i < samples.length();
+                 i++) {
+
+                JSONObject sample =
+                        samples.optJSONObject(i);
+
+                if (sample == null) {
+                    continue;
+                }
+
+                JSONArray faces =
+                        sample.optJSONArray("faces");
+
+                if (faces == null ||
+                        faces.length() == 0) {
+                    continue;
+                }
+
+                validSamples++;
+
+                float minX =
+                        Float.MAX_VALUE;
+
+                float maxX =
+                        -Float.MAX_VALUE;
+
+                int usableFaces = 0;
+
+                for (int f = 0;
+                     f < faces.length();
+                     f++) {
+
+                    JSONObject face =
+                            faces.optJSONObject(f);
+
+                    if (face == null) {
+                        continue;
+                    }
+
+                    double rawX =
+                            face.optDouble(
+                                    "x",
+                                    Double.NaN);
+
+                    double rawSize =
+                            face.optDouble(
+                                    "size",
+                                    Double.NaN);
+
+                    if (Double.isNaN(rawX) ||
+                            Double.isNaN(rawSize)) {
+                        continue;
+                    }
+
+                    float x =
+                            (float) rawX;
+
+                    float size =
+                            (float) rawSize;
+
+                    if (x < 0.0f ||
+                            x > 1.0f ||
+                            size <= 0.0f) {
+                        continue;
+                    }
+
+                    minX =
+                            Math.min(minX, x);
+
+                    maxX =
+                            Math.max(maxX, x);
+
+                    usableFaces++;
+                }
+
+                if (usableFaces >= 2 &&
+                        (maxX - minX) >=
+                                MIN_HORIZONTAL_SEPARATION) {
+
+                    twoFaceSamples++;
+                }
+            }
+
+            if (validSamples < 2) {
+                Log.i(
+                        TAG,
+                        "AUTO LAYOUT shot=" +
+                        shot.optInt("shotId", -1) +
+                        " -> SINGLE (insufficient evidence)");
+
+                return "single";
+            }
+
+            float splitRatio =
+                    (float) twoFaceSamples /
+                    (float) validSamples;
+
+            String result =
+                    splitRatio >= 0.35f
+                            ? "split"
+                            : "single";
+
+            Log.i(
+                    TAG,
+                    "AUTO LAYOUT shot=" +
+                    shot.optInt("shotId", -1) +
+                    " samples=" +
+                    validSamples +
+                    " twoFace=" +
+                    twoFaceSamples +
+                    " ratio=" +
+                    splitRatio +
+                    " -> " +
+                    result);
+
+            return result;
+
+        } catch (Exception e) {
+
+            Log.w(
+                    TAG,
+                    "AUTO LAYOUT failed -> SINGLE",
+                    e);
+
+            return "single";
+        }
     }
 
     private static float[] calibrateSplitShot(
