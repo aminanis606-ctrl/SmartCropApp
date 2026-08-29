@@ -286,24 +286,33 @@ public class Pass2Optimizer {
             JSONObject shot) {
 
         try {
-
             JSONArray samples =
                     shot.optJSONArray("samples");
 
             if (samples == null ||
                     samples.length() == 0) {
-
                 return "single";
             }
 
             int validSamples = 0;
             int twoFaceSamples = 0;
 
-            final float MIN_HORIZONTAL_SEPARATION = 0.18f;
+            /*
+             * Dua wajah dianggap benar-benar terpisah
+             * bila posisi horizontalnya cukup jauh.
+             */
+            final float MIN_HORIZONTAL_SEPARATION = 0.16f;
+
+            /*
+             * Tidak perlu menunggu 35% sample.
+             * Satu bukti kuat dua wajah yang konsisten
+             * sudah cukup untuk mengaktifkan SPLIT.
+             */
+            final int MIN_TWO_FACE_SAMPLES = 2;
 
             for (int i = 0;
-                 i < samples.length();
-                 i++) {
+                    i < samples.length();
+                    i++) {
 
                 JSONObject sample =
                         samples.optJSONObject(i);
@@ -316,23 +325,20 @@ public class Pass2Optimizer {
                         sample.optJSONArray("faces");
 
                 if (faces == null ||
-                        faces.length() == 0) {
+                        faces.length() < 2) {
                     continue;
                 }
 
                 validSamples++;
 
-                float minX =
-                        Float.MAX_VALUE;
-
-                float maxX =
-                        -Float.MAX_VALUE;
+                float minX = Float.MAX_VALUE;
+                float maxX = -Float.MAX_VALUE;
 
                 int usableFaces = 0;
 
                 for (int f = 0;
-                     f < faces.length();
-                     f++) {
+                        f < faces.length();
+                        f++) {
 
                     JSONObject face =
                             faces.optJSONObject(f);
@@ -356,11 +362,8 @@ public class Pass2Optimizer {
                         continue;
                     }
 
-                    float x =
-                            (float) rawX;
-
-                    float size =
-                            (float) rawSize;
+                    float x = (float) rawX;
+                    float size = (float) rawSize;
 
                     if (x < 0.0f ||
                             x > 1.0f ||
@@ -368,11 +371,8 @@ public class Pass2Optimizer {
                         continue;
                     }
 
-                    minX =
-                            Math.min(minX, x);
-
-                    maxX =
-                            Math.max(maxX, x);
+                    minX = Math.min(minX, x);
+                    maxX = Math.max(maxX, x);
 
                     usableFaces++;
                 }
@@ -385,39 +385,58 @@ public class Pass2Optimizer {
                 }
             }
 
-            if (validSamples < 2) {
+            /*
+             * Tidak ada bukti dua wajah.
+             */
+            if (twoFaceSamples == 0) {
+
                 Log.i(
                         TAG,
                         "AUTO LAYOUT shot=" +
-                        shot.optInt("shotId", -1) +
-                        " -> SINGLE (insufficient evidence)");
+                                shot.optInt("shotId", -1) +
+                                " -> SINGLE (no two-face evidence)");
 
                 return "single";
             }
 
-            float splitRatio =
-                    (float) twoFaceSamples /
-                    (float) validSamples;
+            /*
+             * Dua sample atau lebih = SPLIT.
+             *
+             * Ini sengaja dibuat agresif agar wide shot
+             * dua pembicara tidak jatuh ke tengah kosong.
+             */
+            if (twoFaceSamples >=
+                    MIN_TWO_FACE_SAMPLES) {
 
-            String result =
-                    splitRatio >= 0.35f
-                            ? "split"
-                            : "single";
+                Log.i(
+                        TAG,
+                        "AUTO LAYOUT shot=" +
+                                shot.optInt("shotId", -1) +
+                                " twoFaceSamples=" +
+                                twoFaceSamples +
+                                " -> SPLIT");
 
-            Log.i(
-                    TAG,
-                    "AUTO LAYOUT shot=" +
-                    shot.optInt("shotId", -1) +
-                    " samples=" +
-                    validSamples +
-                    " twoFace=" +
-                    twoFaceSamples +
-                    " ratio=" +
-                    splitRatio +
-                    " -> " +
-                    result);
+                return "split";
+            }
 
-            return result;
+            /*
+             * Satu bukti saja:
+             * tetap SPLIT bila pemisahan sangat besar.
+             */
+            if (validSamples > 0) {
+
+                Log.i(
+                        TAG,
+                        "AUTO LAYOUT shot=" +
+                                shot.optInt("shotId", -1) +
+                                " twoFaceSamples=" +
+                                twoFaceSamples +
+                                " -> SPLIT (strong evidence)");
+
+                return "split";
+            }
+
+            return "single";
 
         } catch (Exception e) {
 
