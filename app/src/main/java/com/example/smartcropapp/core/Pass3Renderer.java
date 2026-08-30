@@ -33,8 +33,17 @@ public class Pass3Renderer {
         }
         
         Log.d(TAG, "Starting Pass 3...");
-        TrajectoryReader trajectory = TrajectoryReader.load(trajectoryFile);
-        if (trajectory == null) throw new RuntimeException("Trajectory invalid");
+        
+        TrajectoryReader trajectory = null;
+        try {
+            trajectory = TrajectoryReader.load(trajectoryFile);
+        } catch (Exception e) {
+            throw new RuntimeException("Gagal memuat trajectory: " + e.getMessage(), e);
+        }
+
+        if (trajectory == null) {
+            throw new RuntimeException("Trajectory invalid/null");
+        }
 
         try {
             renderVideoTrack(context, sourceVideoUri, outputVideoFile, trajectory);
