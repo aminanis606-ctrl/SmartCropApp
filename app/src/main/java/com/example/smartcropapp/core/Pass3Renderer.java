@@ -108,9 +108,11 @@ public class Pass3Renderer {
         glContext.setupEncoderSurface(encoderSurface);
         CropShaderProgram shader = new CropShaderProgram();
 
-        boolean muxerStarted = false;
-        int muxerVideoTrack = -1;
-        int muxerAudioTrack = -1;
+        // Use final arrays to allow modification from inner threads/classes
+        final int[] muxerVideoTrackRef = {-1};
+        final int[] muxerAudioTrackRef = {-1};
+        final boolean[] muxerStartedRef = {false};
+
         boolean inputDone = false;
         boolean encoderDone = false;
 
@@ -121,19 +123,26 @@ public class Pass3Renderer {
         MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
         final int panelH = OUTPUT_HEIGHT / 2;
 
-        // --- AUDIO COPY THREAD (FIXED) ---
+        // --- AUDIO COPY THREAD (FIXED FOR FINAL VARIABLES) ---
         Thread audioThread = null;
         if (audioTrackIndex != -1 && audioFormat != null) {
+            // Create final copies of variables needed by the thread
+            final Uri finalSourceUri = sourceVideoUri;
+            final Context finalContext = context;
+            final int finalAudioTrackIndex = audioTrackIndex;
+            final MediaFormat finalAudioFormat = audioFormat;
+            
             audioThread = new Thread(() -> {
                 try {
                     MediaExtractor audioExtractor = new MediaExtractor();
-                    audioExtractor.setDataSource(context, sourceVideoUri, null);
-                    audioExtractor.selectTrack(audioTrackIndex);
+                    audioExtractor.setDataSource(finalContext, finalSourceUri, null);
+                    audioExtractor.selectTrack(finalAudioTrackIndex);
                     
                     MediaCodec.BufferInfo audioInfo = new MediaCodec.BufferInfo();
-                    ByteBuffer audioBuf = ByteBuffer.allocate(1024 * 1024); // 1MB buffer for audio samples
+                    ByteBuffer audioBuf = ByteBuffer.allocate(1024 * 1024); // 1MB buffer
                     
-                    while (!muxerStarted) { 
+                    // Wait for muxer to start
+                    while (!muxerStartedRef[0]) { 
                         try { Thread.sleep(10); } catch (Exception e) {} 
                     }
                     
@@ -149,7 +158,7 @@ public class Pass3Renderer {
                         audioBuf.position(0);
                         audioBuf.limit(sampleSize);
                         
-                        muxer.writeSampleData(muxerAudioTrack, audioBuf, audioInfo);
+                        muxer.writeSampleData(muxerAudioTrackRef[0], audioBuf, audioInfo);
                         
                         if (!audioExtractor.advance()) break;
                     }
@@ -220,21 +229,21 @@ public class Pass3Renderer {
             // 3. Drain Encoder
             int encIndex = encoder.dequeueOutputBuffer(info, TIMEOUT_US);
             if (encIndex >= 0) {
-                if (!muxerStarted) {
-                    muxerVideoTrack = muxer.addTrack(encoder.getOutputFormat());
+                if (!muxerStartedRef[0]) {
+                    muxerVideoTrackRef[0] = muxer.addTrack(encoder.getOutputFormat());
                     if (audioTrackIndex != -1) {
-                        muxerAudioTrack = muxer.addTrack(audioFormat);
+                        muxerAudioTrackRef[0] = muxer.addTrack(audioFormat);
                     }
                     muxer.start();
-                    muxerStarted = true;
+                    muxerStartedRef[0] = true;
                     Log.d(TAG, "Muxer Started");
                 }
                 
-                if (info.size > 0 && muxerStarted) {
+                if (info.size > 0 && muxerStartedRef[0]) {
                     ByteBuffer encodedData = encoder.getOutputBuffer(encIndex);
                     encodedData.position(info.offset);
                     encodedData.limit(info.offset + info.size);
-                    muxer.writeSampleData(muxerVideoTrack, encodedData, info);
+                    muxer.writeSampleData(muxerVideoTrackRef[0], encodedData, info);
                 }
                 
                 if ((info.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
