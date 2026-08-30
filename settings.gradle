@@ -10,7 +10,7 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        maven { url 'https://github.com/arthenica/ffmpeg-kit/releases/download/v6.0/maven/' }
+        maven { url 'https://jitpack.io' }
     }
 }
 
