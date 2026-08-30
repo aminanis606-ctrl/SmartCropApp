@@ -77,17 +77,7 @@ public class Pass3Renderer {
 
         if (videoTrackIndex == -1) throw new RuntimeException("No video track");
 
-        // Setup Decoder
-        MediaCodec decoder = MediaCodec.createDecoderByType(inputFormat.getString(MediaFormat.KEY_MIME));
-        decoder.configure(inputFormat, null, null, 0);
-        SurfaceTexture decoderST = new SurfaceTexture(0);
-        decoderST.setDefaultBufferSize(
-            inputFormat.getInteger(MediaFormat.KEY_WIDTH), 
-            inputFormat.getInteger(MediaFormat.KEY_HEIGHT)
-        );
-        Surface decoderSurface = new Surface(decoderST);
-        
-        // Setup Encoder
+        // 1. Setup Encoder FIRST to get Input Surface
         MediaFormat outputFormat = MediaFormat.createVideoFormat(OUTPUT_MIME, OUTPUT_WIDTH, OUTPUT_HEIGHT);
         outputFormat.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
         outputFormat.setInteger(MediaFormat.KEY_BIT_RATE, OUTPUT_BITRATE);
@@ -98,17 +88,26 @@ public class Pass3Renderer {
         encoder.configure(outputFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
         Surface encoderSurface = encoder.createInputSurface();
         
+        // 2. Setup GL Context & Decoder Surface
+        GlRenderContext glContext = new GlRenderContext();
+        glContext.setupEncoderSurface(encoderSurface);
+        
+        // CRITICAL FIX: Use the surface provided by GlRenderContext for the decoder
+        Surface decoderSurface = glContext.getDecoderInputSurface();
+        if (decoderSurface == null) throw new RuntimeException("Failed to get decoder surface from GlRenderContext");
+
+        // 3. Configure Decoder with the correct surface
+        MediaCodec decoder = MediaCodec.createDecoderByType(inputFormat.getString(MediaFormat.KEY_MIME));
+        decoder.configure(inputFormat, decoderSurface, null, 0);
+        
         MediaMuxer muxer = new MediaMuxer(outputFile.getAbsolutePath(), MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
         
         // Start Components
         decoder.start();
         encoder.start();
         
-        GlRenderContext glContext = new GlRenderContext();
-        glContext.setupEncoderSurface(encoderSurface);
         CropShaderProgram shader = new CropShaderProgram();
 
-        // Use final arrays to allow modification from inner threads/classes
         final int[] muxerVideoTrackRef = {-1};
         final int[] muxerAudioTrackRef = {-1};
         final boolean[] muxerStartedRef = {false};
@@ -121,6 +120,7 @@ public class Pass3Renderer {
         float cropWidthNorm = clamp((float) OUTPUT_WIDTH / srcWidth * (srcHeight / (float) OUTPUT_HEIGHT), 0.1f, 1f);
         
         MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
+        final int panelH = OUTPUT_HEIGHT / 2;
 
         // --- AUDIO COPY THREAD ---
         Thread audioThread = null;
@@ -194,20 +194,30 @@ public class Pass3Renderer {
                     isEos = true;
                 }
                 
-                // CRITICAL: Release to SurfaceTexture
+                // Release to the surface connected to GlRenderContext
                 decoder.releaseOutputBuffer(outIndex, true);
-                decoderST.updateTexImage();
                 
-                float[] stMatrix = new float[16];
-                decoderST.getTransformMatrix(stMatrix);
+                // CRITICAL FIX: Use the SurfaceTexture from GlRenderContext
+                SurfaceTexture decoderST = glContext.getDecoderSurfaceTexture();
+                if (decoderST != null) {
+                    decoderST.updateTexImage();
+                    float[] stMatrix = new float[16];
+                    decoderST.getTransformMatrix(stMatrix);
 
-                // === FULL SCREEN RENDERING (DEBUG MODE) ===
-                GLES20.glClearColor(1.0f, 0.0f, 0.0f, 1.0f); // RED BACKGROUND
-                GLES20.glViewport(0, 0, OUTPUT_WIDTH, OUTPUT_HEIGHT);
-                GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
-                
-                // Draw the video texture
-                shader.draw(glContext.getDecoderTextureId(), stMatrix, 0.5f, 0.5f, cropWidthNorm, 1.0f);
+                    // === SPLIT VIEWPORT RENDERING ===
+                    
+                    /* Panel ATAS - Warna ABU-ABU (Debug) */
+                    GLES20.glClearColor(0.3f, 0.3f, 0.3f, 1f);
+                    GLES20.glViewport(0, panelH, OUTPUT_WIDTH, panelH);
+                    GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
+                    shader.draw(glContext.getDecoderTextureId(), stMatrix, 0.5f, 0.5f, cropWidthNorm, 1.0f);
+
+                    /* Panel BAWAH - Video Utama */
+                    GLES20.glClearColor(0f, 0f, 0f, 1f);
+                    GLES20.glViewport(0, 0, OUTPUT_WIDTH, panelH);
+                    GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
+                    shader.draw(glContext.getDecoderTextureId(), stMatrix, 0.5f, 0.5f, cropWidthNorm, 1.0f);
+                }
 
                 glContext.setPresentationTime(info.presentationTimeUs * 1000);
                 glContext.swapBuffers();
@@ -250,7 +260,7 @@ public class Pass3Renderer {
 
         // Cleanup
         decoder.stop(); decoder.release();
-        decoderST.release(); decoderSurface.release();
+        decoderSurface.release();
         encoder.stop(); encoder.release();
         encoderSurface.release();
         muxer.stop(); muxer.release();
