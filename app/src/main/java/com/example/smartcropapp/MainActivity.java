@@ -23,8 +23,8 @@ import com.example.smartcropapp.core.Pass3Renderer;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.FileInputStream;
-import java.io.OutputStream;
 import java.io.InputStream;
+import java.io.OutputStream;
 
 public class MainActivity extends AppCompatActivity {
     private static final String TAG = "MainActivity";
@@ -117,6 +117,7 @@ public class MainActivity extends AppCompatActivity {
                 Log.e(TAG, "PROCESS FAILED", e);
                 String trace = Log.getStackTraceString(e);
                 if (trace.length() > 300) trace = trace.substring(0, 300) + "...";
+                final String finalTrace = trace;
                 runOnUiThread(() -> tvStatus.setText("ERROR:\n" + finalTrace));
             }
         }).start();
