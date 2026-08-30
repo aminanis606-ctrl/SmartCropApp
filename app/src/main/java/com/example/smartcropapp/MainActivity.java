@@ -125,8 +125,8 @@ public class MainActivity extends AppCompatActivity {
 
     private void exportDiagnostics(File analysisFile, File trajectoryFile) {
         try {
-            exportJsonToMediaStore(analysisFile, "analysis.json");
-            exportJsonToMediaStore(trajectoryFile, "trajectory.json");
+            exportJsonToMediaStore(analysisFile, "analysis_" + System.currentTimeMillis() + ".json");
+            exportJsonToMediaStore(trajectoryFile, "trajectory_" + System.currentTimeMillis() + ".json");
             Log.i(TAG, "DIAGNOSTIC EXPORTED");
         } catch (Exception e) {
             Log.e(TAG, "EXPORT FAILED", e);
