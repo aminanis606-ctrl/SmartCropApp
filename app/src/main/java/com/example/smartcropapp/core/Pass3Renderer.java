@@ -121,37 +121,36 @@ public class Pass3Renderer {
         MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
         final int panelH = OUTPUT_HEIGHT / 2;
 
-        // --- AUDIO COPY THREAD ---
+        // --- AUDIO COPY THREAD (FIXED) ---
         Thread audioThread = null;
-        if (audioTrackIndex != -1) {
+        if (audioTrackIndex != -1 && audioFormat != null) {
             audioThread = new Thread(() -> {
                 try {
-                    // Create a separate extractor for audio to avoid conflict with video seeking
                     MediaExtractor audioExtractor = new MediaExtractor();
                     audioExtractor.setDataSource(context, sourceVideoUri, null);
                     audioExtractor.selectTrack(audioTrackIndex);
                     
                     MediaCodec.BufferInfo audioInfo = new MediaCodec.BufferInfo();
+                    ByteBuffer audioBuf = ByteBuffer.allocate(1024 * 1024); // 1MB buffer for audio samples
                     
                     while (!muxerStarted) { 
                         try { Thread.sleep(10); } catch (Exception e) {} 
                     }
                     
                     while (true) {
-                        int index = audioExtractor.getSampleTrackIndex();
-                        if (index == -1) break;
+                        audioBuf.clear();
+                        int sampleSize = audioExtractor.readSampleData(audioBuf, 0);
+                        if (sampleSize < 0) break;
                         
-                        if (index == audioTrackIndex) {
-                            ByteBuffer buf = audioExtractor.getSampleData();
-                            int size = audioExtractor.getSampleSize();
-                            long time = audioExtractor.getSampleTime();
-                            int flags = audioExtractor.getSampleFlags();
-                            
-                            if (size >= 0) {
-                                audioInfo.set(0, size, time, flags);
-                                muxer.writeSampleData(muxerAudioTrack, buf, audioInfo);
-                            }
-                        }
+                        long time = audioExtractor.getSampleTime();
+                        int flags = audioExtractor.getSampleFlags();
+                        
+                        audioInfo.set(0, sampleSize, time, flags);
+                        audioBuf.position(0);
+                        audioBuf.limit(sampleSize);
+                        
+                        muxer.writeSampleData(muxerAudioTrack, audioBuf, audioInfo);
+                        
                         if (!audioExtractor.advance()) break;
                     }
                     audioExtractor.release();
@@ -202,7 +201,6 @@ public class Pass3Renderer {
                 GLES20.glClearColor(0.3f, 0.3f, 0.3f, 1f);
                 GLES20.glViewport(0, panelH, OUTPUT_WIDTH, panelH);
                 GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
-                // Kita tetap menggambar shader di sini agar pipeline aktif
                 shader.draw(glContext.getDecoderTextureId(), stMatrix, 0.5f, 0.5f, cropWidthNorm, 1.0f);
 
                 /* Panel BAWAH - Video Utama */
@@ -224,7 +222,7 @@ public class Pass3Renderer {
             if (encIndex >= 0) {
                 if (!muxerStarted) {
                     muxerVideoTrack = muxer.addTrack(encoder.getOutputFormat());
-                    if (audioTrackIndex != -1 && audioFormat != null) {
+                    if (audioTrackIndex != -1) {
                         muxerAudioTrack = muxer.addTrack(audioFormat);
                     }
                     muxer.start();
