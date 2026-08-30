@@ -38,11 +38,7 @@ public class Pass3Renderer {
         try {
             trajectory = TrajectoryReader.load(trajectoryFile);
         } catch (Exception e) {
-            throw new RuntimeException("Gagal memuat trajectory: " + e.getMessage(), e);
-        }
-
-        if (trajectory == null) {
-            throw new RuntimeException("Trajectory invalid/null");
+            Log.w(TAG, "Gagal memuat trajectory, menggunakan default center crop", e);
         }
 
         try {
@@ -194,21 +190,64 @@ public class Pass3Renderer {
                     float[] stMatrix = new float[16];
                     decoderST.getTransformMatrix(stMatrix);
 
-                    // === AGGRESSIVE DEBUG RENDERING ===
+                    // === SMART REFRAME LOGIC ===
                     
                     // 1. Clear entire screen ONCE
                     GLES20.glViewport(0, 0, OUTPUT_WIDTH, OUTPUT_HEIGHT);
-                    GLES20.glClearColor(0.2f, 0.2f, 0.2f, 1.0f); // Dark Grey Background
+                    GLES20.glClearColor(0f, 0f, 0f, 1.0f);
                     GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
 
-                    // 2. Draw Top Panel (Red Tint for Debug)
-                    GLES20.glViewport(0, panelH, OUTPUT_WIDTH, panelH);
-                    // Gunakan hardcoded 0.5f untuk memastikan bukan masalah trajectory
-                    shader.draw(glContext.getDecoderTextureId(), stMatrix, 0.5f, 0.5f, 0.5f, 1.0f);
+                    // Default values for safe fallback
+                    String layout = "single";
+                    float topX = 0.5f, topY = 0.5f;
+                    float botX = 0.5f, botY = 0.5f;
+                    float singleX = 0.5f, singleY = 0.5f;
 
-                    // 3. Draw Bottom Panel (Blue Tint for Debug)
-                    GLES20.glViewport(0, 0, OUTPUT_WIDTH, panelH);
-                    shader.draw(glContext.getDecoderTextureId(), stMatrix, 0.5f, 0.5f, 0.5f, 1.0f);
+                    // Try to get trajectory data
+                    if (trajectory != null) {
+                        try {
+                            TrajectoryReader.ShotResult shot = trajectory.getShotAt(info.presentationTimeUs);
+                            if (shot != null) {
+                                layout = shot.layout;
+                                if ("split".equals(layout)) {
+                                    topX = shot.top.x;
+                                    topY = shot.top.y;
+                                    botX = shot.bottom.x;
+                                    botY = shot.bottom.y;
+                                } else {
+                                    singleX = shot.single.x;
+                                    singleY = shot.single.y;
+                                }
+                            }
+                        } catch (Exception e) {
+                            Log.w(TAG, "Error reading trajectory, using default", e);
+                        }
+                    }
+
+                    // Calculate aspect ratio corrected crop size
+                    float cropWidthNorm = 0.5f; // For split view
+                    float cropHeightNorm = clamp(
+                            cropWidthNorm * (panelH / (float) OUTPUT_WIDTH) * (srcWidth / (float) srcHeight),
+                            0.1f, 1f);
+                    
+                    float fullCropHeightNorm = 1.0f; // For single view
+                    float fullCropWidthNorm = clamp(
+                            fullCropHeightNorm * (OUTPUT_WIDTH / (float) OUTPUT_HEIGHT) * (srcHeight / (float) srcWidth),
+                            0.1f, 1f);
+
+                    if ("split".equals(layout)) {
+                        // Draw Top Panel (Speaker A)
+                        GLES20.glViewport(0, panelH, OUTPUT_WIDTH, panelH);
+                        shader.draw(glContext.getDecoderTextureId(), stMatrix, topX, topY, cropWidthNorm, cropHeightNorm);
+
+                        // Draw Bottom Panel (Speaker B)
+                        GLES20.glViewport(0, 0, OUTPUT_WIDTH, panelH);
+                        shader.draw(glContext.getDecoderTextureId(), stMatrix, botX, botY, cropWidthNorm, cropHeightNorm);
+                    } else {
+                        // Draw Single Full Screen (Center Crop)
+                        GLES20.glViewport(0, 0, OUTPUT_WIDTH, OUTPUT_HEIGHT);
+                        shader.draw(glContext.getDecoderTextureId(), stMatrix, singleX, singleY, fullCropWidthNorm, fullCropHeightNorm);
+                    }
                 }
 
                 glContext.setPresentationTime(info.presentationTimeUs * 1000);
