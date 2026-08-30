@@ -88,11 +88,7 @@ public class Pass2Optimizer {
 
             JSONObject output =
                     new JSONObject();
-
             output.put(
-                    "startMs",
-                    startMs);
-
                     "startMs",
                     startMs);
 
