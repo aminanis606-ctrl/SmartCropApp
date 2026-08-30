@@ -160,6 +160,9 @@ public class Pass3Renderer {
 
                         TrajectoryReader.ShotResult shotResult = trajectory.getShotAt(decoderInfo.presentationTimeUs);
             Log.d(TAG, "DEBUG CROP: layout=" + shotResult.layout + ", singleX=" + (shotResult.single != null ? shotResult.single.x : "null") + ", singleY=" + (shotResult.single != null ? shotResult.single.y : "null"));
+            if ("split".equals(shotResult.layout)) {
+                Log.d(TAG, "DEBUG SPLIT: topX=" + shotResult.top.x + ", topY=" + shotResult.top.y + ", bottomX=" + shotResult.bottom.x + ", bottomY=" + shotResult.bottom.y);
+            }
 
                         GLES20.glClearColor(0f, 0f, 0f, 1f);
 
