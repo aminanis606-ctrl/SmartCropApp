@@ -121,16 +121,13 @@ public class Pass3Renderer {
         float cropWidthNorm = clamp((float) OUTPUT_WIDTH / srcWidth * (srcHeight / (float) OUTPUT_HEIGHT), 0.1f, 1f);
         
         MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
-        final int panelH = OUTPUT_HEIGHT / 2;
 
-        // --- AUDIO COPY THREAD (FIXED FOR FINAL VARIABLES) ---
+        // --- AUDIO COPY THREAD ---
         Thread audioThread = null;
         if (audioTrackIndex != -1 && audioFormat != null) {
-            // Create final copies of variables needed by the thread
             final Uri finalSourceUri = sourceVideoUri;
             final Context finalContext = context;
             final int finalAudioTrackIndex = audioTrackIndex;
-            final MediaFormat finalAudioFormat = audioFormat;
             
             audioThread = new Thread(() -> {
                 try {
@@ -139,9 +136,8 @@ public class Pass3Renderer {
                     audioExtractor.selectTrack(finalAudioTrackIndex);
                     
                     MediaCodec.BufferInfo audioInfo = new MediaCodec.BufferInfo();
-                    ByteBuffer audioBuf = ByteBuffer.allocate(1024 * 1024); // 1MB buffer
+                    ByteBuffer audioBuf = ByteBuffer.allocate(1024 * 1024); 
                     
-                    // Wait for muxer to start
                     while (!muxerStartedRef[0]) { 
                         try { Thread.sleep(10); } catch (Exception e) {} 
                     }
@@ -198,24 +194,19 @@ public class Pass3Renderer {
                     isEos = true;
                 }
                 
+                // CRITICAL: Release to SurfaceTexture
                 decoder.releaseOutputBuffer(outIndex, true);
                 decoderST.updateTexImage();
                 
                 float[] stMatrix = new float[16];
                 decoderST.getTransformMatrix(stMatrix);
 
-                // === SPLIT VIEWPORT RENDERING ===
+                // === FULL SCREEN RENDERING (DEBUG MODE) ===
+                GLES20.glClearColor(1.0f, 0.0f, 0.0f, 1.0f); // RED BACKGROUND
+                GLES20.glViewport(0, 0, OUTPUT_WIDTH, OUTPUT_HEIGHT);
+                GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
                 
-                /* Panel ATAS - Warna ABU-ABU (Debug) */
-                GLES20.glClearColor(0.3f, 0.3f, 0.3f, 1f);
-                GLES20.glViewport(0, panelH, OUTPUT_WIDTH, panelH);
-                GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
-                shader.draw(glContext.getDecoderTextureId(), stMatrix, 0.5f, 0.5f, cropWidthNorm, 1.0f);
-
-                /* Panel BAWAH - Video Utama */
-                GLES20.glClearColor(0f, 0f, 0f, 1f);
-                GLES20.glViewport(0, 0, OUTPUT_WIDTH, panelH);
-                GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
+                // Draw the video texture
                 shader.draw(glContext.getDecoderTextureId(), stMatrix, 0.5f, 0.5f, cropWidthNorm, 1.0f);
 
                 glContext.setPresentationTime(info.presentationTimeUs * 1000);
