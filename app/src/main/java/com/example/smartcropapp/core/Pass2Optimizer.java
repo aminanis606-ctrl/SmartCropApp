@@ -74,7 +74,7 @@ public class Pass2Optimizer {
              * Pilihan SINGLE/SPLIT dari UI manual
              * tidak digunakan pada jalur normal.
              */
-            String layout = autoClassifyLayout(shot);
+            String layout = getManualLayout(s);
 
             int shotId =
                     shot.optInt(
@@ -1085,4 +1085,28 @@ public class Pass2Optimizer {
         return Math.max(min, Math.min(max, value));
     }
 
+
+    private static String getManualLayout(int shotId) {
+        try {
+            java.io.File f = new java.io.File("/sdcard/Download/SmartReframe/manual_split.txt");
+            if (f.exists()) {
+                java.util.Scanner sc = new java.util.Scanner(f);
+                while (sc.hasNextLine()) {
+                    String line = sc.nextLine().trim();
+                    if (!line.isEmpty() && !line.startsWith("#")) {
+                        for (String part : line.split(",")) {
+                            if (Integer.parseInt(part.trim()) == shotId) {
+                                sc.close();
+                                return "split";
+                            }
+                        }
+                    }
+                }
+                sc.close();
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return "single";
+    }
 }
