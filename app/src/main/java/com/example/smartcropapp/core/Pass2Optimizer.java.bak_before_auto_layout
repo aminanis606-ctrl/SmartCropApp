@@ -65,16 +65,24 @@ public class Pass2Optimizer {
             JSONObject shot =
                     shots.getJSONObject(s);
 
+            String layout =
+                    shot.optString(
+                            "layout",
+                            "unclassified");
+
             /*
-             * AUTO LAYOUT
+             * MANUAL LAYOUT MODE
              *
-             * Pass 1 hanya menentukan shot boundary.
-             * Layout ditentukan otomatis di Pass 2.
+             * Pass 1 sekarang hanya menentukan shot boundary.
+             * Layout SPLIT/SINGLE harus diberikan oleh UI/manual
+             * sebelum Pass 2 dipakai untuk rendering.
              *
-             * Pilihan SINGLE/SPLIT dari UI manual
-             * tidak digunakan pada jalur normal.
+             * Jangan mengubah UNCLASSIFIED menjadi SINGLE di sini.
              */
-            String layout = autoClassifyLayout(shot);
+
+            if ("".equals(layout.trim())) {
+                layout = "unclassified";
+            }
 
             int shotId =
                     shot.optInt(
@@ -115,50 +123,6 @@ public class Pass2Optimizer {
 
                 float[] calibration =
                         calibrateSplitShot(shot);
-
-                float[] splitPosition =
-                        calibration;
-
-                        /*
-                         * Persist SPLIT calibration into analysis.json.
-                         *
-                         * RETURN ORDER:
-                         * [TOP_X, TOP_Y, BOTTOM_X, BOTTOM_Y]
-                         */
-                        if (splitPosition != null &&
-                                splitPosition.length >= 4) {
-
-                            shot.put(
-                                    "topX",
-                                    splitPosition[0]);
-
-                            shot.put(
-                                    "topY",
-                                    splitPosition[1]);
-
-                            shot.put(
-                                    "bottomX",
-                                    splitPosition[2]);
-
-                            shot.put(
-                                    "bottomY",
-                                    splitPosition[3]);
-
-                            Log.i(
-                                    TAG,
-                                    "SPLIT POSITION SAVED shot=" +
-                                    shotId +
-                                    " TOP=(" +
-                                    splitPosition[0] +
-                                    "," +
-                                    splitPosition[1] +
-                                    ")" +
-                                    " BOTTOM=(" +
-                                    splitPosition[2] +
-                                    "," +
-                                    splitPosition[3] +
-                                    ")");
-                        }
 
                 output.put(
                         "topX",
@@ -318,109 +282,6 @@ public class Pass2Optimizer {
          * satu frame.
          */
         return validSamples >= 2;
-    }
-
-
-    /*
-     * ============================================================
-     * AUTO LAYOUT CLASSIFIER
-     * ============================================================
-     */
-    private static String autoClassifyLayout(
-            JSONObject shot) {
-
-        try {
-            JSONArray samples =
-                    shot.optJSONArray("samples");
-
-            if (samples == null ||
-                    samples.length() == 0) {
-                return "single";
-            }
-
-            int twoFaceSamples = 0;
-
-            for (int i = 0;
-                    i < samples.length();
-                    i++) {
-
-                JSONObject sample =
-                        samples.optJSONObject(i);
-
-                if (sample == null) {
-                    continue;
-                }
-
-                JSONArray faces =
-                        sample.optJSONArray("faces");
-
-                if (faces == null ||
-                        faces.length() < 2) {
-                    continue;
-                }
-
-                int usableFaces = 0;
-
-                for (int f = 0;
-                        f < faces.length();
-                        f++) {
-
-                    JSONObject face =
-                            faces.optJSONObject(f);
-
-                    if (face == null) {
-                        continue;
-                    }
-
-                    double x =
-                            face.optDouble("x", Double.NaN);
-
-                    double size =
-                            face.optDouble("size", Double.NaN);
-
-                    if (!Double.isNaN(x) &&
-                            !Double.isNaN(size) &&
-                            x >= 0.0 &&
-                            x <= 1.0 &&
-                            size > 0.0) {
-
-                        usableFaces++;
-                Log.d(TAG, "DEBUG FACE VALID: x=" + x + ", size=" + size);
-                    }
-                }
-
-                if (usableFaces >= 2) {
-                    twoFaceSamples++;
-                }
-            }
-
-            Log.i(
-                    TAG,
-                    "FORCE-SPLIT TEST shot=" +
-                            shot.optInt("shotId", -1) +
-                            " twoFaceSamples=" +
-                            twoFaceSamples);
-
-            /*
-             * TEST:
-             * Jika minimal satu sample benar-benar mempunyai
-             * dua wajah valid, paksa SPLIT.
-             */
-            if (twoFaceSamples >= 1) {
-                return "split";
-            }
-
-            return "single";
-
-        } catch (Exception e) {
-
-            Log.w(
-                    TAG,
-                    "FORCE-SPLIT TEST failed -> SINGLE",
-                    e);
-
-            return "single";
-        }
     }
 
     private static float[] calibrateSplitShot(

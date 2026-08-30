@@ -116,50 +116,6 @@ public class Pass2Optimizer {
                 float[] calibration =
                         calibrateSplitShot(shot);
 
-                float[] splitPosition =
-                        calibration;
-
-                        /*
-                         * Persist SPLIT calibration into analysis.json.
-                         *
-                         * RETURN ORDER:
-                         * [TOP_X, TOP_Y, BOTTOM_X, BOTTOM_Y]
-                         */
-                        if (splitPosition != null &&
-                                splitPosition.length >= 4) {
-
-                            shot.put(
-                                    "topX",
-                                    splitPosition[0]);
-
-                            shot.put(
-                                    "topY",
-                                    splitPosition[1]);
-
-                            shot.put(
-                                    "bottomX",
-                                    splitPosition[2]);
-
-                            shot.put(
-                                    "bottomY",
-                                    splitPosition[3]);
-
-                            Log.i(
-                                    TAG,
-                                    "SPLIT POSITION SAVED shot=" +
-                                    shotId +
-                                    " TOP=(" +
-                                    splitPosition[0] +
-                                    "," +
-                                    splitPosition[1] +
-                                    ")" +
-                                    " BOTTOM=(" +
-                                    splitPosition[2] +
-                                    "," +
-                                    splitPosition[3] +
-                                    ")");
-                        }
-
                 output.put(
                         "topX",
                         calibration[0]);
@@ -330,19 +286,24 @@ public class Pass2Optimizer {
             JSONObject shot) {
 
         try {
+
             JSONArray samples =
                     shot.optJSONArray("samples");
 
             if (samples == null ||
                     samples.length() == 0) {
+
                 return "single";
             }
 
+            int validSamples = 0;
             int twoFaceSamples = 0;
 
+            final float MIN_HORIZONTAL_SEPARATION = 0.18f;
+
             for (int i = 0;
-                    i < samples.length();
-                    i++) {
+                 i < samples.length();
+                 i++) {
 
                 JSONObject sample =
                         samples.optJSONObject(i);
@@ -355,15 +316,23 @@ public class Pass2Optimizer {
                         sample.optJSONArray("faces");
 
                 if (faces == null ||
-                        faces.length() < 2) {
+                        faces.length() == 0) {
                     continue;
                 }
+
+                validSamples++;
+
+                float minX =
+                        Float.MAX_VALUE;
+
+                float maxX =
+                        -Float.MAX_VALUE;
 
                 int usableFaces = 0;
 
                 for (int f = 0;
-                        f < faces.length();
-                        f++) {
+                     f < faces.length();
+                     f++) {
 
                     JSONObject face =
                             faces.optJSONObject(f);
@@ -372,51 +341,89 @@ public class Pass2Optimizer {
                         continue;
                     }
 
-                    double x =
-                            face.optDouble("x", Double.NaN);
+                    double rawX =
+                            face.optDouble(
+                                    "x",
+                                    Double.NaN);
 
-                    double size =
-                            face.optDouble("size", Double.NaN);
+                    double rawSize =
+                            face.optDouble(
+                                    "size",
+                                    Double.NaN);
 
-                    if (!Double.isNaN(x) &&
-                            !Double.isNaN(size) &&
-                            x >= 0.0 &&
-                            x <= 1.0 &&
-                            size > 0.0) {
-
-                        usableFaces++;
-                Log.d(TAG, "DEBUG FACE VALID: x=" + x + ", size=" + size);
+                    if (Double.isNaN(rawX) ||
+                            Double.isNaN(rawSize)) {
+                        continue;
                     }
+
+                    float x =
+                            (float) rawX;
+
+                    float size =
+                            (float) rawSize;
+
+                    if (x < 0.0f ||
+                            x > 1.0f ||
+                            size <= 0.0f) {
+                        continue;
+                    }
+
+                    minX =
+                            Math.min(minX, x);
+
+                    maxX =
+                            Math.max(maxX, x);
+
+                    usableFaces++;
                 }
 
-                if (usableFaces >= 2) {
+                if (usableFaces >= 2 &&
+                        (maxX - minX) >=
+                                MIN_HORIZONTAL_SEPARATION) {
+
                     twoFaceSamples++;
                 }
             }
 
-            Log.i(
-                    TAG,
-                    "FORCE-SPLIT TEST shot=" +
-                            shot.optInt("shotId", -1) +
-                            " twoFaceSamples=" +
-                            twoFaceSamples);
+            if (validSamples < 2) {
+                Log.i(
+                        TAG,
+                        "AUTO LAYOUT shot=" +
+                        shot.optInt("shotId", -1) +
+                        " -> SINGLE (insufficient evidence)");
 
-            /*
-             * TEST:
-             * Jika minimal satu sample benar-benar mempunyai
-             * dua wajah valid, paksa SPLIT.
-             */
-            if (twoFaceSamples >= 1) {
-                return "split";
+                return "single";
             }
 
-            return "single";
+            float splitRatio =
+                    (float) twoFaceSamples /
+                    (float) validSamples;
+
+            String result =
+                    splitRatio >= 0.35f
+                            ? "split"
+                            : "single";
+
+            Log.i(
+                    TAG,
+                    "AUTO LAYOUT shot=" +
+                    shot.optInt("shotId", -1) +
+                    " samples=" +
+                    validSamples +
+                    " twoFace=" +
+                    twoFaceSamples +
+                    " ratio=" +
+                    splitRatio +
+                    " -> " +
+                    result);
+
+            return result;
 
         } catch (Exception e) {
 
             Log.w(
                     TAG,
-                    "FORCE-SPLIT TEST failed -> SINGLE",
+                    "AUTO LAYOUT failed -> SINGLE",
                     e);
 
             return "single";

@@ -159,7 +159,7 @@ public class Pass3Renderer {
                         decoderSurfaceTexture.getTransformMatrix(stMatrix);
 
                         TrajectoryReader.ShotResult shotResult = trajectory.getShotAt(decoderInfo.presentationTimeUs);
-            Log.d(TAG, "DEBUG CROP: ShotResult layout=" + shotResult.layout + ", x=" + shotResult.x + ", y=" + shotResult.y + ", w=" + shotResult.width + ", h=" + shotResult.height);
+            Log.d(TAG, "DEBUG CROP: layout=" + shotResult.layout + ", singleX=" + (shotResult.single != null ? shotResult.single.x : "null") + ", singleY=" + (shotResult.single != null ? shotResult.single.y : "null"));
 
                         GLES20.glClearColor(0f, 0f, 0f, 1f);
 
