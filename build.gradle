@@ -2,6 +2,14 @@ plugins {
     id 'com.android.application' version '8.1.4' apply false
 }
 
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+        maven { url 'https://github.com/arthenica/ffmpeg-kit/releases/download/v6.0/maven/' }
+    }
+}
+
 task clean(type: Delete) {
     delete rootProject.buildDir
 }
