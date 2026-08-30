@@ -17,6 +17,8 @@ import com.example.smartcropapp.render.GlRenderContext;
 
 import java.io.File;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 
 public class Pass3Renderer {
     private static final String TAG = "Pass3Renderer";
@@ -28,7 +30,6 @@ public class Pass3Renderer {
     private static final long TIMEOUT_US = 10000;
 
     public static File render(Context context, Uri sourceVideoUri, File trajectoryFile, File outputVideoFile) {
-        // Validasi parameter di awal untuk mencegah NPE tanpa pesan
         if (context == null) throw new NullPointerException("Context is null");
         if (sourceVideoUri == null) throw new NullPointerException("Source video URI is null");
         if (trajectoryFile == null) throw new NullPointerException("Trajectory file is null");
@@ -37,17 +38,38 @@ public class Pass3Renderer {
         Log.d(TAG, "Starting Pass 3 with trajectory: " + trajectoryFile.getAbsolutePath());
         Log.d(TAG, "Output will be saved to: " + outputVideoFile.getAbsolutePath());
 
+        // Diagnostik: Baca isi file trajectory sebagai string untuk memverifikasi formatnya
         try {
-            TrajectoryReader trajectory = TrajectoryReader.load(trajectoryFile);
-            if (trajectory == null) {
-                throw new RuntimeException("Failed to load trajectory from: " + trajectoryFile.getAbsolutePath());
-            }
+            byte[] bytes = Files.readAllBytes(trajectoryFile.toPath());
+            String content = new String(bytes, StandardCharsets.UTF_8);
+            Log.d(TAG, "Trajectory file size: " + bytes.length + " bytes");
+            Log.d(TAG, "Trajectory content preview: " + content.substring(0, Math.min(200, content.length())));
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to read trajectory file for diagnostics", e);
+        }
+
+        TrajectoryReader trajectory = null;
+        try {
+            trajectory = TrajectoryReader.load(trajectoryFile);
+            Log.d(TAG, "Trajectory loaded successfully: " + (trajectory != null ? "non-null" : "NULL"));
+        } catch (IllegalStateException e) {
+            Log.e(TAG, "TrajectoryReader.load threw IllegalStateException", e);
+            throw new RuntimeException("Pass 3 gagal: Trajectory file invalid - " + e.getMessage(), e);
+        } catch (Exception e) {
+            Log.e(TAG, "TrajectoryReader.load threw unexpected exception", e);
+            throw new RuntimeException("Pass 3 gagal: " + e.getMessage(), e);
+        }
+
+        if (trajectory == null) {
+            throw new RuntimeException("Failed to load trajectory from: " + trajectoryFile.getAbsolutePath());
+        }
+
+        try {
             renderVideoTrack(context, sourceVideoUri, outputVideoFile, trajectory);
             return outputVideoFile;
         } catch (Exception e) {
-            // Pastikan pesan error tidak pernah null
             String errorMsg = (e.getMessage() != null) ? e.getMessage() : e.getClass().getSimpleName();
-            Log.e(TAG, "Pass 3 failed: " + errorMsg, e);
+            Log.e(TAG, "Pass 3 render failed: " + errorMsg, e);
             throw new RuntimeException("Pass 3 gagal: " + errorMsg, e);
         }
     }
@@ -97,7 +119,6 @@ public class Pass3Renderer {
         Surface encoderSurface = encoder.createInputSurface();
         encoder.start();
 
-        // Setup EGL context SEBELUM membuat shader
         glContext.setupEncoderSurface(encoderSurface);
         CropShaderProgram shader = new CropShaderProgram();
 
