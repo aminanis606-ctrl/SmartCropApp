@@ -39,380 +39,179 @@ public class Pass3Renderer {
         }
     }
 
-    private static void renderVideoTrack(Context context, Uri sourceVideoUri, File outputVideoFile,
-                                          TrajectoryReader trajectory) throws Exception {
-
+    private static void renderVideoTrack(Context context, Uri sourceVideoUri, File outputFile, TrajectoryReader trajectory) throws Exception {
         MediaExtractor extractor = new MediaExtractor();
         extractor.setDataSource(context, sourceVideoUri, null);
 
-        int videoTrackIndex = selectTrack(extractor, "video/");
-        if (videoTrackIndex < 0) throw new RuntimeException("Tidak ada video track di sumber");
+        int videoTrackIndex = -1;
+        MediaFormat inputFormat = null;
+        for (int i = 0; i < extractor.getTrackCount(); i++) {
+            MediaFormat format = extractor.getTrackFormat(i);
+            String mime = format.getString(MediaFormat.KEY_MIME);
+            if (mime.startsWith("video/")) {
+                videoTrackIndex = i;
+                inputFormat = format;
+                break;
+            }
+        }
+
+        if (videoTrackIndex == -1 || inputFormat == null) {
+            throw new RuntimeException("Tidak ditemukan track video");
+        }
+
         extractor.selectTrack(videoTrackIndex);
 
-        int audioTrackIndex =
-                selectTrack(extractor, "audio/");
+        // Ambil dimensi sumber asli
+        int srcWidth = inputFormat.getInteger(MediaFormat.KEY_WIDTH);
+        int srcHeight = inputFormat.getInteger(MediaFormat.KEY_HEIGHT);
 
-        MediaFormat inputFormat =
-                extractor.getTrackFormat(videoTrackIndex);
-
-        MediaFormat audioFormat = null;
-
-        if (audioTrackIndex >= 0) {
-            audioFormat =
-                    extractor.getTrackFormat(audioTrackIndex);
-
-            Log.i(TAG,
-                    "Audio track ditemukan: " +
-                    audioFormat.getString(
-                            MediaFormat.KEY_MIME));
-        } else {
-            Log.w(TAG,
-                    "Audio track tidak ditemukan");
-        }
-        String inputMime = inputFormat.getString(MediaFormat.KEY_MIME);
-        int srcWidth = inputFormat.containsKey(MediaFormat.KEY_WIDTH) ? inputFormat.getInteger(MediaFormat.KEY_WIDTH) : OUTPUT_WIDTH;
-        int srcHeight = inputFormat.containsKey(MediaFormat.KEY_HEIGHT) ? inputFormat.getInteger(MediaFormat.KEY_HEIGHT) : OUTPUT_HEIGHT;
-
-        MediaFormat encoderFormat = MediaFormat.createVideoFormat(OUTPUT_MIME, OUTPUT_WIDTH, OUTPUT_HEIGHT);
-        encoderFormat.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
-        encoderFormat.setInteger(MediaFormat.KEY_BIT_RATE, OUTPUT_BITRATE);
-        encoderFormat.setInteger(MediaFormat.KEY_FRAME_RATE, OUTPUT_FPS);
-        encoderFormat.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 2);
-
-        MediaCodec encoder = MediaCodec.createEncoderByType(OUTPUT_MIME);
-        encoder.configure(encoderFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
-        Surface encoderInputSurface = encoder.createInputSurface();
-        encoder.start();
-
-        GlRenderContext glContext = new GlRenderContext();
-        glContext.setupEncoderSurface(encoderInputSurface);
-        CropShaderProgram shader = new CropShaderProgram();
-
-        final AtomicBoolean frameAvailable = new AtomicBoolean(false);
-        SurfaceTexture decoderSurfaceTexture = glContext.getDecoderSurfaceTexture();
-        decoderSurfaceTexture.setOnFrameAvailableListener(st -> {
-            synchronized (frameAvailable) {
-                frameAvailable.set(true);
-                frameAvailable.notifyAll();
-            }
-        });
-
-        MediaCodec decoder = MediaCodec.createDecoderByType(inputMime);
-        decoder.configure(inputFormat, glContext.getDecoderInputSurface(), null, 0);
+        MediaCodec decoder = MediaCodec.createDecoderByType(inputFormat.getString(MediaFormat.KEY_MIME));
+        decoder.configure(inputFormat, null, null, 0);
+        SurfaceTexture decoderSurfaceTexture = new SurfaceTexture(0);
+        decoderSurfaceTexture.setDefaultBufferSize(srcWidth, srcHeight);
+        Surface decoderSurface = new Surface(decoderSurfaceTexture);
         decoder.start();
 
-        MediaMuxer muxer = new MediaMuxer(outputVideoFile.getAbsolutePath(), MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
+        GlRenderContext glContext = new GlRenderContext(OUTPUT_WIDTH, OUTPUT_HEIGHT);
+        CropShaderProgram shader = new CropShaderProgram();
+
+        MediaFormat outputFormat = MediaFormat.createVideoFormat(OUTPUT_MIME, OUTPUT_WIDTH, OUTPUT_HEIGHT);
+        outputFormat.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
+        outputFormat.setInteger(MediaFormat.KEY_BIT_RATE, OUTPUT_BITRATE);
+        outputFormat.setInteger(MediaFormat.KEY_FRAME_RATE, OUTPUT_FPS);
+        outputFormat.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1);
+
+        MediaCodec encoder = MediaCodec.createEncoderByType(OUTPUT_MIME);
+        encoder.configure(outputFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
+        Surface encoderSurface = encoder.createInputSurface();
+        encoder.start();
+
+        MediaMuxer muxer = new MediaMuxer(outputFile.getAbsolutePath(), MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
         int muxerVideoTrack = -1;
-        int muxerAudioTrack = -1;
         boolean muxerStarted = false;
 
-        MediaExtractor audioExtractor = null;
-
-        if (audioTrackIndex >= 0) {
-            audioExtractor = new MediaExtractor();
-            audioExtractor.setDataSource(
-                    context,
-                    sourceVideoUri,
-                    null);
-            audioExtractor.selectTrack(audioTrackIndex);
-
-            Log.i(TAG,
-                    "Audio extractor siap");
-        }
-
+        ByteBuffer[] decoderInputBuffers = decoder.getInputBuffers();
         MediaCodec.BufferInfo decoderInfo = new MediaCodec.BufferInfo();
         MediaCodec.BufferInfo encoderInfo = new MediaCodec.BufferInfo();
+        boolean decoderEOS = false;
+        boolean encoderEOS = false;
 
-        boolean inputEOS = false, decoderEOS = false, encoderEOS = false;
+        float cropWidthNorm = clamp(
+                (float) OUTPUT_WIDTH / srcWidth * (srcHeight / (float) OUTPUT_HEIGHT),
+                0.1f, 1f);
+        float cropHeightNorm = 1.0f;
+        final int panelH = OUTPUT_HEIGHT / 2;
 
         while (!encoderEOS) {
-
-            if (!inputEOS) {
-                int inIndex = decoder.dequeueInputBuffer(TIMEOUT_US);
-                if (inIndex >= 0) {
-                    ByteBuffer inBuffer = decoder.getInputBuffer(inIndex);
-                    int sampleSize = extractor.readSampleData(inBuffer, 0);
+            // Feed decoder
+            if (!decoderEOS) {
+                int inputBufIndex = decoder.dequeueInputBuffer(TIMEOUT_US);
+                if (inputBufIndex >= 0) {
+                    ByteBuffer inputBuf = decoderInputBuffers[inputBufIndex];
+                    int sampleSize = extractor.readSampleData(inputBuf, 0);
                     if (sampleSize < 0) {
-                        decoder.queueInputBuffer(inIndex, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM);
-                        inputEOS = true;
+                        decoder.queueInputBuffer(inputBufIndex, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM);
+                        decoderEOS = true;
                     } else {
-                        long pts = extractor.getSampleTime();
-                        decoder.queueInputBuffer(inIndex, 0, sampleSize, pts, 0);
+                        decoder.queueInputBuffer(inputBufIndex, 0, sampleSize, extractor.getSampleTime(), 0);
                         extractor.advance();
                     }
                 }
             }
 
-            if (!decoderEOS) {
-                int outIndex = decoder.dequeueOutputBuffer(decoderInfo, TIMEOUT_US);
-                if (outIndex >= 0) {
-                    boolean doRender = decoderInfo.size > 0;
-                    decoder.releaseOutputBuffer(outIndex, doRender);
-                    if (doRender) {
-                        synchronized (frameAvailable) {
-                            while (!frameAvailable.get()) frameAvailable.wait(1000);
-                            frameAvailable.set(false);
-                        }
-                        decoderSurfaceTexture.updateTexImage();
+            // Get decoded frame
+            int outputBufIndex = decoder.dequeueOutputBuffer(decoderInfo, TIMEOUT_US);
+            if (outputBufIndex >= 0) {
+                decoder.releaseOutputBuffer(outputBufIndex, true);
+                decoderSurfaceTexture.updateTexImage();
 
-                        float[] stMatrix = new float[16];
-                        decoderSurfaceTexture.getTransformMatrix(stMatrix);
+                float[] stMatrix = new float[16];
+                decoderSurfaceTexture.getTransformMatrix(stMatrix);
 
-        // FORCE SPLIT TEST - SAFE COORDINATES
-        TrajectoryReader.Point topP = new TrajectoryReader.Point(0.5f, 0.5f, 0.5f);
-        TrajectoryReader.Point botP = new TrajectoryReader.Point(0.5f, 0.5f, 0.5f);
-        TrajectoryReader.ShotResult shotResult = new TrajectoryReader.ShotResult("split", null, topP, botP);
-            Log.d(TAG, "DEBUG CROP: layout=" + shotResult.layout + ", singleX=" + (shotResult.single != null ? shotResult.single.x : "null") + ", singleY=" + (shotResult.single != null ? shotResult.single.y : "null"));
-            if ("split".equals(shotResult.layout)) {
-                Log.d(TAG, "DEBUG SPLIT: topX=" + shotResult.top.x + ", topY=" + shotResult.top.y + ", bottomX=" + shotResult.bottom.x + ", bottomY=" + shotResult.bottom.y);
-            }
+                // === FORCE SPLIT DEBUG MODE ===
+                // Selalu gunakan split dengan koordinat aman (tengah)
+                TrajectoryReader.Point topP = new TrajectoryReader.Point(0.5f, 0.5f, 0.5f);
+                TrajectoryReader.Point botP = new TrajectoryReader.Point(0.5f, 0.5f, 0.5f);
+                TrajectoryReader.ShotResult shotResult = new TrajectoryReader.ShotResult("split", null, topP, botP);
 
-                        GLES20.glClearColor(0f, 0f, 0f, 1f);
-            // Debug: Set clear color based on panel
-            // This is handled inside the split block below
+                Log.d(TAG, "DEBUG FORCE SPLIT: topX=" + shotResult.top.x + ", topY=" + shotResult.top.y 
+                        + ", bottomX=" + shotResult.bottom.x + ", bottomY=" + shotResult.bottom.y);
 
-                        if ("split".equals(shotResult.layout)
-                                && shotResult.bottom != null
-                                && shotResult.top != null) {
+                GLES20.glUseProgram(shader.getProgram());
 
-                            /*
-                             * SPLIT MODE
-                             *
-                             * Output:
-                             *
-                             * ┌──────────────────────┐
-                             * │       PERSON A       │
-                             * │       LEFT            │
-                             * ├──────────────────────┤
-                             * │       PERSON B       │
-                             * │       RIGHT           │
-                             * └──────────────────────┘
-                             *
-                             * Kedua panel berasal dari frame
-                             * yang sama tetapi mempunyai crop
-                             * center berbeda.
-                             */
+                /* Panel ATAS - Warna ABU-ABU untuk debug */
+                GLES20.glClearColor(0.3f, 0.3f, 0.3f, 1f);
+                GLES20.glViewport(0, panelH, OUTPUT_WIDTH, panelH);
+                GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
+                shader.draw(
+                        glContext.getDecoderTextureId(),
+                        stMatrix,
+                        shotResult.top.x,
+                        shotResult.top.y,
+                        cropWidthNorm,
+                        cropHeightNorm);
 
-                            final int panelH =
-                                    OUTPUT_HEIGHT / 2;
+                /* Panel BAWAH - Warna HITAM untuk debug */
+                GLES20.glClearColor(0f, 0f, 0f, 1f);
+                GLES20.glViewport(0, 0, OUTPUT_WIDTH, panelH);
+                GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
+                shader.draw(
+                        glContext.getDecoderTextureId(),
+                        stMatrix,
+                        shotResult.bottom.x,
+                        shotResult.bottom.y,
+                        cropWidthNorm,
+                        cropHeightNorm);
 
-                            final float panelAspect =
-                                    OUTPUT_WIDTH /
-                                    (float) panelH;
-
-                            /*
-                             * Setengah frame horizontal sebagai
-                             * sumber crop. Ini menjaga kedua orang
-                             * tetap terlihat tanpa tracking.
-                             */
-                            final float cropWidthNorm =
-                                    0.50f;
-
-                            float cropHeightNorm =
-                                    cropWidthNorm *
-                                    panelAspect *
-                                    (srcWidth /
-                                            (float) srcHeight);
-
-                            cropHeightNorm =
-                                    clamp(
-                                            cropHeightNorm,
-                                            0.10f,
-                                            1.0f);
-
-                            /*
-                             * Panel atas = titik kiri.
-                             */
-                            GLES20.glViewport(
-                                    0,
-                                    panelH,
-                                    OUTPUT_WIDTH,
-                                    panelH);
-
-                            GLES20.glClear(
-                                    GLES20.GL_COLOR_BUFFER_BIT);
-
-                            shader.draw(
-                                    glContext
-                                            .getDecoderTextureId(),
-                                    stMatrix,
-                                    clamp(
-                                            shotResult.top.x,
-                                            0.05f,
-                                            0.95f),
-                                    clamp(
-                                            shotResult.top.y,
-                                            0.05f,
-                                            0.95f),
-                                    cropWidthNorm,
-                                    cropHeightNorm);
-
-                            /*
-                             * Panel bawah = titik kanan.
-                             */
-                            GLES20.glViewport(
-                                    0,
-                                    0,
-                                    OUTPUT_WIDTH,
-                                    panelH);
-
-                            GLES20.glClear(
-                                    GLES20.GL_COLOR_BUFFER_BIT);
-
-                            shader.draw(
-                                    glContext
-                                            .getDecoderTextureId(),
-                                    stMatrix,
-                                    clamp(
-                                            shotResult.bottom.x,
-                                            0.05f,
-                                            0.95f),
-                                    clamp(
-                                            shotResult.bottom.y,
-                                            0.05f,
-                                            0.95f),
-                                    cropWidthNorm,
-                                    cropHeightNorm);
-
-                        } else {
-                            float cropHeightNorm = 1.0f;
-                            float cropWidthNorm = clamp(
-                                    cropHeightNorm * (OUTPUT_WIDTH / (float) OUTPUT_HEIGHT) * (srcHeight / (float) srcWidth),
-                                    0.1f, 1f);
-
-                            GLES20.glViewport(0, 0, OUTPUT_WIDTH, OUTPUT_HEIGHT);
-                            shader.draw(glContext.getDecoderTextureId(), stMatrix,
-                                    shotResult.single.x, shotResult.single.y, cropWidthNorm, cropHeightNorm);
-                        }
-
-                        glContext.setPresentationTime(decoderInfo.presentationTimeUs * 1000);
-                        glContext.swapBuffers();
-                    }
-                    if ((decoderInfo.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
-                        decoderEOS = true;
-                        encoder.signalEndOfInputStream();
-                    }
+                glContext.setPresentationTime(decoderInfo.presentationTimeUs * 1000);
+                glContext.swapBuffers();
+            } else if (outputBufIndex == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+                if (!muxerStarted) {
+                    muxerVideoTrack = muxer.addTrack(encoder.getOutputFormat());
+                    muxer.start();
+                    muxerStarted = true;
                 }
             }
 
+            // Drain encoder
             int encOutIndex = encoder.dequeueOutputBuffer(encoderInfo, TIMEOUT_US);
-            if (encOutIndex == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
-
-                muxerVideoTrack =
-                        muxer.addTrack(
-                                encoder.getOutputFormat());
-
-                if (audioFormat != null) {
-                    muxerAudioTrack =
-                            muxer.addTrack(
-                                    audioFormat);
-
-                    Log.i(TAG,
-                            "Audio mux track ditambahkan");
-                }
-
-                muxer.start();
-                muxerStarted = true;
-
-                /*
-                 * Copy compressed audio asli.
-                 * Tidak decode/re-encode.
-                 */
-                if (audioExtractor != null &&
-                        muxerAudioTrack >= 0) {
-
-                    ByteBuffer audioBuffer =
-                            ByteBuffer.allocate(
-                                    1024 * 1024);
-
-                    MediaCodec.BufferInfo audioInfo =
-                            new MediaCodec.BufferInfo();
-
-                    while (true) {
-
-                        int size =
-                                audioExtractor
-                                        .readSampleData(
-                                                audioBuffer,
-                                                0);
-
-                        if (size < 0) {
-                            break;
-                        }
-
-                        long pts =
-                                audioExtractor
-                                        .getSampleTime();
-
-                        int flags =
-                                audioExtractor
-                                        .getSampleFlags();
-
-                        audioInfo.set(
-                                0,
-                                size,
-                                pts,
-                                flags);
-
-                        audioBuffer.position(0);
-                        audioBuffer.limit(size);
-
-                        muxer.writeSampleData(
-                                muxerAudioTrack,
-                                audioBuffer,
-                                audioInfo);
-
-                        audioExtractor.advance();
-                    }
-
-                    audioExtractor.release();
-                    audioExtractor = null;
-
-                    Log.i(TAG,
-                            "Audio copy selesai");
-                }
-
-            } else if (encOutIndex >= 0) {
+            if (encOutIndex >= 0) {
                 ByteBuffer encodedData = encoder.getOutputBuffer(encOutIndex);
-                if ((encoderInfo.flags & MediaCodec.BUFFER_FLAG_CODEC_CONFIG) != 0) encoderInfo.size = 0;
-                if (encoderInfo.size > 0 && muxerStarted) {
+                if ((encoderInfo.flags & MediaCodec.BUFFER_FLAG_CODEC_CONFIG) != 0) {
+                    encoderInfo.size = 0;
+                }
+                if (encoderInfo.size != 0 && muxerStarted) {
                     encodedData.position(encoderInfo.offset);
                     encodedData.limit(encoderInfo.offset + encoderInfo.size);
                     muxer.writeSampleData(muxerVideoTrack, encodedData, encoderInfo);
                 }
                 encoder.releaseOutputBuffer(encOutIndex, false);
-                if ((encoderInfo.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) encoderEOS = true;
+                if ((encoderInfo.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
+                    encoderEOS = true;
+                }
+            }
+
+            if ((decoderInfo.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
+                decoderEOS = true;
+                encoder.signalEndOfInputStream();
             }
         }
 
-        decoder.stop(); decoder.release();
-        encoder.stop(); encoder.release();
-        glContext.release();
-        extractor.release();
-        if (muxerStarted) muxer.stop();
+        // Cleanup
+        decoder.stop();
+        decoder.release();
+        decoderSurfaceTexture.release();
+        decoderSurface.release();
+        encoder.stop();
+        encoder.release();
+        encoderSurface.release();
+        muxer.stop();
         muxer.release();
-
-        Log.i(TAG, "Pass 3 selesai (video-only, shot-aware split/single): " + outputVideoFile.getAbsolutePath());
+        extractor.release();
+        glContext.release();
     }
 
-    private static float clamp(
-            float v,
-            float min,
-            float max) {
-
-        return Math.max(
-                min,
-                Math.min(
-                        max,
-                        v));
-    }
-
-    private static int selectTrack(MediaExtractor extractor, String mimePrefix) {
-        for (int i = 0; i < extractor.getTrackCount(); i++) {
-            MediaFormat format = extractor.getTrackFormat(i);
-            String mime = format.getString(MediaFormat.KEY_MIME);
-            if (mime != null && mime.startsWith(mimePrefix)) return i;
-        }
-        return -1;
+    private static float clamp(float value, float min, float max) {
+        return Math.max(min, Math.min(max, value));
     }
 }
