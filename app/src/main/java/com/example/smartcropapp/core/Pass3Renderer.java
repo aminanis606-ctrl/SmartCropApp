@@ -17,7 +17,6 @@ import com.example.smartcropapp.render.GlRenderContext;
 
 import java.io.File;
 import java.nio.ByteBuffer;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 public class Pass3Renderer {
     private static final String TAG = "Pass3Renderer";
@@ -61,7 +60,6 @@ public class Pass3Renderer {
 
         extractor.selectTrack(videoTrackIndex);
 
-        // Ambil dimensi sumber asli
         int srcWidth = inputFormat.getInteger(MediaFormat.KEY_WIDTH);
         int srcHeight = inputFormat.getInteger(MediaFormat.KEY_HEIGHT);
 
@@ -72,7 +70,8 @@ public class Pass3Renderer {
         Surface decoderSurface = new Surface(decoderSurfaceTexture);
         decoder.start();
 
-        GlRenderContext glContext = new GlRenderContext(OUTPUT_WIDTH, OUTPUT_HEIGHT);
+        // FIX 1: Gunakan konstruktor tanpa argumen sesuai API asli
+        GlRenderContext glContext = new GlRenderContext();
         CropShaderProgram shader = new CropShaderProgram();
 
         MediaFormat outputFormat = MediaFormat.createVideoFormat(OUTPUT_MIME, OUTPUT_WIDTH, OUTPUT_HEIGHT);
@@ -103,7 +102,6 @@ public class Pass3Renderer {
         final int panelH = OUTPUT_HEIGHT / 2;
 
         while (!encoderEOS) {
-            // Feed decoder
             if (!decoderEOS) {
                 int inputBufIndex = decoder.dequeueInputBuffer(TIMEOUT_US);
                 if (inputBufIndex >= 0) {
@@ -119,7 +117,6 @@ public class Pass3Renderer {
                 }
             }
 
-            // Get decoded frame
             int outputBufIndex = decoder.dequeueOutputBuffer(decoderInfo, TIMEOUT_US);
             if (outputBufIndex >= 0) {
                 decoder.releaseOutputBuffer(outputBufIndex, true);
@@ -129,7 +126,6 @@ public class Pass3Renderer {
                 decoderSurfaceTexture.getTransformMatrix(stMatrix);
 
                 // === FORCE SPLIT DEBUG MODE ===
-                // Selalu gunakan split dengan koordinat aman (tengah)
                 TrajectoryReader.Point topP = new TrajectoryReader.Point(0.5f, 0.5f, 0.5f);
                 TrajectoryReader.Point botP = new TrajectoryReader.Point(0.5f, 0.5f, 0.5f);
                 TrajectoryReader.ShotResult shotResult = new TrajectoryReader.ShotResult("split", null, topP, botP);
@@ -137,7 +133,8 @@ public class Pass3Renderer {
                 Log.d(TAG, "DEBUG FORCE SPLIT: topX=" + shotResult.top.x + ", topY=" + shotResult.top.y 
                         + ", bottomX=" + shotResult.bottom.x + ", bottomY=" + shotResult.bottom.y);
 
-                GLES20.glUseProgram(shader.getProgram());
+                // FIX 2: Hapus GLES20.glUseProgram(shader.getProgram()) karena tidak ada di API asli
+                // shader.draw() sudah menangani glUseProgram secara internal
 
                 /* Panel ATAS - Warna ABU-ABU untuk debug */
                 GLES20.glClearColor(0.3f, 0.3f, 0.3f, 1f);
@@ -173,7 +170,6 @@ public class Pass3Renderer {
                 }
             }
 
-            // Drain encoder
             int encOutIndex = encoder.dequeueOutputBuffer(encoderInfo, TIMEOUT_US);
             if (encOutIndex >= 0) {
                 ByteBuffer encodedData = encoder.getOutputBuffer(encOutIndex);
@@ -197,7 +193,6 @@ public class Pass3Renderer {
             }
         }
 
-        // Cleanup
         decoder.stop();
         decoder.release();
         decoderSurfaceTexture.release();
