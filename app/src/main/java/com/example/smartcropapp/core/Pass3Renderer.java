@@ -158,7 +158,10 @@ public class Pass3Renderer {
                         float[] stMatrix = new float[16];
                         decoderSurfaceTexture.getTransformMatrix(stMatrix);
 
-                        TrajectoryReader.ShotResult shotResult = trajectory.getShotAt(decoderInfo.presentationTimeUs);
+                        // FORCE SPLIT TEST
+        TrajectoryReader.Point topP = new TrajectoryReader.Point(0.25f, 0.5f, 0.5f);
+        TrajectoryReader.Point botP = new TrajectoryReader.Point(0.75f, 0.5f, 0.5f);
+        TrajectoryReader.ShotResult shotResult = new TrajectoryReader.ShotResult("split", null, topP, botP);
             Log.d(TAG, "DEBUG CROP: layout=" + shotResult.layout + ", singleX=" + (shotResult.single != null ? shotResult.single.x : "null") + ", singleY=" + (shotResult.single != null ? shotResult.single.y : "null"));
             if ("split".equals(shotResult.layout)) {
                 Log.d(TAG, "DEBUG SPLIT: topX=" + shotResult.top.x + ", topY=" + shotResult.top.y + ", bottomX=" + shotResult.bottom.x + ", bottomY=" + shotResult.bottom.y);
