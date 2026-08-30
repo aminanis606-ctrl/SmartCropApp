@@ -31,17 +31,23 @@ public class Pass3Renderer {
         if (context == null || sourceVideoUri == null || trajectoryFile == null || outputVideoFile == null) {
             throw new NullPointerException("Parameter render tidak boleh null");
         }
-
-        TrajectoryReader trajectory;
+        
+        Log.d(TAG, "Starting Pass 3...");
+        
+        TrajectoryReader trajectory = null;
         try {
             trajectory = TrajectoryReader.load(trajectoryFile);
         } catch (Exception e) {
             throw new RuntimeException("Gagal memuat trajectory: " + e.getMessage(), e);
         }
 
+        if (trajectory == null) {
+            throw new RuntimeException("Trajectory invalid/null");
+        }
+
         try {
             renderVideoTrack(context, sourceVideoUri, outputVideoFile, trajectory);
-            Log.d(TAG, "Pass 3 selesai: " + outputVideoFile.getAbsolutePath());
+            Log.d(TAG, "Pass 3 Finished Successfully");
             return outputVideoFile;
         } catch (Exception e) {
             throw new RuntimeException("Pass 3 gagal: " + e.getMessage(), e);
@@ -73,7 +79,7 @@ public class Pass3Renderer {
         int srcWidth = inputFormat.getInteger(MediaFormat.KEY_WIDTH);
         int srcHeight = inputFormat.getInteger(MediaFormat.KEY_HEIGHT);
 
-        // 1. Setup Encoder dulu untuk dapat Input Surface
+        // 1. Setup Encoder
         MediaFormat outputFormat = MediaFormat.createVideoFormat(OUTPUT_MIME, OUTPUT_WIDTH, OUTPUT_HEIGHT);
         outputFormat.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
         outputFormat.setInteger(MediaFormat.KEY_BIT_RATE, OUTPUT_BITRATE);
@@ -84,11 +90,11 @@ public class Pass3Renderer {
         encoder.configure(outputFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
         Surface encoderSurface = encoder.createInputSurface();
 
-        // 2. Setup GL Context terikat ke Encoder Surface
+        // 2. Setup GL Context
         GlRenderContext glContext = new GlRenderContext();
         glContext.setupEncoderSurface(encoderSurface);
 
-        // 3. Decoder WAJIB pakai surface dari GlRenderContext (bukan SurfaceTexture manual terpisah)
+        // 3. Decoder via GlRenderContext
         Surface decoderSurface = glContext.getDecoderInputSurface();
         if (decoderSurface == null) throw new RuntimeException("GlRenderContext gagal menyediakan decoder surface");
 
@@ -160,7 +166,6 @@ public class Pass3Renderer {
         extractor.selectTrack(videoTrackIndex);
 
         while (!encoderDone) {
-            // 1. Suapi decoder
             if (!inputDone) {
                 int inIndex = decoder.dequeueInputBuffer(TIMEOUT_US);
                 if (inIndex >= 0) {
@@ -176,7 +181,6 @@ public class Pass3Renderer {
                 }
             }
 
-            // 2. Ambil output decoder -> render GL -> encoder surface
             boolean isEos = false;
             int outIndex = decoder.dequeueOutputBuffer(info, TIMEOUT_US);
             if (outIndex >= 0) {
@@ -190,39 +194,21 @@ public class Pass3Renderer {
                     float[] stMatrix = new float[16];
                     decoderST.getTransformMatrix(stMatrix);
 
-                    TrajectoryReader.ShotResult shotResult = trajectory.getShotAt(info.presentationTimeUs);
-
-                    // KUNCI PERBAIKAN: glClear cuma SEKALI dengan viewport penuh,
-                    // sebelum kedua panel digambar. glClear() TIDAK dibatasi oleh
-                    // glViewport() -- kalau dipanggil lagi di antara panel, itu akan
-                    // menghapus panel yang sudah digambar sebelumnya.
+                    // === AGGRESSIVE DEBUG RENDERING ===
+                    
+                    // 1. Clear entire screen ONCE
                     GLES20.glViewport(0, 0, OUTPUT_WIDTH, OUTPUT_HEIGHT);
-                    GLES20.glClearColor(0f, 0f, 0f, 1f);
+                    GLES20.glClearColor(0.2f, 0.2f, 0.2f, 1.0f); // Dark Grey Background
                     GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
 
-                    if ("split".equals(shotResult.layout)) {
-                        float cropWidthNorm = 0.5f;
-                        float cropHeightNorm = clamp(
-                                cropWidthNorm * (panelH / (float) OUTPUT_WIDTH) * (srcWidth / (float) srcHeight),
-                                0.1f, 1f);
+                    // 2. Draw Top Panel (Red Tint for Debug)
+                    GLES20.glViewport(0, panelH, OUTPUT_WIDTH, panelH);
+                    // Gunakan hardcoded 0.5f untuk memastikan bukan masalah trajectory
+                    shader.draw(glContext.getDecoderTextureId(), stMatrix, 0.5f, 0.5f, 0.5f, 1.0f);
 
-                        GLES20.glViewport(0, panelH, OUTPUT_WIDTH, panelH);
-                        shader.draw(glContext.getDecoderTextureId(), stMatrix,
-                                shotResult.top.x, shotResult.top.y, cropWidthNorm, cropHeightNorm);
-
-                        GLES20.glViewport(0, 0, OUTPUT_WIDTH, panelH);
-                        shader.draw(glContext.getDecoderTextureId(), stMatrix,
-                                shotResult.bottom.x, shotResult.bottom.y, cropWidthNorm, cropHeightNorm);
-                    } else {
-                        float cropHeightNorm = 1.0f;
-                        float cropWidthNorm = clamp(
-                                cropHeightNorm * (OUTPUT_WIDTH / (float) OUTPUT_HEIGHT) * (srcHeight / (float) srcWidth),
-                                0.1f, 1f);
-
-                        GLES20.glViewport(0, 0, OUTPUT_WIDTH, OUTPUT_HEIGHT);
-                        shader.draw(glContext.getDecoderTextureId(), stMatrix,
-                                shotResult.single.x, shotResult.single.y, cropWidthNorm, cropHeightNorm);
-                    }
+                    // 3. Draw Bottom Panel (Blue Tint for Debug)
+                    GLES20.glViewport(0, 0, OUTPUT_WIDTH, panelH);
+                    shader.draw(glContext.getDecoderTextureId(), stMatrix, 0.5f, 0.5f, 0.5f, 1.0f);
                 }
 
                 glContext.setPresentationTime(info.presentationTimeUs * 1000);
@@ -231,7 +217,6 @@ public class Pass3Renderer {
                 if (isEos) encoder.signalEndOfInputStream();
             }
 
-            // 3. Ambil output encoder -> tulis ke muxer
             int encIndex = encoder.dequeueOutputBuffer(info, TIMEOUT_US);
             if (encIndex >= 0) {
                 if (!muxerStartedRef[0]) {
