@@ -93,6 +93,7 @@ public class Pass2Optimizer {
                     "shotId",
                     shotId);
 
+            Log.d(TAG, "DEBUG FACES: sample=" + i + ", faceCount=" + (faces != null ? faces.length() : "null"));
             output.put(
                     "startMs",
                     startMs);
@@ -385,6 +386,7 @@ public class Pass2Optimizer {
                             size > 0.0) {
 
                         usableFaces++;
+                Log.d(TAG, "DEBUG FACE VALID: x=" + x + ", size=" + size);
                     }
                 }
 
