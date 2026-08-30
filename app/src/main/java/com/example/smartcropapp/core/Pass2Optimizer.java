@@ -90,8 +90,9 @@ public class Pass2Optimizer {
                     new JSONObject();
 
             output.put(
-                    "shotId",
-                    shotId);
+            output.put(
+                    "startMs",
+                    startMs);
 
                     "startMs",
                     startMs);
