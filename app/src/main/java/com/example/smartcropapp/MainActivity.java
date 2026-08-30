@@ -140,7 +140,7 @@ public class MainActivity extends AppCompatActivity {
         ContentValues values = new ContentValues();
         values.put(MediaStore.Video.Media.DISPLAY_NAME, displayName);
         values.put(MediaStore.Video.Media.MIME_TYPE, "video/mp4");
-        values.put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/SmartReframe");
+        values.put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/SmartReframe");
         values.put(MediaStore.Video.Media.IS_PENDING, 1);
         
         Uri uri = getContentResolver().insert(MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY), values);
