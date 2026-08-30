@@ -70,9 +70,8 @@ public class Pass3Renderer {
         Surface decoderSurface = new Surface(decoderSurfaceTexture);
         decoder.start();
 
-        // FIX 1: Gunakan konstruktor tanpa argumen sesuai API asli
+        // Inisialisasi GlRenderContext TANPA membuat shader dulu
         GlRenderContext glContext = new GlRenderContext();
-        CropShaderProgram shader = new CropShaderProgram();
 
         MediaFormat outputFormat = MediaFormat.createVideoFormat(OUTPUT_MIME, OUTPUT_WIDTH, OUTPUT_HEIGHT);
         outputFormat.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
@@ -84,6 +83,12 @@ public class Pass3Renderer {
         encoder.configure(outputFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
         Surface encoderSurface = encoder.createInputSurface();
         encoder.start();
+
+        // FIX KRITIS: Setup EGL context DULU sebelum membuat shader
+        glContext.setupEncoderSurface(encoderSurface);
+        
+        // BARU SEKARANG buat shader setelah EGL context aktif
+        CropShaderProgram shader = new CropShaderProgram();
 
         MediaMuxer muxer = new MediaMuxer(outputFile.getAbsolutePath(), MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
         int muxerVideoTrack = -1;
@@ -132,9 +137,6 @@ public class Pass3Renderer {
 
                 Log.d(TAG, "DEBUG FORCE SPLIT: topX=" + shotResult.top.x + ", topY=" + shotResult.top.y 
                         + ", bottomX=" + shotResult.bottom.x + ", bottomY=" + shotResult.bottom.y);
-
-                // FIX 2: Hapus GLES20.glUseProgram(shader.getProgram()) karena tidak ada di API asli
-                // shader.draw() sudah menangani glUseProgram secara internal
 
                 /* Panel ATAS - Warna ABU-ABU untuk debug */
                 GLES20.glClearColor(0.3f, 0.3f, 0.3f, 1f);
