@@ -158,9 +158,9 @@ public class Pass3Renderer {
                         float[] stMatrix = new float[16];
                         decoderSurfaceTexture.getTransformMatrix(stMatrix);
 
-                        // FORCE SPLIT TEST
-        TrajectoryReader.Point topP = new TrajectoryReader.Point(0.25f, 0.5f, 0.5f);
-        TrajectoryReader.Point botP = new TrajectoryReader.Point(0.75f, 0.5f, 0.5f);
+        // FORCE SPLIT TEST - SAFE COORDINATES
+        TrajectoryReader.Point topP = new TrajectoryReader.Point(0.5f, 0.5f, 0.5f);
+        TrajectoryReader.Point botP = new TrajectoryReader.Point(0.5f, 0.5f, 0.5f);
         TrajectoryReader.ShotResult shotResult = new TrajectoryReader.ShotResult("split", null, topP, botP);
             Log.d(TAG, "DEBUG CROP: layout=" + shotResult.layout + ", singleX=" + (shotResult.single != null ? shotResult.single.x : "null") + ", singleY=" + (shotResult.single != null ? shotResult.single.y : "null"));
             if ("split".equals(shotResult.layout)) {
@@ -168,6 +168,8 @@ public class Pass3Renderer {
             }
 
                         GLES20.glClearColor(0f, 0f, 0f, 1f);
+            // Debug: Set clear color based on panel
+            // This is handled inside the split block below
 
                         if ("split".equals(shotResult.layout)
                                 && shotResult.bottom != null
