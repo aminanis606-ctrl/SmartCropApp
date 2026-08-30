@@ -28,13 +28,27 @@ public class Pass3Renderer {
     private static final long TIMEOUT_US = 10000;
 
     public static File render(Context context, Uri sourceVideoUri, File trajectoryFile, File outputVideoFile) {
+        // Validasi parameter di awal untuk mencegah NPE tanpa pesan
+        if (context == null) throw new NullPointerException("Context is null");
+        if (sourceVideoUri == null) throw new NullPointerException("Source video URI is null");
+        if (trajectoryFile == null) throw new NullPointerException("Trajectory file is null");
+        if (outputVideoFile == null) throw new NullPointerException("Output video file is null");
+        
+        Log.d(TAG, "Starting Pass 3 with trajectory: " + trajectoryFile.getAbsolutePath());
+        Log.d(TAG, "Output will be saved to: " + outputVideoFile.getAbsolutePath());
+
         try {
             TrajectoryReader trajectory = TrajectoryReader.load(trajectoryFile);
+            if (trajectory == null) {
+                throw new RuntimeException("Failed to load trajectory from: " + trajectoryFile.getAbsolutePath());
+            }
             renderVideoTrack(context, sourceVideoUri, outputVideoFile, trajectory);
             return outputVideoFile;
         } catch (Exception e) {
-            Log.e(TAG, "Pass 3 gagal", e);
-            throw new RuntimeException("Pass 3 gagal: " + e.getMessage(), e);
+            // Pastikan pesan error tidak pernah null
+            String errorMsg = (e.getMessage() != null) ? e.getMessage() : e.getClass().getSimpleName();
+            Log.e(TAG, "Pass 3 failed: " + errorMsg, e);
+            throw new RuntimeException("Pass 3 gagal: " + errorMsg, e);
         }
     }
 
@@ -70,7 +84,6 @@ public class Pass3Renderer {
         Surface decoderSurface = new Surface(decoderSurfaceTexture);
         decoder.start();
 
-        // Inisialisasi GlRenderContext TANPA membuat shader dulu
         GlRenderContext glContext = new GlRenderContext();
 
         MediaFormat outputFormat = MediaFormat.createVideoFormat(OUTPUT_MIME, OUTPUT_WIDTH, OUTPUT_HEIGHT);
@@ -84,10 +97,8 @@ public class Pass3Renderer {
         Surface encoderSurface = encoder.createInputSurface();
         encoder.start();
 
-        // FIX KRITIS: Setup EGL context DULU sebelum membuat shader
+        // Setup EGL context SEBELUM membuat shader
         glContext.setupEncoderSurface(encoderSurface);
-        
-        // BARU SEKARANG buat shader setelah EGL context aktif
         CropShaderProgram shader = new CropShaderProgram();
 
         MediaMuxer muxer = new MediaMuxer(outputFile.getAbsolutePath(), MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
