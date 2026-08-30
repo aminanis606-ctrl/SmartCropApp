@@ -117,7 +117,7 @@ public class MainActivity extends AppCompatActivity {
                 Log.e(TAG, "PROCESS FAILED", e);
                 String trace = Log.getStackTraceString(e);
                 if (trace.length() > 300) trace = trace.substring(0, 300) + "...";
-                runOnUiThread(() -> tvStatus.setText("ERROR:\n" + trace));
+                runOnUiThread(() -> tvStatus.setText("ERROR:\n" + finalTrace));
             }
         }).start();
     }
