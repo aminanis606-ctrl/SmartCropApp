@@ -93,7 +93,6 @@ public class Pass2Optimizer {
                     "shotId",
                     shotId);
 
-            output.put(
                     "startMs",
                     startMs);
 
@@ -353,6 +352,7 @@ public class Pass2Optimizer {
 
                 JSONArray faces =
                         sample.optJSONArray("faces");
+                Log.d(TAG, "DEBUG FACES: sample=" + i + ", faceCount=" + (faces != null ? faces.length() : "null"));
 
                 if (faces == null ||
                         faces.length() < 2) {
