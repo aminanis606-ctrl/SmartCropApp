@@ -19,7 +19,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
-import com.example.smartcropapp.core.Pass1Analyzer;
+import com.example.smartcropapp.core.Pass1Extractor;
 import com.example.smartcropapp.core.Pass2Optimizer;
 import com.example.smartcropapp.core.Pass3Renderer;
 
@@ -33,6 +33,7 @@ import java.util.Comparator;
 public class MainActivity extends AppCompatActivity {
     private static final String TAG = "SmartCropApp";
     private static final int REQUEST_CODE_STORAGE = 101;
+    private Uri selectedVideoUri; // Untuk menyimpan URI video yang dipilih
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -52,6 +53,9 @@ public class MainActivity extends AppCompatActivity {
             requestStoragePermission();
         }
 
+        // Sementara kita gunakan video dummy atau Anda bisa tambahkan tombol pilih video
+        // Untuk demo ini, kita asumsikan ada video di Download/test.mp4 atau sejenisnya
+        
         btnPass1.setOnClickListener(v -> runPass1(statusText));
         btnPass2.setOnClickListener(v -> runPass2(statusText));
         btnPass3.setOnClickListener(v -> runPass3(statusText));
@@ -116,15 +120,23 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void runPass1(TextView statusText) {
-        statusText.setText("Menjalankan Pass 1: Analisis Wajah...");
+        statusText.setText("Menjalankan Pass 1: Ekstraksi Wajah...");
         new Thread(() -> {
             try {
-                Pass1Analyzer analyzer = new Pass1Analyzer(this);
-                File analysisFile = analyzer.analyze();
+                // Ganti dengan logika pemilihan video yang sebenarnya
+                // Untuk sementara, kita cari file video pertama di folder Download
+                File downloadDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+                File[] videos = downloadDir.listFiles((dir, name) -> name.endsWith(".mp4"));
+                if (videos == null || videos.length == 0) throw new Exception("Tidak ada file video di folder Download!");
+                
+                Uri sourceUri = Uri.fromFile(videos[0]);
+                File outputAnalysis = new File(getFilesDir(), "analysis.json");
+                
+                Pass1Extractor.extract(this, sourceUri, outputAnalysis);
                 
                 File diagnosticsDir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "SmartReframe/diagnostics");
                 File dest = new File(diagnosticsDir, "analysis_" + System.currentTimeMillis() + ".json");
-                java.nio.file.Files.copy(analysisFile.toPath(), dest.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                java.nio.file.Files.copy(outputAnalysis.toPath(), dest.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
                 
                 runOnUiThread(() -> statusText.setText("Pass 1 Selesai. Hasil disimpan di diagnostics."));
             } catch (Exception e) {
@@ -138,7 +150,6 @@ public class MainActivity extends AppCompatActivity {
         statusText.setText("Menjalankan Pass 2: Optimasi Trajectory...");
         new Thread(() -> {
             try {
-                // Cari file analysis terbaru
                 File diagnosticsDir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "SmartReframe/diagnostics");
                 File[] files = diagnosticsDir.listFiles((dir, name) -> name.startsWith("analysis_") && name.endsWith(".json"));
                 if (files == null || files.length == 0) throw new Exception("File analysis tidak ditemukan!");
@@ -146,11 +157,11 @@ public class MainActivity extends AppCompatActivity {
                 Arrays.sort(files, Comparator.comparingLong(File::lastModified));
                 File latestAnalysis = files[files.length - 1];
 
-                Pass2Optimizer optimizer = new Pass2Optimizer(this);
-                File trajectoryFile = optimizer.optimize(latestAnalysis);
+                File trajectoryOutput = new File(getFilesDir(), "trajectory.json");
+                Pass2Optimizer.optimize(latestAnalysis, trajectoryOutput);
 
                 File dest = new File(diagnosticsDir, "trajectory_" + System.currentTimeMillis() + ".json");
-                java.nio.file.Files.copy(trajectoryFile.toPath(), dest.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                java.nio.file.Files.copy(trajectoryOutput.toPath(), dest.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
 
                 runOnUiThread(() -> statusText.setText("Pass 2 Selesai. Cek layout di file trajectory."));
             } catch (Exception e) {
@@ -171,12 +182,16 @@ public class MainActivity extends AppCompatActivity {
                 Arrays.sort(files, Comparator.comparingLong(File::lastModified));
                 File latestTrajectory = files[files.length - 1];
 
-                // Contoh: Menggunakan video dummy atau video terakhir yang dipilih
-                // Anda mungkin perlu menambahkan logic pemilihan video di sini
-                Uri sourceUri = null; // Ganti dengan logic pemilihan video Anda
-                
-                Pass3Renderer renderer = new Pass3Renderer(this);
-                // renderer.render(sourceUri, latestTrajectory, outputFile); 
+                // Gunakan video sumber yang sama dengan Pass 1
+                File downloadDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+                File[] videos = downloadDir.listFiles((dir, name) -> name.endsWith(".mp4"));
+                if (videos == null || videos.length == 0) throw new Exception("Tidak ada file video di folder Download!");
+                Uri sourceUri = Uri.fromFile(videos[0]);
+
+                File outputVideo = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES), "SmartReframe/output.mp4");
+                if (!outputVideo.getParentFile().exists()) outputVideo.getParentFile().mkdirs();
+
+                Pass3Renderer.render(this, sourceUri, latestTrajectory, outputVideo);
 
                 runOnUiThread(() -> statusText.setText("Pass 3 Selesai. Cek folder Movies/SmartReframe."));
             } catch (Exception e) {
