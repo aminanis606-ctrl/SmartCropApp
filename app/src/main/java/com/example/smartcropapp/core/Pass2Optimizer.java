@@ -1,1112 +1,215 @@
 package com.example.smartcropapp.core;
 
 import android.util.Log;
-
 import org.json.JSONArray;
 import org.json.JSONObject;
-
+import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.nio.charset.StandardCharsets;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.util.ArrayList;
+import java.util.List;
 
 public class Pass2Optimizer {
+    private static final String TAG = "Pass2Optimizer";
+    private static final float CENTER_MIN = 0.25f;
+    private static final float CENTER_MAX = 0.75f;
 
-    private static final String TAG =
-            "Pass2Optimizer";
-
-    private static final float CENTER_MIN =
-            0.40f;
-
-    private static final float CENTER_MAX =
-            0.60f;
-
-    private static final int HYSTERESIS_THRESHOLD =
-            3;
-
-    public static void optimize(
-            File analysisFile,
-            File trajectoryFile)
-            throws Exception {
-
-        String content;
-
-        try (FileInputStream fis =
-                     new FileInputStream(analysisFile)) {
-
-            byte[] data =
-                    new byte[(int)
-                            analysisFile.length()];
-
-            int read =
-                    fis.read(data);
-
-            content =
-                    new String(
-                            data,
-                            0,
-                            read,
-                            StandardCharsets.UTF_8);
-        }
-
-        JSONObject root =
-                new JSONObject(content);
-
-        JSONArray shots =
-                root.getJSONArray("shots");
-
-        JSONArray outputShots =
-                new JSONArray();
-
-        for (int s = 0;
-             s < shots.length();
-             s++) {
-
-            JSONObject shot =
-                    shots.getJSONObject(s);
-
-            /*
-             * AUTO LAYOUT
-             *
-             * Pass 1 hanya menentukan shot boundary.
-             * Layout ditentukan otomatis di Pass 2.
-             *
-             * Pilihan SINGLE/SPLIT dari UI manual
-             * tidak digunakan pada jalur normal.
-             */
-            String layout = getManualLayout(s);
-
-            int shotId =
-                    shot.optInt(
-                            "shotId",
-                            s);
-
-            long startMs =
-                    shot.optLong(
-                            "startMs",
-                            0);
-
-            JSONObject output =
-                    new JSONObject();
-            output.put(
-                    "startMs",
-                    startMs);
-
-            output.put(
-                    "layout",
-                    layout);
-
-            if ("split".equals(layout)) {
-
-                /*
-                 * SPLIT CALIBRATION
-                 *
-                 * Tidak tracking.
-                 * Kita hanya mencari pusat aktivitas
-                 * kiri dan kanan SATU KALI per shot.
-                 *
-                 * Hasil kemudian dibekukan sepanjang shot.
-                 */
-
-                float[] calibration =
-                        calibrateSplitShot(shot);
-
-                float[] splitPosition =
-                        calibration;
-
-                        /*
-                         * Persist SPLIT calibration into analysis.json.
-                         *
-                         * RETURN ORDER:
-                         * [TOP_X, TOP_Y, BOTTOM_X, BOTTOM_Y]
-                         */
-                        if (splitPosition != null &&
-                                splitPosition.length >= 4) {
-
-                            shot.put(
-                                    "topX",
-                                    splitPosition[0]);
-
-                            shot.put(
-                                    "topY",
-                                    splitPosition[1]);
-
-                            shot.put(
-                                    "bottomX",
-                                    splitPosition[2]);
-
-                            shot.put(
-                                    "bottomY",
-                                    splitPosition[3]);
-
-                            Log.i(
-                                    TAG,
-                                    "SPLIT POSITION SAVED shot=" +
-                                    shotId +
-                                    " TOP=(" +
-                                    splitPosition[0] +
-                                    "," +
-                                    splitPosition[1] +
-                                    ")" +
-                                    " BOTTOM=(" +
-                                    splitPosition[2] +
-                                    "," +
-                                    splitPosition[3] +
-                                    ")");
-                        }
-
-                output.put(
-                        "topX",
-                        calibration[0]);
-
-                output.put(
-                        "topY",
-                        calibration[1]);
-
-                output.put(
-                        "bottomX",
-                        calibration[2]);
-
-                output.put(
-                        "bottomY",
-                        calibration[3]);
-
-                Log.i(
-                        TAG,
-                        "Shot " + shotId +
-                        " SPLIT CALIBRATED:" +
-                        " left=" + calibration[0] +
-                        "," + calibration[1] +
-                        " right=" + calibration[2] +
-                        "," + calibration[3]);
-
-                Log.i(
-                        TAG,
-                        "Shot " + shotId +
-                        " SPLIT");
-
-            } else {
-
-                JSONArray samples =
-                        shot.optJSONArray(
-                                "samples");
-
-                if (samples == null) {
-                    samples =
-                            new JSONArray();
-                }
-
-                output.put(
-                        "track",
-                        processSingleShot(
-                                shotId,
-                                samples));
-            }
-
-            outputShots.put(
-                    output);
-        }
-
-        JSONObject outputRoot =
-                new JSONObject();
-
-        outputRoot.put(
-                "version",
-                2);
-
-        outputRoot.put(
-                "shots",
-                outputShots);
-
-        try (FileOutputStream fos =
-                     new FileOutputStream(
-                             trajectoryFile)) {
-
-            fos.write(
-                    outputRoot
-                            .toString()
-                            .getBytes(
-                                    StandardCharsets.UTF_8));
-        }
-
-        Log.i(
-                TAG,
-                "PASS2 DONE -> " +
-                trajectoryFile.getAbsolutePath());
+    private static class FrameData {
+        int shotId;
+        int frameIndex;
+        float faceX;
+        float faceY;
+        float faceWidth;
+        float faceHeight;
     }
 
-    private static boolean hasStableTwoFaceEvidence(
-            JSONObject shot)
-            throws Exception {
-
-        JSONArray samples =
-                shot.optJSONArray("samples");
-
-        if (samples == null ||
-                samples.length() == 0) {
-            return false;
-        }
-
-        int validSamples = 0;
-
-        for (int i = 0;
-             i < samples.length();
-             i++) {
-
-            JSONObject sample =
-                    samples.getJSONObject(i);
-
-            JSONArray faces =
-                    sample.optJSONArray("faces");
-
-            if (faces == null ||
-                    faces.length() < 2) {
-                continue;
-            }
-
-            float minX =
-                    Float.MAX_VALUE;
-
-            float maxX =
-                    -Float.MAX_VALUE;
-
-            for (int f = 0;
-                 f < faces.length();
-                 f++) {
-
-                JSONObject face =
-                        faces.getJSONObject(f);
-
-                float x =
-                        (float)
-                        face.optDouble(
-                                "x",
-                                0.5f);
-
-                if (x < minX) {
-                    minX = x;
-                }
-
-                if (x > maxX) {
-                    maxX = x;
-                }
-            }
-
-            /*
-             * Dua wajah harus benar-benar terpisah.
-             *
-             * 0.25 = jarak horizontal minimum.
-             * Close-up satu wajah dengan beberapa deteksi
-             * berdekatan tidak lolos.
-             */
-            if (maxX - minX >= 0.25f) {
-                validSamples++;
-            }
-        }
-
-        /*
-         * Minimal 2 sample berbeda harus mendukung
-         * keberadaan dua wajah.
-         *
-         * Karena Pass1 sampling sekitar 500 ms,
-         * ini cukup kuat untuk menolak false-positive
-         * satu frame.
-         */
-        return validSamples >= 2;
+    private static class CropRegion {
+        int shotId; // Ditambahkan untuk keperluan serialisasi
+        int frameIndex;
+        float x;
+        float y;
+        float width;
+        float height;
     }
 
+    private static class ShotConfig {
+        boolean isSplit;
+        float topX;
+        float bottomX;
 
-    /*
-     * ============================================================
-     * AUTO LAYOUT CLASSIFIER
-     * ============================================================
-     */
-    private static String autoClassifyLayout(
-            JSONObject shot) {
+        ShotConfig() {
+            this.isSplit = false;
+            this.topX = 0.25f;
+            this.bottomX = 0.75f;
+        }
+    }
 
+    public static void optimize(File analysisFile, File trajectoryFile) throws Exception {
+        // 1. Baca file analisis dari Pass 1
+        String content = java.nio.file.Files.readString(analysisFile.toPath());
+        JSONObject analysis = new JSONObject(content);
+        JSONArray shotsArray = analysis.getJSONArray("shots");
+        
+        List<FrameData> frames = new ArrayList<>();
+
+        // Parse data frame per frame dari JSON analisis
+        for (int i = 0; i < shotsArray.length(); i++) {
+            JSONObject shot = shotsArray.getJSONObject(i);
+            int shotId = shot.getInt("shotId");
+            JSONArray track = shot.getJSONArray("track");
+            
+            for (int j = 0; j < track.length(); j++) {
+                JSONObject point = track.getJSONObject(j);
+                FrameData fd = new FrameData();
+                fd.shotId = shotId;
+                fd.frameIndex = point.getInt("t");
+                fd.faceX = (float) point.getDouble("x");
+                fd.faceY = (float) point.getDouble("y");
+                fd.faceWidth = (float) point.getDouble("size");
+                fd.faceHeight = (float) point.getDouble("size");
+                frames.add(fd);
+            }
+        }
+
+        // 2. Proses optimasi per shot
+        List<CropRegion> result = new ArrayList<>();
+        int totalFrames = frames.size();
+        
+        if (totalFrames == 0) {
+            throw new Exception("Tidak ada data frame untuk dioptimasi");
+        }
+
+        // Kelompokkan frame berdasarkan shotId
+        int i = 0;
+        while (i < totalFrames) {
+            int shotId = frames.get(i).shotId;
+            int startIdx = i;
+            while (i < totalFrames && frames.get(i).shotId == shotId) {
+                i++;
+            }
+            int endIdx = i - 1;
+
+            processShot(frames, startIdx, endIdx, shotId, result);
+        }
+
+        // 3. Tulis hasil ke trajectory.json
+        writeTrajectoryJSON(result, trajectoryFile);
+    }
+
+    private static void writeTrajectoryJSON(List<CropRegion> regions, File outputFile) throws Exception {
+        JSONObject root = new JSONObject();
+        JSONArray shotsJson = new JSONArray();
+
+        // Kelompokkan region berdasarkan shotId
+        int i = 0;
+        while (i < regions.size()) {
+            int currentShotId = regions.get(i).shotId;
+            JSONObject shotObj = new JSONObject();
+            shotObj.put("shotId", currentShotId);
+            
+            // Tentukan layout berdasarkan konfigurasi
+            ShotConfig config = getShotConfig(currentShotId);
+            shotObj.put("layout", config.isSplit ? "split" : "single");
+            
+            JSONArray trackJson = new JSONArray();
+            while (i < regions.size() && regions.get(i).shotId == currentShotId) {
+                CropRegion r = regions.get(i);
+                JSONObject point = new JSONObject();
+                point.put("t", r.frameIndex);
+                point.put("x", r.x);
+                point.put("y", r.y);
+                point.put("size", Math.max(r.width, r.height)); // Simplifikasi size
+                trackJson.put(point);
+                i++;
+            }
+            shotObj.put("track", trackJson);
+            shotsJson.put(shotObj);
+        }
+
+        root.put("shots", shotsJson);
+
+        try (FileWriter writer = new FileWriter(outputFile)) {
+            writer.write(root.toString(2)); // Indentasi 2 spasi agar mudah dibaca
+        }
+        Log.d(TAG, "Trajectory written to: " + outputFile.getAbsolutePath());
+    }
+
+    private static void processShot(List<FrameData> frames, int startFrame, int endFrame, int shotId, List<CropRegion> result) {
+        ShotConfig config = getShotConfig(shotId);
+        
+        if (config.isSplit) {
+            // Layout split: dua panel vertikal (atas & bawah)
+            for (int i = startFrame; i <= endFrame; i++) {
+                FrameData fd = frames.get(i);
+                
+                // Panel Atas
+                CropRegion topRegion = new CropRegion();
+                topRegion.shotId = shotId;
+                topRegion.frameIndex = i;
+                topRegion.x = config.topX; 
+                topRegion.y = 0.25f; 
+                topRegion.width = 0.5f;
+                topRegion.height = 0.5f;
+                result.add(topRegion);
+
+                // Panel Bawah
+                CropRegion bottomRegion = new CropRegion();
+                bottomRegion.shotId = shotId;
+                bottomRegion.frameIndex = i;
+                bottomRegion.x = config.bottomX;
+                bottomRegion.y = 0.75f; 
+                bottomRegion.width = 0.5f;
+                bottomRegion.height = 0.5f;
+                result.add(bottomRegion);
+            }
+        } else {
+            // Layout single: satu panel penuh mengikuti subjek
+            for (int i = startFrame; i <= endFrame; i++) {
+                FrameData fd = frames.get(i);
+                CropRegion region = new CropRegion();
+                region.shotId = shotId;
+                region.frameIndex = i;
+                region.x = fd.faceX;
+                region.y = fd.faceY;
+                region.width = fd.faceWidth;
+                region.height = fd.faceHeight;
+                result.add(region);
+            }
+        }
+    }
+
+    private static ShotConfig getShotConfig(int shotId) {
+        ShotConfig config = new ShotConfig();
         try {
-            JSONArray samples =
-                    shot.optJSONArray("samples");
+            File baseDir = new File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), "SmartReframe");
+            File configFile = new File(baseDir, "manual_split.txt");
+            
+            if (!configFile.exists()) return config;
 
-            if (samples == null ||
-                    samples.length() == 0) {
-                return "single";
-            }
-
-            int twoFaceSamples = 0;
-
-            for (int i = 0;
-                    i < samples.length();
-                    i++) {
-
-                JSONObject sample =
-                        samples.optJSONObject(i);
-
-                if (sample == null) {
-                    continue;
-                }
-
-                JSONArray faces =
-                        sample.optJSONArray("faces");
-                Log.d(TAG, "DEBUG FACES: sample=" + i + ", faceCount=" + (faces != null ? faces.length() : "null"));
-
-                if (faces == null ||
-                        faces.length() < 2) {
-                    continue;
-                }
-
-                int usableFaces = 0;
-
-                for (int f = 0;
-                        f < faces.length();
-                        f++) {
-
-                    JSONObject face =
-                            faces.optJSONObject(f);
-
-                    if (face == null) {
-                        continue;
+            BufferedReader reader = new BufferedReader(new FileReader(configFile));
+            String line;
+            while ((line = reader.readLine()) != null) {
+                line = line.trim();
+                if (line.isEmpty() || line.startsWith("#")) continue;
+                
+                String[] parts = line.split(",");
+                int idInFile = Integer.parseInt(parts[0].trim());
+                
+                if (idInFile == shotId) {
+                    config.isSplit = true;
+                    if (parts.length >= 3) {
+                        config.topX = Float.parseFloat(parts[1].trim());
+                        config.bottomX = Float.parseFloat(parts[2].trim());
                     }
-
-                    double x =
-                            face.optDouble("x", Double.NaN);
-
-                    double size =
-                            face.optDouble("size", Double.NaN);
-
-                    if (!Double.isNaN(x) &&
-                            !Double.isNaN(size) &&
-                            x >= 0.0 &&
-                            x <= 1.0 &&
-                            size > 0.0) {
-
-                        usableFaces++;
-                Log.d(TAG, "DEBUG FACE VALID: x=" + x + ", size=" + size);
-                    }
-                }
-
-                if (usableFaces >= 2) {
-                    twoFaceSamples++;
+                    reader.close();
+                    return config;
                 }
             }
-
-            Log.i(
-                    TAG,
-                    "FORCE-SPLIT TEST shot=" +
-                            shot.optInt("shotId", -1) +
-                            " twoFaceSamples=" +
-                            twoFaceSamples);
-
-            /*
-             * TEST:
-             * Jika minimal satu sample benar-benar mempunyai
-             * dua wajah valid, paksa SPLIT.
-             */
-            if (twoFaceSamples >= 1) {
-                return "split";
-            }
-
-            return "single";
-
+            reader.close();
         } catch (Exception e) {
-
-            Log.w(
-                    TAG,
-                    "FORCE-SPLIT TEST failed -> SINGLE",
-                    e);
-
-            return "single";
+            Log.e(TAG, "Gagal membaca manual_split.txt", e);
         }
-    }
-
-    private static float[] calibrateSplitShot(
-            JSONObject shot)
-            throws Exception {
-
-        JSONArray samples =
-                shot.optJSONArray("samples");
-
-        /*
-         * Fallback konservatif:
-         * LEFT  = 0.25
-         * RIGHT = 0.75
-         */
-        float fallbackLeftX = 0.25f;
-        float fallbackRightX = 0.75f;
-
-        if (samples == null ||
-                samples.length() == 0) {
-
-            return new float[]{
-                    fallbackRightX,
-                    0.50f,
-                    fallbackLeftX,
-                    0.50f
-            };
-        }
-
-        double leftXSum = 0.0;
-        double leftYSum = 0.0;
-        double leftWeight = 0.0;
-
-        double rightXSum = 0.0;
-        double rightYSum = 0.0;
-        double rightWeight = 0.0;
-
-        int validTwoFaceSamples = 0;
-
-        /*
-         * IMPORTANT:
-         *
-         * SPLIT calibration sekarang memakai FACE,
-         * bukan texture activity.
-         *
-         * Ini mencegah:
-         * - close-up satu orang
-         * - tangan
-         * - meja
-         * - background
-         * - objek lain
-         *
-         * menjadi pasangan kiri/kanan palsu.
-         */
-        for (int i = 0;
-             i < samples.length();
-             i++) {
-
-            JSONObject sample =
-                    samples.getJSONObject(i);
-
-            JSONArray faces =
-                    sample.optJSONArray("faces");
-
-            if (faces == null ||
-                    faces.length() < 2) {
-                continue;
-            }
-
-            JSONObject leftFace = null;
-            JSONObject rightFace = null;
-
-            float minX = Float.MAX_VALUE;
-            float maxX = -Float.MAX_VALUE;
-
-            for (int f = 0;
-                 f < faces.length();
-                 f++) {
-
-                JSONObject face =
-                        faces.getJSONObject(f);
-
-                float x =
-                        (float)
-                        face.optDouble(
-                                "x",
-                                0.5f);
-
-                if (x < minX) {
-                    minX = x;
-                    leftFace = face;
-                }
-
-                if (x > maxX) {
-                    maxX = x;
-                    rightFace = face;
-                }
-            }
-
-            if (leftFace == null ||
-                    rightFace == null ||
-                    leftFace == rightFace) {
-                continue;
-            }
-
-            float lx =
-                    (float)
-                    leftFace.optDouble(
-                            "x",
-                            0.25f);
-
-            float ly =
-                    (float)
-                    leftFace.optDouble(
-                            "y",
-                            0.50f);
-
-            float ls =
-                    (float)
-                    leftFace.optDouble(
-                            "size",
-                            0.30f);
-
-            float rx =
-                    (float)
-                    rightFace.optDouble(
-                            "x",
-                            0.75f);
-
-            float ry =
-                    (float)
-                    rightFace.optDouble(
-                            "y",
-                            0.50f);
-
-            float rs =
-                    (float)
-                    rightFace.optDouble(
-                            "size",
-                            0.30f);
-
-            /*
-             * Dua wajah harus benar-benar terpisah.
-             *
-             * Jarak minimum 0.25 mencegah satu close-up
-             * atau dua deteksi yang terlalu berdekatan
-             * menghasilkan SPLIT.
-             */
-            if (rx - lx < 0.25f) {
-                continue;
-            }
-
-            /*
-             * Bobot berdasarkan ukuran wajah.
-             * Wajah yang lebih jelas mendapat bobot lebih besar,
-             * tetapi tidak boleh mendominasi terlalu ekstrem.
-             */
-            double lw =
-                    Math.max(
-                            0.10,
-                            Math.min(
-                                    1.0,
-                                    ls));
-
-            double rw =
-                    Math.max(
-                            0.10,
-                            Math.min(
-                                    1.0,
-                                    rs));
-
-            leftXSum += lx * lw;
-            leftYSum += ly * lw;
-            leftWeight += lw;
-
-            rightXSum += rx * rw;
-            rightYSum += ry * rw;
-            rightWeight += rw;
-
-            validTwoFaceSamples++;
-        }
-
-        /*
-         * Tidak ada bukti dua wajah:
-         *
-         * Jangan memaksakan posisi berdasarkan texture.
-         * Fallback tetap simetris.
-         */
-        if (validTwoFaceSamples == 0) {
-
-            Log.w(
-                    TAG,
-                    "SPLIT calibration: tidak ditemukan dua wajah terpisah -> fallback");
-
-            /*
-             * RETURN ORDER:
-             *
-             * [TOP_X, TOP_Y, BOTTOM_X, BOTTOM_Y]
-             *
-             * TOP    = RIGHT
-             * BOTTOM = LEFT
-             */
-            return new float[]{
-                    fallbackRightX,
-                    0.50f,
-                    fallbackLeftX,
-                    0.50f
-            };
-        }
-
-        float leftX =
-                (float)
-                (leftXSum / leftWeight);
-
-        float leftY =
-                (float)
-                (leftYSum / leftWeight);
-
-        float rightX =
-                (float)
-                (rightXSum / rightWeight);
-
-        float rightY =
-                (float)
-                (rightYSum / rightWeight);
-
-        leftX =
-                clamp(
-                        leftX,
-                        0.16f,
-                        0.42f);
-
-        rightX =
-                clamp(
-                        rightX,
-                        0.58f,
-                        0.84f);
-
-        leftY =
-                clamp(
-                        leftY,
-                        0.25f,
-                        0.75f);
-
-        rightY =
-                clamp(
-                        rightY,
-                        0.25f,
-                        0.75f);
-
-        /*
-         * Final separation guard.
-         */
-        if (rightX - leftX < 0.25f) {
-
-            Log.w(
-                    TAG,
-                    "SPLIT calibration: separation gagal -> fallback");
-
-            rightX = fallbackRightX;
-            rightY = 0.50f;
-
-            leftX = fallbackLeftX;
-            leftY = 0.50f;
-        }
-
-        Log.i(
-                TAG,
-                "SPLIT FACE CALIBRATION: " +
-                "RIGHT->TOP x=" + rightX +
-                " y=" + rightY +
-                " | LEFT->BOTTOM x=" + leftX +
-                " y=" + leftY +
-                " | twoFaceSamples=" +
-                validTwoFaceSamples);
-
-        /*
-         * RETURN:
-         *
-         * index 0 = TOP X    = RIGHT
-         * index 1 = TOP Y    = RIGHT
-         * index 2 = BOTTOM X = LEFT
-         * index 3 = BOTTOM Y = LEFT
-         */
-        return new float[]{
-                rightX,
-                rightY,
-                leftX,
-                leftY
-        };
-    }
-
-    private static JSONArray processSingleShot(
-            int shotId,
-            JSONArray samples)
-            throws Exception {
-
-        JSONArray track = new JSONArray();
-        int n = samples.length();
-
-        if (n == 0) {
-            return track;
-        }
-
-        float[] lockedX = new float[n];
-        float[] lockedY = new float[n];
-        float[] lockedSize = new float[n];
-        long[] times = new long[n];
-
-        final float DEFAULT_X = 0.50f;
-        final float DEFAULT_Y = 0.40f;
-        final float DEFAULT_SIZE = 0.30f;
-
-        final float MIN_SIZE = 0.20f;
-        final float MAX_SIZE = 0.45f;
-
-        final float EDGE_LEFT = 0.20f;
-        final float EDGE_RIGHT = 0.80f;
-
-        float previousX = DEFAULT_X;
-        float previousY = DEFAULT_Y;
-        float previousSize = DEFAULT_SIZE;
-
-        boolean hasValidSubject = false;
-
-        for (int i = 0; i < n; i++) {
-
-            JSONObject sample =
-                    samples.getJSONObject(i);
-
-            times[i] =
-                    sample.optLong("t", 0);
-
-            JSONArray faces =
-                    sample.optJSONArray("faces");
-
-            /*
-             * No face:
-             * fallback ke center.
-             */
-            if (faces == null ||
-                    faces.length() == 0) {
-
-                lockedX[i] = DEFAULT_X;
-                lockedY[i] = DEFAULT_Y;
-                lockedSize[i] = DEFAULT_SIZE;
-
-                previousX = DEFAULT_X;
-                previousY = DEFAULT_Y;
-                previousSize = DEFAULT_SIZE;
-
-                hasValidSubject = false;
-                continue;
-            }
-
-            JSONObject chosen = null;
-
-            /*
-             * SINGLE dengan satu wajah:
-             * gunakan langsung.
-             */
-            if (faces.length() == 1) {
-
-                chosen =
-                        faces.getJSONObject(0);
-
-            } else {
-
-                /*
-                 * Multi-face SINGLE:
-                 *
-                 * Jangan menebak speaker.
-                 *
-                 * Score =
-                 * ukuran + kedekatan center + kestabilan.
-                 */
-                float bestScore =
-                        -Float.MAX_VALUE;
-
-                for (int f = 0;
-                     f < faces.length();
-                     f++) {
-
-                    JSONObject candidate =
-                            faces.getJSONObject(f);
-
-                    float x =
-                            (float)
-                            candidate.optDouble(
-                                    "x",
-                                    DEFAULT_X);
-
-                    float y =
-                            (float)
-                            candidate.optDouble(
-                                    "y",
-                                    DEFAULT_Y);
-
-                    float size =
-                            (float)
-                            candidate.optDouble(
-                                    "size",
-                                    DEFAULT_SIZE);
-
-                    if (x < 0.0f ||
-                            x > 1.0f ||
-                            y < 0.0f ||
-                            y > 1.0f) {
-                        continue;
-                    }
-
-                    size =
-                            clamp(
-                                    size,
-                                    MIN_SIZE,
-                                    MAX_SIZE);
-
-                    float sizeScore =
-                            clamp(
-                                    size,
-                                    0.0f,
-                                    1.0f);
-
-                    float centerDistance =
-                            Math.abs(x - 0.50f);
-
-                    float centerScore =
-                            1.0f -
-                            clamp(
-                                    centerDistance * 2.0f,
-                                    0.0f,
-                                    1.0f);
-
-                    float movement =
-                            Math.abs(
-                                    x - previousX);
-
-                    float stabilityScore =
-                            1.0f -
-                            clamp(
-                                    movement * 2.0f,
-                                    0.0f,
-                                    1.0f);
-
-                    float score =
-                            (sizeScore * 0.35f) +
-                            (centerScore * 0.30f) +
-                            (stabilityScore * 0.35f);
-
-                    if (score > bestScore) {
-                        bestScore = score;
-                        chosen = candidate;
-                    }
-                }
-            }
-
-            /*
-             * Tidak ada kandidat valid.
-             */
-            if (chosen == null) {
-
-                lockedX[i] = DEFAULT_X;
-                lockedY[i] = DEFAULT_Y;
-                lockedSize[i] = DEFAULT_SIZE;
-
-                previousX = DEFAULT_X;
-                previousY = DEFAULT_Y;
-                previousSize = DEFAULT_SIZE;
-
-                hasValidSubject = false;
-                continue;
-            }
-
-            float detectedX =
-                    (float)
-                    chosen.optDouble(
-                            "x",
-                            DEFAULT_X);
-
-            float detectedY =
-                    (float)
-                    chosen.optDouble(
-                            "y",
-                            DEFAULT_Y);
-
-            float detectedSize =
-                    (float)
-                    chosen.optDouble(
-                            "size",
-                            DEFAULT_SIZE);
-
-            detectedX =
-                    clamp(
-                            detectedX,
-                            0.05f,
-                            0.95f);
-
-            detectedY =
-                    clamp(
-                            detectedY,
-                            0.15f,
-                            0.85f);
-
-            detectedSize =
-                    clamp(
-                            detectedSize,
-                            MIN_SIZE,
-                            MAX_SIZE);
-
-            /*
-             * Normal:
-             * center.
-             *
-             * Jika subjek terlalu dekat edge:
-             * mulai ikuti.
-             */
-            float targetX;
-
-            if (detectedX >= EDGE_LEFT &&
-                    detectedX <= EDGE_RIGHT) {
-
-                targetX = DEFAULT_X;
-
-            } else {
-
-                targetX = detectedX;
-            }
-
-            /*
-             * Y:
-             * prioritaskan upper-middle.
-             */
-            float targetY =
-                    detectedY;
-
-            if (targetY >= 0.25f &&
-                    targetY <= 0.60f) {
-
-                targetY = DEFAULT_Y;
-            }
-
-            /*
-             * Size:
-             * perubahan kecil jangan dikejar.
-             */
-            float targetSize =
-                    detectedSize;
-
-            if (hasValidSubject) {
-
-                float sizeDelta =
-                        Math.abs(
-                                targetSize -
-                                previousSize);
-
-                if (sizeDelta < 0.05f) {
-                    targetSize =
-                            previousSize;
-                }
-            }
-
-            lockedX[i] = targetX;
-            lockedY[i] = targetY;
-            lockedSize[i] = targetSize;
-
-            previousX = targetX;
-            previousY = targetY;
-            previousSize = targetSize;
-
-            hasValidSubject = true;
-        }
-
-        /*
-         * Adaptive smoothing.
-         *
-         * Perpindahan kecil = lambat.
-         * Perpindahan besar = lebih cepat.
-         */
-        float smoothX = lockedX[0];
-        float smoothY = lockedY[0];
-        float smoothSize = lockedSize[0];
-
-        for (int i = 0;
-             i < n;
-             i++) {
-
-            if (i > 0) {
-
-                float distanceX =
-                        Math.abs(
-                                lockedX[i] -
-                                smoothX);
-
-                float alphaX;
-
-                if (distanceX < 0.10f) {
-                    alphaX = 0.20f;
-                } else if (distanceX < 0.25f) {
-                    alphaX = 0.35f;
-                } else {
-                    alphaX = 0.60f;
-                }
-
-                smoothX +=
-                        alphaX *
-                        (lockedX[i] -
-                                smoothX);
-
-                final float alphaY = 0.25f;
-
-                smoothY +=
-                        alphaY *
-                        (lockedY[i] -
-                                smoothY);
-
-                final float alphaSize = 0.15f;
-
-                smoothSize +=
-                        alphaSize *
-                        (lockedSize[i] -
-                                smoothSize);
-            }
-
-            JSONObject point =
-                    new JSONObject();
-
-            point.put(
-                    "t",
-                    times[i]);
-
-            point.put(
-                    "x",
-                    (double)
-                    clamp(
-                            smoothX,
-                            0.05f,
-                            0.95f));
-
-            point.put(
-                    "y",
-                    (double)
-                    clamp(
-                            smoothY,
-                            0.15f,
-                            0.85f));
-
-            point.put(
-                    "size",
-                    (double)
-                    clamp(
-                            smoothSize,
-                            MIN_SIZE,
-                            MAX_SIZE));
-
-            track.put(point);
-        }
-
-        Log.i(
-                TAG,
-                "Shot " + shotId +
-                " SINGLE: adaptive subject tracking");
-
-        return track;
-    }
-
-    private static float clamp(float value, float min, float max) {
-        return Math.max(min, Math.min(max, value));
-    }
-
-
-    private static String getManualLayout(int shotId) {
-        try {
-            java.io.File f = new java.io.File("/sdcard/Download/SmartReframe/manual_split.txt");
-            if (f.exists()) {
-                java.util.Scanner sc = new java.util.Scanner(f);
-                while (sc.hasNextLine()) {
-                    String line = sc.nextLine().trim();
-                    if (!line.isEmpty() && !line.startsWith("#")) {
-                        for (String part : line.split(",")) {
-                            if (Integer.parseInt(part.trim()) == shotId) {
-                                sc.close();
-                                return "split";
-                            }
-                        }
-                    }
-                }
-                sc.close();
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        return "single";
+        return config;
     }
 }
