@@ -453,8 +453,8 @@ public class Pass2Optimizer {
                 Math.max(0.0001, left + right + center);
 
         if (balance < 0.55) return false;
-        if (separation < 0.35) return false;
-        if (sideStrength < 0.48) return false;
+        if (separation < 0.24) return false;
+        if (sideStrength < 0.36) return false;
 
         shot.layout = "split";
 
