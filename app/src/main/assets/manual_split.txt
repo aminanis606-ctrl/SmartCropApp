@@ -1,0 +1,4 @@
+# SmartCropApp Manual Split Configuration
+# Format: Shot IDs separated by commas (e.g., 0,2)
+# This file will auto-sync if missing from external storage.
+0,2
