@@ -1,21 +1,19 @@
 package com.example.smartcropapp;
 
 import android.Manifest;
-import android.content.ContentValues;
 import android.content.pm.PackageManager;
 import android.content.res.AssetManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
-import android.provider.MediaStore;
 import android.util.Log;
 import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
-import androidx.activity.result.PickVisualMediaContract;
+import androidx.activity.result.contract.PickVisualMediaContract;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
@@ -29,8 +27,6 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.util.Arrays;
-import java.util.Comparator;
 
 public class MainActivity extends AppCompatActivity {
     private static final String TAG = "SmartCropApp";
@@ -53,9 +49,9 @@ public class MainActivity extends AppCompatActivity {
 
     private void setupUI() {
         statusText = findViewById(R.id.statusText);
-        Button btnSelect = findViewById(R.id.btnPass1); // Kita gunakan ulang ID btnPass1 sebagai tombol Pilih
-        Button btnProcess = findViewById(R.id.btnPass2); // Kita gunakan ulang ID btnPass2 sebagai tombol Proses
-        Button btnDummy = findViewById(R.id.btnPass3);   // Kita sembunyikan tombol ini
+        Button btnSelect = findViewById(R.id.btnPass1);
+        Button btnProcess = findViewById(R.id.btnPass2);
+        Button btnDummy = findViewById(R.id.btnPass3);
         
         btnSelect.setText("Pilih Video");
         btnProcess.setText("Proses Otomatis");
