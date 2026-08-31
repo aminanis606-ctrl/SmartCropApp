@@ -1,12 +1,14 @@
 package com.example.smartcropapp;
 
 import android.Manifest;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.res.AssetManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.provider.Settings;
 import android.util.Log;
 import android.widget.Button;
 import android.widget.TextView;
@@ -33,6 +35,13 @@ public class MainActivity extends AppCompatActivity {
     private static final String TAG = "SmartCropApp";
     private static final int REQUEST_CODE_STORAGE = 101;
     
+    // Path Konfigurasi (Input) - Aman dari penghapusan massal file diagnostik
+    private File configDir;
+    private File manualSplitFile;
+    
+    // Path Diagnostik (Output) - Bisa dibersihkan kapan saja
+    private File diagnosticsDir;
+
     private TextView statusText;
     private Uri selectedVideoUri;
     private ActivityResultLauncher<PickVisualMediaRequest> pickMedia;
@@ -48,6 +57,14 @@ public class MainActivity extends AppCompatActivity {
         setupMediaPicker();
     }
 
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (checkStoragePermission()) {
+            statusText.setText("Izin diberikan. Siap memproses.");
+        }
+    }
+
     private void setupUI() {
         statusText = findViewById(R.id.statusText);
         Button btnSelect = findViewById(R.id.btnPass1);
@@ -59,6 +76,11 @@ public class MainActivity extends AppCompatActivity {
         btnDummy.setVisibility(android.view.View.GONE);
 
         btnSelect.setOnClickListener(v -> {
+            if (!checkStoragePermission()) {
+                Toast.makeText(this, "Berikan izin penyimpanan terlebih dahulu!", Toast.LENGTH_LONG).show();
+                requestStoragePermission();
+                return;
+            }
             PickVisualMediaRequest request = new PickVisualMediaRequest.Builder()
                     .setMediaType(ActivityResultContracts.PickVisualMedia.VideoOnly.INSTANCE)
                     .build();
@@ -89,29 +111,42 @@ public class MainActivity extends AppCompatActivity {
 
     private void initializeStorageStructure() {
         try {
-            // Gunakan path yang konsisten: Download/SmartReframe
             File baseDir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "SmartReframe");
-            File diagnosticsDir = new File(baseDir, "diagnostics");
+            
+            // 1. Folder Konfigurasi (Input)
+            configDir = new File(baseDir, "config");
+            if (!configDir.exists()) configDir.mkdirs();
+            manualSplitFile = new File(configDir, "manual_split.txt");
 
-            if (!baseDir.exists()) baseDir.mkdirs();
+            // 2. Folder Diagnostik (Output)
+            diagnosticsDir = new File(baseDir, "diagnostics");
             if (!diagnosticsDir.exists()) diagnosticsDir.mkdirs();
 
-            File externalConfig = new File(baseDir, "manual_split.txt");
-            if (!externalConfig.exists() || externalConfig.length() == 0) {
-                AssetManager assetManager = getAssets();
-                InputStream in = assetManager.open("manual_split.txt");
-                OutputStream out = new FileOutputStream(externalConfig);
-                byte[] buffer = new byte[1024];
-                int read;
-                while ((read = in.read(buffer)) != -1) {
-                    out.write(buffer, 0, read);
-                }
-                in.close();
-                out.flush();
-                out.close();
+            // Selalu pastikan manual_split.txt ada (auto-restore jika terhapus/update)
+            if (!manualSplitFile.exists() || manualSplitFile.length() == 0) {
+                restoreManualSplitFromAssets();
             }
         } catch (Exception e) {
             Log.e(TAG, "Gagal inisialisasi storage", e);
+        }
+    }
+
+    private void restoreManualSplitFromAssets() {
+        try {
+            AssetManager assetManager = getAssets();
+            InputStream in = assetManager.open("manual_split.txt");
+            OutputStream out = new FileOutputStream(manualSplitFile);
+            byte[] buffer = new byte[1024];
+            int read;
+            while ((read = in.read(buffer)) != -1) {
+                out.write(buffer, 0, read);
+            }
+            in.close();
+            out.flush();
+            out.close();
+            Log.i(TAG, "manual_split.txt berhasil dipulihkan ke: " + manualSplitFile.getAbsolutePath());
+        } catch (Exception e) {
+            Log.e(TAG, "Gagal memulihkan manual_split.txt dari assets", e);
         }
     }
 
@@ -127,7 +162,16 @@ public class MainActivity extends AppCompatActivity {
 
     private void requestStoragePermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            Toast.makeText(this, "Berikan izin 'Akses ke Semua File' di pengaturan.", Toast.LENGTH_LONG).show();
+            try {
+                Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
+                intent.addCategory("android.intent.category.DEFAULT");
+                intent.setData(Uri.parse(String.format("package:%s", getApplicationContext().getPackageName())));
+                startActivity(intent);
+            } catch (Exception e) {
+                Intent intent = new Intent();
+                intent.setAction(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION);
+                startActivity(intent);
+            }
         } else {
             ActivityCompat.requestPermissions(this,
                 new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE, Manifest.permission.READ_EXTERNAL_STORAGE},
@@ -152,21 +196,12 @@ public class MainActivity extends AppCompatActivity {
         statusText.setText("Memulai Pipeline Otomatis...");
         new Thread(() -> {
             try {
-                // Pastikan path konsisten dengan initializeStorageStructure
-                File downloadDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
-                File baseDir = new File(downloadDir, "SmartReframe");
-                File diagnosticsDir = new File(baseDir, "diagnostics");
-                
-                // Buat ulang folder jika belum ada untuk keamanan
-                if (!diagnosticsDir.exists()) diagnosticsDir.mkdirs();
-
                 // --- PASS 1 ---
                 runOnUiThread(() -> statusText.setText("Pass 1: Menganalisis Wajah..."));
                 File outputAnalysis = new File(getFilesDir(), "analysis.json");
                 Pass1Extractor.extract(this, selectedVideoUri, outputAnalysis);
                 
                 File dest1 = new File(diagnosticsDir, "analysis_latest.json");
-                // Gunakan metode copy yang lebih kompatibel
                 java.nio.file.Files.copy(outputAnalysis.toPath(), dest1.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
 
                 // --- PASS 2 ---
