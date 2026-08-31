@@ -445,8 +445,24 @@ public class Pass2Optimizer {
                 Math.min(leftPeak, rightPeak) /
                 Math.max(leftPeak, rightPeak);
 
+        double leftPos =
+                ((leftIndex - 1) * col[leftIndex - 1]
+                + leftIndex * col[leftIndex]
+                + (leftIndex + 1) * col[leftIndex + 1])
+                / (col[leftIndex - 1]
+                + col[leftIndex]
+                + col[leftIndex + 1]);
+
+        double rightPos =
+                ((rightIndex - 1) * col[rightIndex - 1]
+                + rightIndex * col[rightIndex]
+                + (rightIndex + 1) * col[rightIndex + 1])
+                / (col[rightIndex - 1]
+                + col[rightIndex]
+                + col[rightIndex + 1]);
+
         double separation =
-                (rightIndex - leftIndex) / (double) GRID_X;
+                (rightPos - leftPos) / (double) GRID_X;
 
         double sideStrength =
                 (left + right) /
