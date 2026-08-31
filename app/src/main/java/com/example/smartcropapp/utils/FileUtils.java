@@ -1,12 +1,8 @@
 package com.example.smartcropapp.utils;
 
-import android.app.Activity;
 import android.content.Context;
-import android.content.Intent;
-import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
-import android.provider.Settings;
 import android.util.Log;
 
 import java.io.BufferedInputStream;
@@ -21,105 +17,89 @@ public final class FileUtils {
 
     public static boolean copyFileToPublicDownloads(Context context, String sourceFileName) {
         File src = new File(context.getFilesDir(), sourceFileName);
-        File downloadsRoot = Environment.getExternalStorageDirectory();
-        File destDir = new File(downloadsRoot, "Download/SmartReframe/diagnostics");
-
-        // 1) Check source availability
-        if (!src.exists()) {
-            Log.e(TAG, "Source file does not exist: " + src.getAbsolutePath());
-            return false;
-        }
-        if (!src.isFile()) {
-            Log.e(TAG, "Source is not a file: " + src.getAbsolutePath());
-            return false;
-        }
-        long srcLen = src.length();
-        if (srcLen == 0L) {
-            Log.w(TAG, "Source file is empty (length=0): " + src.getAbsolutePath());
+        
+        // Cek sumber terlebih dahulu
+        if (!src.exists() || src.length() == 0) {
+            Log.e(TAG, "Source file missing or empty: " + src.getAbsolutePath());
             return false;
         }
 
-        // 2) Check external manage permission (Android 11+)
+        // Cek Izin
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             if (!Environment.isExternalStorageManager()) {
-                Log.e(TAG, "App is not granted MANAGE_EXTERNAL_STORAGE.");
-                return false;
-            }
-        } else {
-            String state = Environment.getExternalStorageState();
-            if (!Environment.MEDIA_MOUNTED.equals(state)) {
-                Log.e(TAG, "External storage not mounted or not writable: state=" + state);
+                Log.e(TAG, "PERMISSION DENIED: MANAGE_EXTERNAL_STORAGE is not granted.");
                 return false;
             }
         }
 
-        // 3) Ensure destination directory exists
-        if (!destDir.exists()) {
-            boolean made = destDir.mkdirs();
-            if (!made && !destDir.exists()) {
-                Log.e(TAG, "Failed to create destination directory: " + destDir.getAbsolutePath());
-                return false;
+        // Coba beberapa variasi path tujuan untuk kompatibilitas perangkat
+        File[] destDirs = {
+            new File(Environment.getExternalStorageDirectory(), "Download/SmartReframe/diagnostics"),
+            new File("/storage/emulated/0/Download/SmartReframe/diagnostics")
+        };
+
+        File destDir = null;
+        for (File dir : destDirs) {
+            if (dir.exists() || dir.mkdirs()) {
+                destDir = dir;
+                break;
             }
         }
 
-        // 4) Copy using buffered streams into a temp file
+        if (destDir == null || !destDir.canWrite()) {
+            Log.e(TAG, "Failed to find or create a writable destination directory.");
+            return false;
+        }
+
         File destFile = new File(destDir, sourceFileName);
-        File tmpFile = new File(destDir, sourceFileName + ".tmp-" + System.currentTimeMillis());
-        final int BUF_SIZE = 8 * 1024;
+        File tmpFile = new File(destDir, sourceFileName + ".tmp");
 
-        try (FileInputStream fis = new FileInputStream(src);
-             BufferedInputStream bis = new BufferedInputStream(fis, BUF_SIZE);
-             FileOutputStream fos = new FileOutputStream(tmpFile);
-             BufferedOutputStream bos = new BufferedOutputStream(fos, BUF_SIZE)) {
+        try {
+            // Hapus file lama jika ada
+            if (destFile.exists()) destFile.delete();
+            if (tmpFile.exists()) tmpFile.delete();
 
-            byte[] buffer = new byte[BUF_SIZE];
-            int read;
-            while ((read = bis.read(buffer)) != -1) {
-                bos.write(buffer, 0, read);
+            // Proses Copy
+            try (FileInputStream fis = new FileInputStream(src);
+                 BufferedInputStream bis = new BufferedInputStream(fis);
+                 FileOutputStream fos = new FileOutputStream(tmpFile);
+                 BufferedOutputStream bos = new BufferedOutputStream(fos)) {
+
+                byte[] buffer = new byte[8192];
+                int len;
+                while ((len = bis.read(buffer)) != -1) {
+                    bos.write(buffer, 0, len);
+                }
+                bos.flush();
+                fos.getFD().sync();
             }
-            bos.flush();
-            fos.getFD().sync();
 
-        } catch (IOException ioe) {
-            Log.e(TAG, "IOException during copy: " + ioe.getMessage(), ioe);
+            // Rename atomic
+            if (!tmpFile.renameTo(destFile)) {
+                // Fallback manual copy jika rename gagal (cross-device link error)
+                try (FileInputStream fis = new FileInputStream(tmpFile);
+                     FileOutputStream fos = new FileOutputStream(destFile)) {
+                    byte[] buffer = new byte[8192];
+                    int len;
+                    while ((len = fis.read(buffer)) != -1) {
+                        fos.write(buffer, 0, len);
+                    }
+                }
+                tmpFile.delete();
+            }
+
+            if (destFile.exists() && destFile.length() > 0) {
+                Log.i(TAG, "Successfully copied: " + destFile.getAbsolutePath());
+                return true;
+            } else {
+                Log.e(TAG, "Destination file is empty or missing after copy.");
+                return false;
+            }
+
+        } catch (IOException e) {
+            Log.e(TAG, "IO Error during copy", e);
             if (tmpFile.exists()) tmpFile.delete();
             return false;
         }
-
-        // 5) Move temp -> final
-        if (tmpFile.exists()) {
-            if (destFile.exists()) destFile.delete();
-            
-            boolean renamed = tmpFile.renameTo(destFile);
-            if (!renamed) {
-                // Fallback stream-copy
-                try (FileInputStream fis2 = new FileInputStream(tmpFile);
-                     BufferedInputStream bis2 = new BufferedInputStream(fis2, BUF_SIZE);
-                     FileOutputStream fos2 = new FileOutputStream(destFile);
-                     BufferedOutputStream bos2 = new BufferedOutputStream(fos2, BUF_SIZE)) {
-                    
-                    byte[] buffer = new byte[BUF_SIZE];
-                    int r;
-                    while ((r = bis2.read(buffer)) != -1) {
-                        bos2.write(buffer, 0, r);
-                    }
-                    bos2.flush();
-                    fos2.getFD().sync();
-                } catch (IOException fallbackEx) {
-                    Log.e(TAG, "Fallback copy failed", fallbackEx);
-                    return false;
-                } finally {
-                    if (tmpFile.exists()) tmpFile.delete();
-                }
-            }
-            
-            if (!destFile.exists() || destFile.length() == 0L) {
-                Log.e(TAG, "Final destination file missing or empty after move.");
-                return false;
-            }
-            Log.i(TAG, "Copy succeeded: " + destFile.getAbsolutePath());
-            return true;
-        }
-        return false;
     }
 }
