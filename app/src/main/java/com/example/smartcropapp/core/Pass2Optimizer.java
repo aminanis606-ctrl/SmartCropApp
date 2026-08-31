@@ -151,6 +151,11 @@ public class Pass2Optimizer {
                 continue;
             }
 
+            if (detectAutoSplit(shot)) {
+                Log.i(TAG, "Shot " + shot.shotId + " -> AUTO SPLIT");
+                continue;
+            }
+
             /*
              * Pass 1 memberikan spatial grid.
              * Pass 2 mengubahnya menjadi satu
@@ -365,6 +370,110 @@ public class Pass2Optimizer {
                     "Gagal membaca manual_split.txt",
                     e);
         }
+    }
+
+    private static boolean detectAutoSplit(Shot shot) {
+        if (shot == null || shot.samples.size() < 3) return false;
+
+        final int GRID_X = 12;
+        final int GRID_Y = 8;
+
+        double[] col = new double[GRID_X];
+        int frames = 0;
+
+        for (FrameSample sample : shot.samples) {
+            if (sample.texture == null || sample.brightness == null) continue;
+
+            int n = Math.min(
+                    GRID_X * GRID_Y,
+                    Math.min(sample.texture.length, sample.brightness.length));
+
+            for (int i = 0; i < n; i++) {
+                int x = i % GRID_X;
+                int y = i / GRID_X;
+
+                if (y == 0 || y == GRID_Y - 1) continue;
+
+                double score =
+                        sample.texture[i] * 0.75 +
+                        sample.brightness[i] * 0.25;
+
+                col[x] += Math.max(0, score);
+            }
+
+            frames++;
+        }
+
+        if (frames == 0) return false;
+
+        for (int x = 0; x < GRID_X; x++) {
+            col[x] /= frames;
+        }
+
+        double left = 0;
+        double right = 0;
+        double center = 0;
+
+        for (int x = 0; x < GRID_X; x++) {
+            if (x < 4) left += col[x];
+            else if (x >= 8) right += col[x];
+            else center += col[x];
+        }
+
+        double leftPeak = 0;
+        double rightPeak = 0;
+        int leftIndex = 0;
+        int rightIndex = 0;
+
+        for (int x = 1; x < 5; x++) {
+            if (col[x] > leftPeak) {
+                leftPeak = col[x];
+                leftIndex = x;
+            }
+        }
+
+        for (int x = 7; x < 11; x++) {
+            if (col[x] > rightPeak) {
+                rightPeak = col[x];
+                rightIndex = x;
+            }
+        }
+
+        if (leftPeak <= 0 || rightPeak <= 0) return false;
+
+        double balance =
+                Math.min(leftPeak, rightPeak) /
+                Math.max(leftPeak, rightPeak);
+
+        double separation =
+                (rightIndex - leftIndex) / (double) GRID_X;
+
+        double sideStrength =
+                (left + right) /
+                Math.max(0.0001, left + right + center);
+
+        if (balance < 0.55) return false;
+        if (separation < 0.35) return false;
+        if (sideStrength < 0.48) return false;
+
+        shot.layout = "split";
+
+        shot.topX =
+                clamp(
+                        (leftIndex + 0.5f) / GRID_X,
+                        0.10f,
+                        0.45f);
+
+        shot.bottomX =
+                clamp(
+                        (rightIndex + 0.5f) / GRID_X,
+                        0.55f,
+                        0.90f);
+
+        shot.topY = DEFAULT_Y;
+        shot.bottomY = DEFAULT_Y;
+
+        return true;
     }
 
     private static Point estimateSubject(
