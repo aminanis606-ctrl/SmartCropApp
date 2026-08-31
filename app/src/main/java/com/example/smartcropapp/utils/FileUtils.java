@@ -18,48 +18,46 @@ public final class FileUtils {
     public static boolean copyFileToPublicDownloads(Context context, String sourceFileName) {
         File src = new File(context.getFilesDir(), sourceFileName);
         
-        // Cek sumber terlebih dahulu
         if (!src.exists() || src.length() == 0) {
             Log.e(TAG, "Source file missing or empty: " + src.getAbsolutePath());
             return false;
         }
 
-        // Cek Izin
+        // Cek Izin: Coba MANAGE_EXTERNAL_STORAGE dulu, fallback ke state eksternal biasa
+        boolean hasPermission = false;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            if (!Environment.isExternalStorageManager()) {
-                Log.e(TAG, "PERMISSION DENIED: MANAGE_EXTERNAL_STORAGE is not granted.");
-                return false;
+            hasPermission = Environment.isExternalStorageManager();
+            if (!hasPermission) {
+                Log.w(TAG, "MANAGE_EXTERNAL_STORAGE not granted. Trying legacy write access.");
+                // Fallback check for older permission style if possible
+                File test = new File(Environment.getExternalStorageDirectory(), "test_write.tmp");
+                try {
+                    test.createNewFile();
+                    test.delete();
+                    hasPermission = true;
+                } catch (IOException e) {
+                    Log.e(TAG, "Legacy write test failed. Permission denied.");
+                }
             }
+        } else {
+            hasPermission = Environment.MEDIA_MOUNTED.equals(Environment.getExternalStorageState());
         }
 
-        // Coba beberapa variasi path tujuan untuk kompatibilitas perangkat
-        File[] destDirs = {
-            new File(Environment.getExternalStorageDirectory(), "Download/SmartReframe/diagnostics"),
-            new File("/storage/emulated/0/Download/SmartReframe/diagnostics")
-        };
-
-        File destDir = null;
-        for (File dir : destDirs) {
-            if (dir.exists() || dir.mkdirs()) {
-                destDir = dir;
-                break;
-            }
-        }
-
-        if (destDir == null || !destDir.canWrite()) {
-            Log.e(TAG, "Failed to find or create a writable destination directory.");
+        if (!hasPermission) {
+            Log.e(TAG, "PERMISSION DENIED: Cannot write to external storage.");
             return false;
         }
+
+        File destDir = new File(Environment.getExternalStorageDirectory(), "Download/SmartReframe/diagnostics");
+        if (!destDir.exists()) destDir.mkdirs();
 
         File destFile = new File(destDir, sourceFileName);
         File tmpFile = new File(destDir, sourceFileName + ".tmp");
 
         try {
-            // Hapus file lama jika ada
             if (destFile.exists()) destFile.delete();
             if (tmpFile.exists()) tmpFile.delete();
 
-            // Proses Copy
             try (FileInputStream fis = new FileInputStream(src);
                  BufferedInputStream bis = new BufferedInputStream(fis);
                  FileOutputStream fos = new FileOutputStream(tmpFile);
@@ -74,9 +72,8 @@ public final class FileUtils {
                 fos.getFD().sync();
             }
 
-            // Rename atomic
             if (!tmpFile.renameTo(destFile)) {
-                // Fallback manual copy jika rename gagal (cross-device link error)
+                // Fallback manual copy
                 try (FileInputStream fis = new FileInputStream(tmpFile);
                      FileOutputStream fos = new FileOutputStream(destFile)) {
                     byte[] buffer = new byte[8192];
@@ -91,15 +88,12 @@ public final class FileUtils {
             if (destFile.exists() && destFile.length() > 0) {
                 Log.i(TAG, "Successfully copied: " + destFile.getAbsolutePath());
                 return true;
-            } else {
-                Log.e(TAG, "Destination file is empty or missing after copy.");
-                return false;
             }
-
         } catch (IOException e) {
             Log.e(TAG, "IO Error during copy", e);
+        } finally {
             if (tmpFile.exists()) tmpFile.delete();
-            return false;
         }
+        return false;
     }
 }
