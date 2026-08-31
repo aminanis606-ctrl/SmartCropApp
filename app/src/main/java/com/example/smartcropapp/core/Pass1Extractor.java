@@ -26,31 +26,32 @@ public class Pass1Extractor {
         if (durationStr == null) throw new Exception("Gagal membaca durasi video.");
         
         long durationUs = Long.parseLong(durationStr);
-        JSONArray facesArray = new JSONArray();
+        JSONArray shotsArray = new JSONArray();
 
         for (long timeUs = 0; timeUs <= durationUs; timeUs += SAMPLE_INTERVAL_US) {
             Bitmap frame = retriever.getFrameAtTime(timeUs, MediaMetadataRetriever.OPTION_CLOSEST);
             if (frame != null) {
-                // Simulasi estimasi fokus sederhana (Center-weighted)
-                // Di versi nyata, ini bisa diganti dengan analisis edge/brightness
+                // Estimasi fokus sederhana (Center-weighted simulation)
                 float x = 0.5f + (float)(Math.random() - 0.5) * 0.1f; 
                 float y = 0.5f;
                 float size = 0.3f;
 
-                JSONObject faceObj = new JSONObject();
-                faceObj.put("t", timeUs / 1000.0); // convert to ms
-                faceObj.put("x", x);
-                faceObj.put("y", y);
-                faceObj.put("size", size);
-                facesArray.put(faceObj);
+                JSONObject shotObj = new JSONObject();
+                shotObj.put("t", timeUs / 1000.0); // ms
+                shotObj.put("x", x);
+                shotObj.put("y", y);
+                shotObj.put("size", size);
+                shotsArray.put(shotObj);
                 
                 frame.recycle();
             }
         }
         retriever.release();
 
+        // STRUKTUR JSON YANG KOMPATIBEL DENGAN PASS2/PASS3
         JSONObject result = new JSONObject();
-        result.put("faces", facesArray);
+        result.put("shots", shotsArray); // Field "shots" wajib ada!
+        result.put("faces", shotsArray); // Alias untuk kompatibilitas backward
 
         try (FileWriter writer = new FileWriter(outputFile)) {
             writer.write(result.toString(2));
@@ -60,6 +61,6 @@ public class Pass1Extractor {
             throw new Exception("Pass1Extractor gagal menulis file analysis.json");
         }
         
-        Log.i(TAG, "Extraction complete. File size: " + outputFile.length());
+        Log.i(TAG, "Extraction complete. Shots count: " + shotsArray.length());
     }
 }

@@ -22,8 +22,8 @@ import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
 import com.example.smartcropapp.core.Pass1Extractor;
-import com.example.smartcropapp.core.Pass2Optimizer; // Sesuaikan nama class Pass2 Anda
-import com.example.smartcropapp.core.Pass3Renderer;   // Sesuaikan nama class Pass3 Anda
+import com.example.smartcropapp.core.Pass2Optimizer;
+import com.example.smartcropapp.core.Pass3Renderer;
 import com.example.smartcropapp.utils.FileUtils;
 
 import java.io.File;
@@ -52,7 +52,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void setupUI() {
         statusText = findViewById(R.id.statusText);
-        Button btnStart = findViewById(R.id.btnStart); // Pastikan ID ini ada di layout
+        Button btnStart = findViewById(R.id.btnStart);
         
         btnStart.setText("MULAI PROSES");
         btnStart.setOnClickListener(v -> {
@@ -63,7 +63,6 @@ public class MainActivity extends AppCompatActivity {
                 return;
             }
             
-            // Launch picker first, then process automatically
             pickMedia.launch(new PickVisualMediaRequest.Builder()
                     .setMediaType(ActivityResultContracts.PickVisualMedia.VideoOnly.INSTANCE)
                     .build());
@@ -92,23 +91,31 @@ public class MainActivity extends AppCompatActivity {
         
         new Thread(() -> {
             try {
-                // PASS 1: Extract
+                // PASS 1
                 runOnUiThread(() -> statusText.setText("Pass 1: Analisis Video..."));
                 File internalAnalysis = new File(getFilesDir(), "analysis.json");
                 Pass1Extractor.extract(this, selectedVideoUri, internalAnalysis);
                 
-                // Copy diagnostic (Non-fatal)
-                FileUtils.copyFileToPublicDownloads(this, "analysis.json");
+                // COPY DIAGNOSTIC (SILENT FAILURE - TIDAK BOLEH MENGHENTIKAN PIPELINE)
+                try {
+                    FileUtils.copyFileToPublicDownloads(this, "analysis.json");
+                } catch (Exception e) {
+                    Log.w(TAG, "Gagal copy analysis.json (diabaikan): " + e.getMessage());
+                }
 
-                // PASS 2: Smooth/Optimize
+                // PASS 2
                 runOnUiThread(() -> statusText.setText("Pass 2: Optimasi Gerakan..."));
                 File internalTrajectory = new File(getFilesDir(), "trajectory.json");
                 Pass2Optimizer.optimize(internalAnalysis, internalTrajectory);
                 
-                // Copy diagnostic (Non-fatal)
-                FileUtils.copyFileToPublicDownloads(this, "trajectory.json");
+                // COPY DIAGNOSTIC (SILENT FAILURE)
+                try {
+                    FileUtils.copyFileToPublicDownloads(this, "trajectory.json");
+                } catch (Exception e) {
+                    Log.w(TAG, "Gagal copy trajectory.json (diabaikan): " + e.getMessage());
+                }
 
-                // PASS 3: Render
+                // PASS 3
                 runOnUiThread(() -> statusText.setText("Pass 3: Rendering Video..."));
                 File outputVideo = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES), "IkhlasApp/output_final.mp4");
                 if (!outputVideo.getParentFile().exists()) outputVideo.getParentFile().mkdirs();
@@ -121,7 +128,7 @@ public class MainActivity extends AppCompatActivity {
                 });
 
             } catch (Exception e) {
-                Log.e(TAG, "Pipeline Error", e);
+                Log.e(TAG, "Pipeline Fatal Error", e);
                 runOnUiThread(() -> {
                     statusText.setText("Error: " + e.getMessage());
                     Toast.makeText(MainActivity.this, "Gagal: " + e.getMessage(), Toast.LENGTH_LONG).show();
