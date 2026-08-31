@@ -89,6 +89,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void initializeStorageStructure() {
         try {
+            // Gunakan path yang konsisten: Download/SmartReframe
             File baseDir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "SmartReframe");
             File diagnosticsDir = new File(baseDir, "diagnostics");
 
@@ -151,14 +152,21 @@ public class MainActivity extends AppCompatActivity {
         statusText.setText("Memulai Pipeline Otomatis...");
         new Thread(() -> {
             try {
+                // Pastikan path konsisten dengan initializeStorageStructure
                 File downloadDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
-                File diagnosticsDir = new File(downloadDir, "SmartReframe/diagnostics");
+                File baseDir = new File(downloadDir, "SmartReframe");
+                File diagnosticsDir = new File(baseDir, "diagnostics");
                 
+                // Buat ulang folder jika belum ada untuk keamanan
+                if (!diagnosticsDir.exists()) diagnosticsDir.mkdirs();
+
                 // --- PASS 1 ---
                 runOnUiThread(() -> statusText.setText("Pass 1: Menganalisis Wajah..."));
                 File outputAnalysis = new File(getFilesDir(), "analysis.json");
                 Pass1Extractor.extract(this, selectedVideoUri, outputAnalysis);
+                
                 File dest1 = new File(diagnosticsDir, "analysis_latest.json");
+                // Gunakan metode copy yang lebih kompatibel
                 java.nio.file.Files.copy(outputAnalysis.toPath(), dest1.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
 
                 // --- PASS 2 ---
