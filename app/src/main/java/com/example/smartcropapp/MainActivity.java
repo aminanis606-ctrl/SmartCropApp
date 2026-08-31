@@ -14,6 +14,8 @@ import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.PickVisualMediaContract;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
@@ -33,7 +35,10 @@ import java.util.Comparator;
 public class MainActivity extends AppCompatActivity {
     private static final String TAG = "SmartCropApp";
     private static final int REQUEST_CODE_STORAGE = 101;
-    private Uri selectedVideoUri; // Untuk menyimpan URI video yang dipilih
+    
+    private TextView statusText;
+    private Uri selectedVideoUri;
+    private ActivityResultLauncher<String> pickMedia;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -41,24 +46,43 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
 
         initializeStorageStructure();
+        setupUI();
+        setupPermission();
+        setupMediaPicker();
+    }
 
-        TextView statusText = findViewById(R.id.statusText);
-        Button btnPass1 = findViewById(R.id.btnPass1);
-        Button btnPass2 = findViewById(R.id.btnPass2);
-        Button btnPass3 = findViewById(R.id.btnPass3);
+    private void setupUI() {
+        statusText = findViewById(R.id.statusText);
+        Button btnSelect = findViewById(R.id.btnPass1); // Kita gunakan ulang ID btnPass1 sebagai tombol Pilih
+        Button btnProcess = findViewById(R.id.btnPass2); // Kita gunakan ulang ID btnPass2 sebagai tombol Proses
+        Button btnDummy = findViewById(R.id.btnPass3);   // Kita sembunyikan tombol ini
+        
+        btnSelect.setText("Pilih Video");
+        btnProcess.setText("Proses Otomatis");
+        btnDummy.setVisibility(android.view.View.GONE);
 
+        btnSelect.setOnClickListener(v -> pickMedia.launch("video/*"));
+        btnProcess.setOnClickListener(v -> startAutoPipeline());
+    }
+
+    private void setupMediaPicker() {
+        pickMedia = registerForActivityResult(new PickVisualMediaContract(), uri -> {
+            if (uri != null) {
+                selectedVideoUri = uri;
+                statusText.setText("Video dipilih: " + uri.getLastPathSegment());
+                Log.d(TAG, "Selected URI: " + uri);
+            } else {
+                Toast.makeText(this, "Tidak ada video yang dipilih", Toast.LENGTH_SHORT).show();
+            }
+        });
+    }
+
+    private void setupPermission() {
         if (checkStoragePermission()) {
-            statusText.setText("Izin penyimpanan diberikan. Siap memproses.");
+            statusText.setText("Siap. Silakan pilih video.");
         } else {
             requestStoragePermission();
         }
-
-        // Sementara kita gunakan video dummy atau Anda bisa tambahkan tombol pilih video
-        // Untuk demo ini, kita asumsikan ada video di Download/test.mp4 atau sejenisnya
-        
-        btnPass1.setOnClickListener(v -> runPass1(statusText));
-        btnPass2.setOnClickListener(v -> runPass2(statusText));
-        btnPass3.setOnClickListener(v -> runPass3(statusText));
     }
 
     private void initializeStorageStructure() {
@@ -69,13 +93,11 @@ public class MainActivity extends AppCompatActivity {
             if (!baseDir.exists()) baseDir.mkdirs();
             if (!diagnosticsDir.exists()) diagnosticsDir.mkdirs();
 
-            // SELF-HEALING: Salin manual_split.txt dari assets jika belum ada atau kosong
             File externalConfig = new File(baseDir, "manual_split.txt");
             if (!externalConfig.exists() || externalConfig.length() == 0) {
                 AssetManager assetManager = getAssets();
                 InputStream in = assetManager.open("manual_split.txt");
                 OutputStream out = new FileOutputStream(externalConfig);
-
                 byte[] buffer = new byte[1024];
                 int read;
                 while ((read = in.read(buffer)) != -1) {
@@ -84,10 +106,9 @@ public class MainActivity extends AppCompatActivity {
                 in.close();
                 out.flush();
                 out.close();
-                Log.d(TAG, "manual_split.txt berhasil disinkronisasi dari assets.");
             }
         } catch (Exception e) {
-            Log.e(TAG, "Gagal inisialisasi struktur storage", e);
+            Log.e(TAG, "Gagal inisialisasi storage", e);
         }
     }
 
@@ -115,88 +136,53 @@ public class MainActivity extends AppCompatActivity {
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == REQUEST_CODE_STORAGE && grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-            Toast.makeText(this, "Izin diberikan!", Toast.LENGTH_SHORT).show();
+            statusText.setText("Izin diberikan. Siap memproses.");
         }
     }
 
-    private void runPass1(TextView statusText) {
-        statusText.setText("Menjalankan Pass 1: Ekstraksi Wajah...");
+    private void startAutoPipeline() {
+        if (selectedVideoUri == null) {
+            Toast.makeText(this, "Pilih video terlebih dahulu!", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        statusText.setText("Memulai Pipeline Otomatis...");
         new Thread(() -> {
             try {
-                // Ganti dengan logika pemilihan video yang sebenarnya
-                // Untuk sementara, kita cari file video pertama di folder Download
                 File downloadDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
-                File[] videos = downloadDir.listFiles((dir, name) -> name.endsWith(".mp4"));
-                if (videos == null || videos.length == 0) throw new Exception("Tidak ada file video di folder Download!");
+                File diagnosticsDir = new File(downloadDir, "SmartReframe/diagnostics");
                 
-                Uri sourceUri = Uri.fromFile(videos[0]);
+                // --- PASS 1 ---
+                runOnUiThread(() -> statusText.setText("Pass 1: Menganalisis Wajah..."));
                 File outputAnalysis = new File(getFilesDir(), "analysis.json");
-                
-                Pass1Extractor.extract(this, sourceUri, outputAnalysis);
-                
-                File diagnosticsDir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "SmartReframe/diagnostics");
-                File dest = new File(diagnosticsDir, "analysis_" + System.currentTimeMillis() + ".json");
-                java.nio.file.Files.copy(outputAnalysis.toPath(), dest.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-                
-                runOnUiThread(() -> statusText.setText("Pass 1 Selesai. Hasil disimpan di diagnostics."));
-            } catch (Exception e) {
-                runOnUiThread(() -> statusText.setText("Error Pass 1: " + e.getMessage()));
-                Log.e(TAG, "Pass 1 Error", e);
-            }
-        }).start();
-    }
+                Pass1Extractor.extract(this, selectedVideoUri, outputAnalysis);
+                File dest1 = new File(diagnosticsDir, "analysis_latest.json");
+                java.nio.file.Files.copy(outputAnalysis.toPath(), dest1.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
 
-    private void runPass2(TextView statusText) {
-        statusText.setText("Menjalankan Pass 2: Optimasi Trajectory...");
-        new Thread(() -> {
-            try {
-                File diagnosticsDir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "SmartReframe/diagnostics");
-                File[] files = diagnosticsDir.listFiles((dir, name) -> name.startsWith("analysis_") && name.endsWith(".json"));
-                if (files == null || files.length == 0) throw new Exception("File analysis tidak ditemukan!");
-                
-                Arrays.sort(files, Comparator.comparingLong(File::lastModified));
-                File latestAnalysis = files[files.length - 1];
-
+                // --- PASS 2 ---
+                runOnUiThread(() -> statusText.setText("Pass 2: Mengoptimalkan Trajectory..."));
                 File trajectoryOutput = new File(getFilesDir(), "trajectory.json");
-                Pass2Optimizer.optimize(latestAnalysis, trajectoryOutput);
+                Pass2Optimizer.optimize(outputAnalysis, trajectoryOutput);
+                File dest2 = new File(diagnosticsDir, "trajectory_latest.json");
+                java.nio.file.Files.copy(trajectoryOutput.toPath(), dest2.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
 
-                File dest = new File(diagnosticsDir, "trajectory_" + System.currentTimeMillis() + ".json");
-                java.nio.file.Files.copy(trajectoryOutput.toPath(), dest.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-
-                runOnUiThread(() -> statusText.setText("Pass 2 Selesai. Cek layout di file trajectory."));
-            } catch (Exception e) {
-                runOnUiThread(() -> statusText.setText("Error Pass 2: " + e.getMessage()));
-                Log.e(TAG, "Pass 2 Error", e);
-            }
-        }).start();
-    }
-
-    private void runPass3(TextView statusText) {
-        statusText.setText("Menjalankan Pass 3: Rendering Video...");
-        new Thread(() -> {
-            try {
-                File diagnosticsDir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "SmartReframe/diagnostics");
-                File[] files = diagnosticsDir.listFiles((dir, name) -> name.startsWith("trajectory_") && name.endsWith(".json"));
-                if (files == null || files.length == 0) throw new Exception("File trajectory tidak ditemukan!");
-
-                Arrays.sort(files, Comparator.comparingLong(File::lastModified));
-                File latestTrajectory = files[files.length - 1];
-
-                // Gunakan video sumber yang sama dengan Pass 1
-                File downloadDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
-                File[] videos = downloadDir.listFiles((dir, name) -> name.endsWith(".mp4"));
-                if (videos == null || videos.length == 0) throw new Exception("Tidak ada file video di folder Download!");
-                Uri sourceUri = Uri.fromFile(videos[0]);
-
-                File outputVideo = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES), "SmartReframe/output.mp4");
+                // --- PASS 3 ---
+                runOnUiThread(() -> statusText.setText("Pass 3: Merender Video Akhir..."));
+                File outputVideo = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES), "SmartReframe/output_final.mp4");
                 if (!outputVideo.getParentFile().exists()) outputVideo.getParentFile().mkdirs();
+                
+                Pass3Renderer.render(this, selectedVideoUri, trajectoryOutput, outputVideo);
 
-                Pass3Renderer.render(this, sourceUri, latestTrajectory, outputVideo);
+                runOnUiThread(() -> {
+                    statusText.setText("SELESAI! Video disimpan di Movies/SmartReframe/");
+                    Toast.makeText(MainActivity.this, "Proses Selesai!", Toast.LENGTH_LONG).show();
+                });
 
-                runOnUiThread(() -> statusText.setText("Pass 3 Selesai. Cek folder Movies/SmartReframe."));
             } catch (Exception e) {
-                runOnUiThread(() -> statusText.setText("Error Pass 3: " + e.getMessage()));
-                Log.e(TAG, "Pass 3 Error", e);
+                runOnUiThread(() -> {
+                    statusText.setText("Error: " + e.getMessage());
+                    Log.e(TAG, "Pipeline Error", e);
+                });
             }
         }).start();
     }
