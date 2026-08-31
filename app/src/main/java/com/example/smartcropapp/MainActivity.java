@@ -13,6 +13,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.PickVisualMediaRequest;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
@@ -34,7 +35,7 @@ public class MainActivity extends AppCompatActivity {
     
     private TextView statusText;
     private Uri selectedVideoUri;
-    private ActivityResultLauncher<String> pickMedia;
+    private ActivityResultLauncher<PickVisualMediaRequest> pickMedia;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -57,7 +58,12 @@ public class MainActivity extends AppCompatActivity {
         btnProcess.setText("Proses Otomatis");
         btnDummy.setVisibility(android.view.View.GONE);
 
-        btnSelect.setOnClickListener(v -> pickMedia.launch("video/*"));
+        btnSelect.setOnClickListener(v -> {
+            PickVisualMediaRequest request = new PickVisualMediaRequest.Builder()
+                    .setMediaType(ActivityResultContracts.PickVisualMedia.VideoOnly.INSTANCE)
+                    .build();
+            pickMedia.launch(request);
+        });
         btnProcess.setOnClickListener(v -> startAutoPipeline());
     }
 
