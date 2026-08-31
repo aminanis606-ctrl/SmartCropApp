@@ -3,6 +3,10 @@ plugins {
 }
 
 android {
+    configurations.all {
+        exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk8'
+        exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk7'
+    }
     namespace 'com.example.smartcropapp'
     compileSdk 34
 

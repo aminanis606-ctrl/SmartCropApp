@@ -13,7 +13,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
-import androidx.activity.result.contract.PickVisualMediaContract;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
@@ -62,7 +62,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void setupMediaPicker() {
-        pickMedia = registerForActivityResult(new PickVisualMediaContract(), uri -> {
+        pickMedia = registerForActivityResult(new ActivityResultContracts.PickVisualMedia(), uri -> {
             if (uri != null) {
                 selectedVideoUri = uri;
                 statusText.setText("Video dipilih: " + uri.getLastPathSegment());
