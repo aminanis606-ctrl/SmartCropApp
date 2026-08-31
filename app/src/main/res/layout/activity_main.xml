@@ -9,23 +9,37 @@
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="SmartReframe Pass 1"
+        android:text="SmartReframe Pipeline"
         android:textSize="22sp"
         android:textStyle="bold"
         android:textColor="@android:color/white"/>
 
     <Button
-        android:id="@+id/btnSelectVideo"
+        android:id="@+id/btnPass1"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Pilih Video &amp; Ekstrak Metadata"
+        android:text="Pass 1: Analisis Wajah"
         android:layout_marginTop="24dp"/>
 
-    <TextView
-        android:id="@+id/tvStatus"
+    <Button
+        android:id="@+id/btnPass2"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Status: Menunggu video..."
+        android:text="Pass 2: Optimasi Trajectory"
+        android:layout_marginTop="8dp"/>
+
+    <Button
+        android:id="@+id/btnPass3"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Pass 3: Rendering Video"
+        android:layout_marginTop="8dp"/>
+
+    <TextView
+        android:id="@+id/statusText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Status: Siap memproses..."
         android:textSize="14sp"
         android:layout_marginTop="16dp"
         android:gravity="center"

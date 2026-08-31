@@ -39,7 +39,6 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        // Inisialisasi Struktur Folder & Self-Healing Config
         initializeStorageStructure();
 
         TextView statusText = findViewById(R.id.statusText);
@@ -62,17 +61,17 @@ public class MainActivity extends AppCompatActivity {
         try {
             File baseDir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "SmartReframe");
             File diagnosticsDir = new File(baseDir, "diagnostics");
-            
+
             if (!baseDir.exists()) baseDir.mkdirs();
             if (!diagnosticsDir.exists()) diagnosticsDir.mkdirs();
-            
+
             // SELF-HEALING: Salin manual_split.txt dari assets jika belum ada atau kosong
             File externalConfig = new File(baseDir, "manual_split.txt");
             if (!externalConfig.exists() || externalConfig.length() == 0) {
                 AssetManager assetManager = getAssets();
                 InputStream in = assetManager.open("manual_split.txt");
                 OutputStream out = new FileOutputStream(externalConfig);
-                
+
                 byte[] buffer = new byte[1024];
                 int read;
                 while ((read = in.read(buffer)) != -1) {
@@ -102,8 +101,8 @@ public class MainActivity extends AppCompatActivity {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             Toast.makeText(this, "Berikan izin 'Akses ke Semua File' di pengaturan.", Toast.LENGTH_LONG).show();
         } else {
-            ActivityCompat.requestPermissions(this, 
-                new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE, Manifest.permission.READ_EXTERNAL_STORAGE}, 
+            ActivityCompat.requestPermissions(this,
+                new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE, Manifest.permission.READ_EXTERNAL_STORAGE},
                 REQUEST_CODE_STORAGE);
         }
     }
@@ -120,13 +119,17 @@ public class MainActivity extends AppCompatActivity {
         statusText.setText("Menjalankan Pass 1: Analisis Wajah...");
         new Thread(() -> {
             try {
-                // Logika Pass 1 Anda di sini
-                // ...
-                File analysisFile = new File(getFilesDir(), "analysis.json");
-                exportJsonToMediaStore(analysisFile, "analysis_" + System.currentTimeMillis() + ".json");
-                runOnUiThread(() -> statusText.setText("Pass 1 Selesai."));
+                Pass1Analyzer analyzer = new Pass1Analyzer(this);
+                File analysisFile = analyzer.analyze();
+                
+                File diagnosticsDir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "SmartReframe/diagnostics");
+                File dest = new File(diagnosticsDir, "analysis_" + System.currentTimeMillis() + ".json");
+                java.nio.file.Files.copy(analysisFile.toPath(), dest.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                
+                runOnUiThread(() -> statusText.setText("Pass 1 Selesai. Hasil disimpan di diagnostics."));
             } catch (Exception e) {
                 runOnUiThread(() -> statusText.setText("Error Pass 1: " + e.getMessage()));
+                Log.e(TAG, "Pass 1 Error", e);
             }
         }).start();
     }
@@ -135,13 +138,24 @@ public class MainActivity extends AppCompatActivity {
         statusText.setText("Menjalankan Pass 2: Optimasi Trajectory...");
         new Thread(() -> {
             try {
-                // Logika Pass 2 Anda di sini
-                // ...
-                File trajectoryFile = new File(getFilesDir(), "trajectory.json");
-                exportJsonToMediaStore(trajectoryFile, "trajectory_" + System.currentTimeMillis() + ".json");
-                runOnUiThread(() -> statusText.setText("Pass 2 Selesai."));
+                // Cari file analysis terbaru
+                File diagnosticsDir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "SmartReframe/diagnostics");
+                File[] files = diagnosticsDir.listFiles((dir, name) -> name.startsWith("analysis_") && name.endsWith(".json"));
+                if (files == null || files.length == 0) throw new Exception("File analysis tidak ditemukan!");
+                
+                Arrays.sort(files, Comparator.comparingLong(File::lastModified));
+                File latestAnalysis = files[files.length - 1];
+
+                Pass2Optimizer optimizer = new Pass2Optimizer(this);
+                File trajectoryFile = optimizer.optimize(latestAnalysis);
+
+                File dest = new File(diagnosticsDir, "trajectory_" + System.currentTimeMillis() + ".json");
+                java.nio.file.Files.copy(trajectoryFile.toPath(), dest.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+
+                runOnUiThread(() -> statusText.setText("Pass 2 Selesai. Cek layout di file trajectory."));
             } catch (Exception e) {
                 runOnUiThread(() -> statusText.setText("Error Pass 2: " + e.getMessage()));
+                Log.e(TAG, "Pass 2 Error", e);
             }
         }).start();
     }
@@ -150,50 +164,25 @@ public class MainActivity extends AppCompatActivity {
         statusText.setText("Menjalankan Pass 3: Rendering Video...");
         new Thread(() -> {
             try {
-                // Cari trajectory terbaru dari folder diagnostics
-                File downloadDir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "SmartReframe/diagnostics");
-                File trajectoryFile = null;
-                
-                if (downloadDir.exists()) {
-                    File[] files = downloadDir.listFiles((dir, name) -> name.startsWith("trajectory_") && name.endsWith(".json"));
-                    if (files != null && files.length > 0) {
-                        Arrays.sort(files, Comparator.comparingLong(File::lastModified));
-                        trajectoryFile = files[files.length - 1];
-                    }
-                }
+                File diagnosticsDir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "SmartReframe/diagnostics");
+                File[] files = diagnosticsDir.listFiles((dir, name) -> name.startsWith("trajectory_") && name.endsWith(".json"));
+                if (files == null || files.length == 0) throw new Exception("File trajectory tidak ditemukan!");
 
-                if (trajectoryFile == null) throw new Exception("File trajectory tidak ditemukan di folder diagnostics!");
+                Arrays.sort(files, Comparator.comparingLong(File::lastModified));
+                File latestTrajectory = files[files.length - 1];
 
-                // Logika rendering Pass 3
-                // Pass3Renderer.render(this, sourceUri, trajectoryFile, outputFile);
+                // Contoh: Menggunakan video dummy atau video terakhir yang dipilih
+                // Anda mungkin perlu menambahkan logic pemilihan video di sini
+                Uri sourceUri = null; // Ganti dengan logic pemilihan video Anda
                 
+                Pass3Renderer renderer = new Pass3Renderer(this);
+                // renderer.render(sourceUri, latestTrajectory, outputFile); 
+
                 runOnUiThread(() -> statusText.setText("Pass 3 Selesai. Cek folder Movies/SmartReframe."));
             } catch (Exception e) {
                 runOnUiThread(() -> statusText.setText("Error Pass 3: " + e.getMessage()));
+                Log.e(TAG, "Pass 3 Error", e);
             }
         }).start();
-    }
-
-    private void exportJsonToMediaStore(File sourceFile, String displayName) throws Exception {
-        ContentValues values = new ContentValues();
-        values.put(MediaStore.Files.FileColumns.DISPLAY_NAME, displayName);
-        values.put(MediaStore.Files.FileColumns.MIME_TYPE, "application/json");
-        values.put(MediaStore.Files.FileColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/SmartReframe/diagnostics");
-        
-        Uri uri = getContentResolver().insert(MediaStore.Files.getContentUri("external"), values);
-        if (uri == null) throw new Exception("Gagal membuat entry MediaStore");
-        
-        try (OutputStream os = getContentResolver().openOutputStream(uri);
-             InputStream is = new java.io.FileInputStream(sourceFile)) {
-            
-            byte[] buffer = new byte[8192];
-            int len;
-            while ((len = is.read(buffer)) != -1) {
-                os.write(buffer, 0, len);
-            }
-        } catch (Exception e) {
-            getContentResolver().delete(uri, null, null);
-            throw e;
-        }
     }
 }
