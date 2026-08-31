@@ -47,7 +47,7 @@ public class Pass2Optimizer {
 
     public static void optimize(File analysisFile, File trajectoryFile) throws Exception {
         // 1. Baca file analisis dari Pass 1
-        String content = java.nio.file.Files.readString(analysisFile.toPath());
+        String content = new String(java.nio.file.Files.readAllBytes(analysisFile.toPath()));
         JSONObject analysis = new JSONObject(content);
         JSONArray shotsArray = analysis.getJSONArray("shots");
         
