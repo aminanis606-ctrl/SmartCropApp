@@ -27,7 +27,7 @@ public class Pass2Optimizer {
      * CONFIG dan DIAGNOSTIC SENGAJA DIPISAH.
      *
      * Config:
-     *   Downloads/SmartReframeConfig/manual_split.txt
+     *   Downloads/IkhlasApp/config/manual_split.txt
      *
      * Diagnostic:
      *   Downloads/SmartReframe/analysis_*.json
