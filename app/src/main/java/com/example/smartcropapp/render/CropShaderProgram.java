@@ -175,9 +175,9 @@ public class CropShaderProgram {
         Matrix.multiplyMM(
                 combinedST,
                 0,
-                stMatrix,
-                0,
                 cropMatrix,
+                0,
+                stMatrix,
                 0);
 
         float[] mvpMatrix =
