@@ -2,6 +2,7 @@ package com.example.smartcropapp.render;
 
 import android.opengl.GLES11Ext;
 import android.opengl.GLES20;
+import android.opengl.Matrix;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -10,19 +11,14 @@ import java.nio.FloatBuffer;
 public class CropShaderProgram {
 
     private static final String VERTEX_SHADER =
+            "uniform mat4 uMVPMatrix;\n" +
+            "uniform mat4 uSTMatrix;\n" +
             "attribute vec4 aPosition;\n" +
             "attribute vec4 aTextureCoord;\n" +
             "varying vec2 vTextureCoord;\n" +
-            "uniform float uLeft;\n" +
-            "uniform float uBottom;\n" +
-            "uniform float uWidth;\n" +
-            "uniform float uHeight;\n" +
             "void main() {\n" +
-            "    gl_Position = aPosition;\n" +
-            "    vTextureCoord = vec2(\n" +
-            "        uLeft + aTextureCoord.x * uWidth,\n" +
-            "        uBottom + aTextureCoord.y * uHeight\n" +
-            "    );\n" +
+            "    gl_Position = uMVPMatrix * aPosition;\n" +
+            "    vTextureCoord = (uSTMatrix * aTextureCoord).xy;\n" +
             "}\n";
 
     private static final String FRAGMENT_SHADER =
@@ -34,6 +30,14 @@ public class CropShaderProgram {
             "    gl_FragColor = texture2D(sTexture, vTextureCoord);\n" +
             "}\n";
 
+    private final FloatBuffer vertexBuffer;
+
+    private final int program;
+    private final int aPositionHandle;
+    private final int aTextureCoordHandle;
+    private final int uMVPMatrixHandle;
+    private final int uSTMatrixHandle;
+
     private static final float[] VERTEX_DATA = {
             -1f, -1f, 0f, 0f, 0f,
              1f, -1f, 0f, 1f, 0f,
@@ -41,27 +45,21 @@ public class CropShaderProgram {
              1f,  1f, 0f, 1f, 1f
     };
 
-    private final FloatBuffer vertexBuffer;
-    private final int program;
-    private final int aPositionHandle;
-    private final int aTextureCoordHandle;
-    private final int uLeftHandle;
-    private final int uBottomHandle;
-    private final int uWidthHandle;
-    private final int uHeightHandle;
-
     public CropShaderProgram() {
+
         vertexBuffer =
                 ByteBuffer
-                        .allocateDirect(VERTEX_DATA.length * 4)
+                        .allocateDirect(
+                                VERTEX_DATA.length * 4)
                         .order(ByteOrder.nativeOrder())
                         .asFloatBuffer();
 
         vertexBuffer.put(VERTEX_DATA).position(0);
 
-        program = createProgram(
-                VERTEX_SHADER,
-                FRAGMENT_SHADER);
+        program =
+                createProgram(
+                        VERTEX_SHADER,
+                        FRAGMENT_SHADER);
 
         aPositionHandle =
                 GLES20.glGetAttribLocation(
@@ -73,25 +71,15 @@ public class CropShaderProgram {
                         program,
                         "aTextureCoord");
 
-        uLeftHandle =
+        uMVPMatrixHandle =
                 GLES20.glGetUniformLocation(
                         program,
-                        "uLeft");
+                        "uMVPMatrix");
 
-        uBottomHandle =
+        uSTMatrixHandle =
                 GLES20.glGetUniformLocation(
                         program,
-                        "uBottom");
-
-        uWidthHandle =
-                GLES20.glGetUniformLocation(
-                        program,
-                        "uWidth");
-
-        uHeightHandle =
-                GLES20.glGetUniformLocation(
-                        program,
-                        "uHeight");
+                        "uSTMatrix");
     }
 
     public void draw(
@@ -127,24 +115,77 @@ public class CropShaderProgram {
                 halfH,
                 1.0f - halfH);
 
+        /*
+         * Explicit crop rectangle.
+         *
+         * Texture coordinate:
+         *
+         * left   = cx - halfW
+         * right  = cx + halfW
+         * bottom = cy - halfH
+         * top    = cy + halfH
+         */
+
         float left = cx - halfW;
+        float right = cx + halfW;
         float bottom = cy - halfH;
+        float top = cy + halfH;
 
-        GLES20.glUniform1f(
-                uLeftHandle,
-                left);
+        float sx = right - left;
+        float sy = top - bottom;
 
-        GLES20.glUniform1f(
-                uBottomHandle,
-                bottom);
+        float tx = left;
+        float ty = bottom;
 
-        GLES20.glUniform1f(
-                uWidthHandle,
-                w);
+        /*
+         * Build texture matrix:
+         *
+         * output 0..1
+         *      ↓
+         * crop rectangle
+         *
+         * Jadi masing-masing panel benar-benar
+         * mengambil area sumber yang berbeda.
+         */
 
-        GLES20.glUniform1f(
-                uHeightHandle,
-                h);
+        float[] cropMatrix =
+                new float[16];
+
+        Matrix.setIdentityM(
+                cropMatrix,
+                0);
+
+        Matrix.translateM(
+                cropMatrix,
+                0,
+                tx,
+                ty,
+                0f);
+
+        Matrix.scaleM(
+                cropMatrix,
+                0,
+                sx,
+                sy,
+                1f);
+
+        float[] combinedST =
+                new float[16];
+
+        Matrix.multiplyMM(
+                combinedST,
+                0,
+                stMatrix,
+                0,
+                cropMatrix,
+                0);
+
+        float[] mvpMatrix =
+                new float[16];
+
+        Matrix.setIdentityM(
+                mvpMatrix,
+                0);
 
         vertexBuffer.position(0);
 
@@ -171,6 +212,20 @@ public class CropShaderProgram {
 
         GLES20.glEnableVertexAttribArray(
                 aTextureCoordHandle);
+
+        GLES20.glUniformMatrix4fv(
+                uMVPMatrixHandle,
+                1,
+                false,
+                mvpMatrix,
+                0);
+
+        GLES20.glUniformMatrix4fv(
+                uSTMatrixHandle,
+                1,
+                false,
+                combinedST,
+                0);
 
         GLES20.glActiveTexture(
                 GLES20.GL_TEXTURE0);
@@ -230,7 +285,8 @@ public class CropShaderProgram {
 
         GLES20.glLinkProgram(prog);
 
-        int[] linkStatus = new int[1];
+        int[] linkStatus =
+                new int[1];
 
         GLES20.glGetProgramiv(
                 prog,
@@ -239,13 +295,16 @@ public class CropShaderProgram {
                 0);
 
         if (linkStatus[0] == 0) {
-            String error =
-                    GLES20.glGetProgramInfoLog(prog);
+
+            String log =
+                    GLES20.glGetProgramInfoLog(
+                            prog);
 
             GLES20.glDeleteProgram(prog);
 
             throw new RuntimeException(
-                    "Program link failed: " + error);
+                    "Link program gagal: "
+                            + log);
         }
 
         return prog;
@@ -253,33 +312,39 @@ public class CropShaderProgram {
 
     private int loadShader(
             int type,
-            String source) {
+            String src) {
 
         int shader =
                 GLES20.glCreateShader(type);
 
         GLES20.glShaderSource(
                 shader,
-                source);
+                src);
 
-        GLES20.glCompileShader(shader);
+        GLES20.glCompileShader(
+                shader);
 
-        int[] status = new int[1];
+        int[] compiled =
+                new int[1];
 
         GLES20.glGetShaderiv(
                 shader,
                 GLES20.GL_COMPILE_STATUS,
-                status,
+                compiled,
                 0);
 
-        if (status[0] == 0) {
-            String error =
-                    GLES20.glGetShaderInfoLog(shader);
+        if (compiled[0] == 0) {
 
-            GLES20.glDeleteShader(shader);
+            String log =
+                    GLES20.glGetShaderInfoLog(
+                            shader);
+
+            GLES20.glDeleteShader(
+                    shader);
 
             throw new RuntimeException(
-                    "Shader compile failed: " + error);
+                    "Compile shader gagal: "
+                            + log);
         }
 
         return shader;
