@@ -468,6 +468,17 @@ public class Pass2Optimizer {
                 (left + right) /
                 Math.max(0.0001, left + right + center);
 
+        Log.i(TAG,
+                "AUTO_SPLIT_DIAG shot=" + shot.shotId
+                + " leftIndex=" + leftIndex
+                + " rightIndex=" + rightIndex
+                + " leftPeak=" + leftPeak
+                + " rightPeak=" + rightPeak
+                + " balance=" + balance
+                + " separation=" + separation
+                + " sideStrength=" + sideStrength
+                + " col=" + java.util.Arrays.toString(col));
+
         if (balance < 0.55) return false;
         if (separation < 0.35) return false;
         if (sideStrength < 0.48) return false;
