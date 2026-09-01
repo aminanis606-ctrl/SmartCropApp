@@ -445,7 +445,7 @@ public class Pass2Optimizer {
                 + " col=" + java.util.Arrays.toString(col));
 
         if (balance < 0.55) return false;
-        if (separation < 0.35) return false;
+        if (separation < 0.60) return false;
         if (sideStrength < 0.48) return false;
 
         shot.layout = "split";
