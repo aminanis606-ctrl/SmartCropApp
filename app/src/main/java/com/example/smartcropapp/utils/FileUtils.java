@@ -15,6 +15,49 @@ import java.io.IOException;
 public final class FileUtils {
     private static final String TAG = "FileUtils";
 
+    public static boolean copyFileToPublicDownloads(
+            Context context,
+            String sourceFileName,
+            String destinationFileName) {
+
+        File src = new File(context.getFilesDir(), sourceFileName);
+
+        if (!src.exists() || src.length() == 0) {
+            Log.e(TAG, "Source file missing or empty: " + src.getAbsolutePath());
+            return false;
+        }
+
+        File destDir = new File(
+                Environment.getExternalStorageDirectory(),
+                "Download/SmartReframe/diagnostics");
+
+        if (!destDir.exists()) destDir.mkdirs();
+
+        File destFile = new File(destDir, destinationFileName);
+
+        try (FileInputStream fis = new FileInputStream(src);
+             BufferedInputStream bis = new BufferedInputStream(fis);
+             FileOutputStream fos = new FileOutputStream(destFile);
+             BufferedOutputStream bos = new BufferedOutputStream(fos)) {
+
+            byte[] buffer = new byte[8192];
+            int len;
+
+            while ((len = bis.read(buffer)) != -1) {
+                bos.write(buffer, 0, len);
+            }
+
+            bos.flush();
+            fos.getFD().sync();
+
+            return destFile.exists() && destFile.length() > 0;
+
+        } catch (IOException e) {
+            Log.e(TAG, "IO Error during diagnostic copy", e);
+            return false;
+        }
+    }
+
     public static boolean copyFileToPublicDownloads(Context context, String sourceFileName) {
         File src = new File(context.getFilesDir(), sourceFileName);
         

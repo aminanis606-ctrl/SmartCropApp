@@ -98,25 +98,11 @@ public class MainActivity extends AppCompatActivity {
                 File internalAnalysis = new File(getFilesDir(), "analysis.json");
                 Pass1Extractor.extract(this, selectedVideoUri, internalAnalysis);
                 
-                // COPY DIAGNOSTIC (SILENT FAILURE - TIDAK BOLEH MENGHENTIKAN PIPELINE)
-                try {
-                    FileUtils.copyFileToPublicDownloads(this, "analysis.json");
-                } catch (Exception e) {
-                    Log.w(TAG, "Gagal copy analysis.json (diabaikan): " + e.getMessage());
-                }
-
                 // PASS 2
                 runOnUiThread(() -> statusText.setText("Pass 2: Optimasi Gerakan..."));
                 File internalTrajectory = new File(getFilesDir(), "trajectory.json");
                 Pass2Optimizer.optimize(internalAnalysis, internalTrajectory);
                 
-                // COPY DIAGNOSTIC (SILENT FAILURE)
-                try {
-                    FileUtils.copyFileToPublicDownloads(this, "trajectory.json");
-                } catch (Exception e) {
-                    Log.w(TAG, "Gagal copy trajectory.json (diabaikan): " + e.getMessage());
-                }
-
                 // PASS 3
                 runOnUiThread(() -> statusText.setText("Pass 3: Rendering Video..."));
                 File outputDir =
@@ -132,6 +118,35 @@ public class MainActivity extends AppCompatActivity {
                                 selectedVideoUri,
                                 internalAnalysis,
                                 outputDir);
+
+                String diagnosticBase =
+                        outputVideo.getName();
+
+                int dot =
+                        diagnosticBase.lastIndexOf('.');
+
+                if (dot > 0) {
+                    diagnosticBase =
+                            diagnosticBase.substring(0, dot);
+                }
+
+                try {
+                    FileUtils.copyFileToPublicDownloads(
+                            this,
+                            "analysis.json",
+                            diagnosticBase + "_analysis.json");
+
+                    FileUtils.copyFileToPublicDownloads(
+                            this,
+                            "trajectory.json",
+                            diagnosticBase + "_trajectory.json");
+
+                } catch (Exception e) {
+                    Log.w(
+                            TAG,
+                            "Gagal copy diagnostic (diabaikan): "
+                                    + e.getMessage());
+                }
 
                 Pass3Renderer.render(
                         this,
