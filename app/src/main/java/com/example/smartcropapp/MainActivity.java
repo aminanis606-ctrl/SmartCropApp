@@ -365,21 +365,35 @@ public class MainActivity extends AppCompatActivity {
 
     private void initializeStorageStructure() {
         try {
-            File baseDir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "IkhlasApp");
+            File baseDir = new File(
+                    Environment.getExternalStoragePublicDirectory(
+                            Environment.DIRECTORY_DOWNLOADS),
+                    "IkhlasApp");
+
             File configDir = new File(baseDir, "config");
             if (!configDir.exists()) configDir.mkdirs();
-            
-            File manualSplitFile = new File(configDir, "manual_split.txt");
+
+            File manualSplitFile =
+                    new File(configDir, "manual_split.txt");
+
             AssetManager assetManager = getAssets();
-            InputStream in = assetManager.open("manual_split.txt");
-            OutputStream out = new FileOutputStream(manualSplitFile, false);
-                byte[] buffer = new byte[1024];
-                int read;
-                while ((read = in.read(buffer)) != -1) out.write(buffer, 0, read);
-                in.close(); out.close();
+            InputStream in =
+                    assetManager.open("manual_split.txt");
+
+            OutputStream out =
+                    new FileOutputStream(manualSplitFile, false);
+
+            byte[] buffer = new byte[1024];
+            int read;
+
+            while ((read = in.read(buffer)) != -1) {
+                out.write(buffer, 0, read);
             }
+
+            in.close();
+            out.close();
+
         } catch (Exception e) {
             Log.e(TAG, "Init storage error", e);
         }
     }
-}
