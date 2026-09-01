@@ -9,7 +9,6 @@ import android.media.MediaFormat;
 import android.media.MediaMuxer;
 import android.net.Uri;
 import android.opengl.GLES20;
-import android.opengl.Matrix;
 import android.util.Log;
 import android.view.Surface;
 
@@ -281,13 +280,11 @@ public class Pass3Renderer {
 
                         // Draw Top Panel (Speaker A)
                         GLES20.glViewport(0, panelH, OUTPUT_WIDTH, panelH);
-                        float[] splitST = new float[16];
-                        Matrix.setIdentityM(splitST, 0);
-                        shader.draw(glContext.getDecoderTextureId(), splitST, topX, topY, cropWidthNorm, cropHeightNorm);
+                        shader.draw(glContext.getDecoderTextureId(), stMatrix, topX, topY, cropWidthNorm, cropHeightNorm);
 
                         // Draw Bottom Panel (Speaker B)
                         GLES20.glViewport(0, 0, OUTPUT_WIDTH, panelH);
-                        shader.draw(glContext.getDecoderTextureId(), splitST, botX, botY, cropWidthNorm, cropHeightNorm);
+                        shader.draw(glContext.getDecoderTextureId(), stMatrix, botX, botY, cropWidthNorm, cropHeightNorm);
                     } else {
                         // Draw Single Full Screen (Center Crop)
                         GLES20.glViewport(0, 0, OUTPUT_WIDTH, OUTPUT_HEIGHT);
