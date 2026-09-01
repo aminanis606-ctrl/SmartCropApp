@@ -10,6 +10,8 @@ import android.os.Bundle;
 import android.os.Environment;
 import android.media.MediaMetadataRetriever;
 import android.provider.Settings;
+import android.provider.OpenableColumns;
+import android.database.Cursor;
 import android.util.Log;
 import android.widget.Button;
 import android.widget.TextView;
@@ -82,6 +84,28 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
+    private String getVideoId(Uri uri) {
+        if (uri == null) return "unknown";
+
+        try (Cursor c = getContentResolver().query(
+                uri,
+                new String[]{OpenableColumns.DISPLAY_NAME},
+                null, null, null)) {
+
+            if (c != null && c.moveToFirst()) {
+                String name = c.getString(0);
+                java.util.regex.Matcher m =
+                        java.util.regex.Pattern.compile("(\\d+)").matcher(name);
+
+                if (m.find()) return m.group(1);
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "Gagal mengambil video ID", e);
+        }
+
+        return "unknown";
+    }
+
     private void startAutoPipeline() {
         if (selectedVideoUri == null) {
             Toast.makeText(this, "Pilih video terlebih dahulu!", Toast.LENGTH_SHORT).show();
@@ -101,7 +125,7 @@ public class MainActivity extends AppCompatActivity {
                 // PASS 2
                 runOnUiThread(() -> statusText.setText("Pass 2: Optimasi Gerakan..."));
                 File internalTrajectory = new File(getFilesDir(), "trajectory.json");
-                Pass2Optimizer.optimize(internalAnalysis, internalTrajectory);
+                Pass2Optimizer.optimize(internalAnalysis, internalTrajectory, getVideoId(selectedVideoUri));
                 
                 // PASS 3
                 runOnUiThread(() -> statusText.setText("Pass 3: Rendering Video..."));
@@ -346,10 +370,9 @@ public class MainActivity extends AppCompatActivity {
             if (!configDir.exists()) configDir.mkdirs();
             
             File manualSplitFile = new File(configDir, "manual_split.txt");
-            if (!manualSplitFile.exists() || manualSplitFile.length() == 0) {
-                AssetManager assetManager = getAssets();
-                InputStream in = assetManager.open("manual_split.txt");
-                OutputStream out = new FileOutputStream(manualSplitFile);
+            AssetManager assetManager = getAssets();
+            InputStream in = assetManager.open("manual_split.txt");
+            OutputStream out = new FileOutputStream(manualSplitFile, false);
                 byte[] buffer = new byte[1024];
                 int read;
                 while ((read = in.read(buffer)) != -1) out.write(buffer, 0, read);

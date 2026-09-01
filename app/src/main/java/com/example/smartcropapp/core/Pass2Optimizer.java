@@ -88,7 +88,8 @@ public class Pass2Optimizer {
 
     public static void optimize(
             File analysisFile,
-            File trajectoryFile)
+            File trajectoryFile,
+            String videoId)
             throws Exception {
 
         if (analysisFile == null ||
@@ -145,7 +146,8 @@ public class Pass2Optimizer {
 
             applyManualConfig(
                     shot,
-                    configFile);
+                    configFile,
+                    videoId);
 
             if ("split".equals(shot.layout)) {
                 continue;
@@ -298,54 +300,40 @@ public class Pass2Optimizer {
 
     private static void applyManualConfig(
             Shot shot,
-            File configFile) {
+            File configFile,
+            String videoId) {
 
-        if (configFile == null || !configFile.exists()) {
-            return;
-        }
+        if (configFile == null || !configFile.exists()
+                || videoId == null) return;
 
-        try (BufferedReader reader =
-                     new BufferedReader(
-                             new FileReader(configFile))) {
+        try (BufferedReader reader = new BufferedReader(
+                new FileReader(configFile))) {
 
             String line;
-
             while ((line = reader.readLine()) != null) {
                 line = line.trim();
 
-                if (line.isEmpty() || line.startsWith("#")) {
-                    continue;
-                }
+                if (line.isEmpty() || line.startsWith("#")
+                        || !line.contains("=")) continue;
 
-                String[] parts = line.split(",");
+                String[] cfg = line.split("=", 2);
+                if (!videoId.equals(cfg[0].trim())) continue;
 
-                // Format resmi: 0,2,5 = daftar Shot ID yang menjadi split.
-                if (parts.length >= 2) {
-                    for (String part : parts) {
-                        try {
-                            int id = Integer.parseInt(part.trim());
+                String[] ids = cfg[1].split(",");
 
-                            if (id == shot.shotId) {
-                                shot.layout = "split";
-
-                                Log.i(
-                                        TAG,
-                                        "Shot " + shot.shotId +
-                                        " -> MANUAL SPLIT");
-
-                                return;
-                            }
-                        } catch (NumberFormatException ignored) {
-                        }
+                for (String value : ids) {
+                    if (Integer.parseInt(value.trim()) == shot.shotId) {
+                        shot.layout = "split";
+                        Log.i(TAG, "Shot " + shot.shotId
+                                + " -> MANUAL SPLIT video=" + videoId);
+                        return;
                     }
                 }
-            }
 
+                return;
+            }
         } catch (Exception e) {
-            Log.e(
-                    TAG,
-                    "Gagal membaca manual_split.txt",
-                    e);
+            Log.e(TAG, "Gagal membaca manual_split.txt", e);
         }
     }
 
