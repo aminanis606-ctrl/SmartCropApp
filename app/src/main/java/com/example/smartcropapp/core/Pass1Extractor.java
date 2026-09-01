@@ -92,6 +92,7 @@ public class Pass1Extractor {
             current.startMs = 0;
 
             float[] previousBrightness = null;
+            float[] previousTexture = null;
 
             int shotId = 0;
 
@@ -121,7 +122,25 @@ public class Pass1Extractor {
                                     previousBrightness,
                                     feature.brightness);
 
-                    if (diff > CUT_THRESHOLD) {
+                    float textureDiff =
+                            previousTexture == null
+                                    ? 0f
+                                    : histogramDiff(
+                                            previousTexture,
+                                            feature.texture);
+
+                    boolean weakCut =
+                            diff >= WEAK_CUT_BRIGHTNESS &&
+                            textureDiff >= WEAK_CUT_TEXTURE;
+
+                    Log.i(
+                            TAG,
+                            "CUT_DIAG t=" +
+                            feature.timeMs +
+                            " diff=" +
+                            diff);
+
+                    if (diff > CUT_THRESHOLD || weakCut) {
 
                         if (!current.frames.isEmpty()) {
 
@@ -152,6 +171,9 @@ public class Pass1Extractor {
 
                 previousBrightness =
                         feature.brightness;
+
+                previousTexture =
+                        feature.texture;
 
                 bitmap.recycle();
             }
