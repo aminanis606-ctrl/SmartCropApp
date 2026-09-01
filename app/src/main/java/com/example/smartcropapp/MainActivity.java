@@ -8,6 +8,7 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.media.MediaMetadataRetriever;
 import android.provider.Settings;
 import android.util.Log;
 import android.widget.Button;
@@ -30,6 +31,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.Locale;
 
 public class MainActivity extends AppCompatActivity {
     private static final String TAG = "IkhlasApp";
@@ -117,9 +119,25 @@ public class MainActivity extends AppCompatActivity {
 
                 // PASS 3
                 runOnUiThread(() -> statusText.setText("Pass 3: Rendering Video..."));
-                File outputVideo = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES), "IkhlasApp/output_final.mp4");
-                if (!outputVideo.getParentFile().exists()) outputVideo.getParentFile().mkdirs();
-                Pass3Renderer.render(this, selectedVideoUri, internalTrajectory, outputVideo);
+                File outputDir =
+                        new File(
+                                Environment.getExternalStoragePublicDirectory(
+                                        Environment.DIRECTORY_MOVIES),
+                                "IkhlasApp");
+
+                if (!outputDir.exists()) outputDir.mkdirs();
+
+                File outputVideo =
+                        createUniqueOutputFile(
+                                selectedVideoUri,
+                                internalAnalysis,
+                                outputDir);
+
+                Pass3Renderer.render(
+                        this,
+                        selectedVideoUri,
+                        internalTrajectory,
+                        outputVideo);
 
                 runOnUiThread(() -> {
                     statusText.setText("SELESAI! Video tersimpan di Movies/IkhlasApp/");
@@ -136,6 +154,144 @@ public class MainActivity extends AppCompatActivity {
                 });
             }
         }).start();
+    }
+
+    private File createUniqueOutputFile(
+            Uri sourceUri,
+            File analysisFile,
+            File outputDir) throws Exception {
+
+        MediaMetadataRetriever mmr =
+                new MediaMetadataRetriever();
+
+        try {
+            mmr.setDataSource(this, sourceUri);
+
+            String durationStr =
+                    mmr.extractMetadata(
+                            MediaMetadataRetriever.METADATA_KEY_DURATION);
+
+            long durationMs =
+                    durationStr == null
+                            ? 0L
+                            : Long.parseLong(durationStr);
+
+            long totalSeconds =
+                    Math.max(0L, durationMs / 1000L);
+
+            long minutes = totalSeconds / 60L;
+            long seconds = totalSeconds % 60L;
+
+            String duration =
+                    String.format(
+                            Locale.US,
+                            "%02d:%02d",
+                            minutes,
+                            seconds);
+
+            org.json.JSONObject root =
+                    new org.json.JSONObject(
+                            readTextFile(analysisFile));
+
+            org.json.JSONArray shots =
+                    root.optJSONArray("shots");
+
+            int shotCount =
+                    shots == null ? 0 : shots.length();
+
+            int splitCount = 0;
+
+            if (shots != null) {
+                for (int i = 0; i < shots.length(); i++) {
+                    if ("split".equals(
+                            shots.getJSONObject(i)
+                                    .optString("layout"))) {
+                        splitCount++;
+                    }
+                }
+            }
+
+            int singleCount =
+                    Math.max(0, shotCount - splitCount);
+
+            String sourceName =
+                    "video";
+
+            String uriName =
+                    sourceUri.getLastPathSegment();
+
+            if (uriName != null && !uriName.isEmpty()) {
+                int slash = uriName.lastIndexOf('/');
+                if (slash >= 0) {
+                    uriName = uriName.substring(slash + 1);
+                }
+
+                int dot = uriName.lastIndexOf('.');
+                if (dot > 0) {
+                    uriName = uriName.substring(0, dot);
+                }
+
+                if (!uriName.isEmpty()) {
+                    sourceName = uriName;
+                }
+            }
+
+            sourceName =
+                    sourceName.replaceAll(
+                            "[^A-Za-z0-9_-]",
+                            "_");
+
+            String base =
+                    String.format(
+                            Locale.US,
+                            "%s_SHT%d_SPT%d_SGL%d_%s",
+                            duration,
+                            shotCount,
+                            splitCount,
+                            singleCount,
+                            sourceName);
+
+            File result =
+                    new File(
+                            outputDir,
+                            base + ".mp4");
+
+            int index = 1;
+
+            while (result.exists()) {
+                result =
+                        new File(
+                                outputDir,
+                                String.format(
+                                        Locale.US,
+                                        "%s_%03d.mp4",
+                                        base,
+                                        index++));
+            }
+
+            return result;
+
+        } finally {
+            mmr.release();
+        }
+    }
+
+    private String readTextFile(File file) throws Exception {
+        try (InputStream in =
+                     new java.io.FileInputStream(file)) {
+
+            java.io.ByteArrayOutputStream out =
+                    new java.io.ByteArrayOutputStream();
+
+            byte[] buffer = new byte[4096];
+            int n;
+
+            while ((n = in.read(buffer)) != -1) {
+                out.write(buffer, 0, n);
+            }
+
+            return out.toString("UTF-8");
+        }
     }
 
     private void checkPermissions() {
