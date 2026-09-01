@@ -219,7 +219,10 @@ public class Pass2Optimizer {
              * candidate layout "single".
              * Split ditentukan manual di Pass 2.
              */
-            shot.layout = "single";
+            shot.layout =
+                obj.optString(
+                        "layout",
+                        "single");
 
             JSONArray samples =
                     obj.optJSONArray(
