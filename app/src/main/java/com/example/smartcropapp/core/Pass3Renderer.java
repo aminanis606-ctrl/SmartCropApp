@@ -208,6 +208,14 @@ public class Pass3Renderer {
                     if (trajectory != null) {
                         try {
                             TrajectoryReader.ShotResult shot = trajectory.getShotAt(info.presentationTimeUs);
+
+                                if (shot != null) {
+                                    Log.i(TAG,
+                                            "RENDER_LAYOUT t=" +
+                                            (info.presentationTimeUs / 1000L) +
+                                            " layout=" +
+                                            shot.layout);
+                                }
                             if (shot != null) {
                                 layout = shot.layout;
                                 if ("split".equals(layout)) {
