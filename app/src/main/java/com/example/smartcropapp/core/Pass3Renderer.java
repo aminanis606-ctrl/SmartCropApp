@@ -209,6 +209,27 @@ public class Pass3Renderer {
                         try {
                             TrajectoryReader.ShotResult shot = trajectory.getShotAt(info.presentationTimeUs);
 
+                                try {
+                                    File diagDir = new File(
+                                            "/storage/emulated/0/Download/SmartReframe/diagnostics");
+                                    diagDir.mkdirs();
+
+                                    File diagFile = new File(
+                                            diagDir,
+                                            "render_layout_diag.txt");
+
+                                    FileWriter fw = new FileWriter(diagFile, true);
+
+                                    fw.write(
+                                            (info.presentationTimeUs / 1000L) +
+                                            " layout=" +
+                                            (shot != null ? shot.layout : "null") +
+                                            "\n");
+
+                                    fw.close();
+                                } catch (Exception ignored) {
+                                }
+
                                 if (shot != null) {
                                     Log.i(TAG,
                                             "RENDER_LAYOUT t=" +
