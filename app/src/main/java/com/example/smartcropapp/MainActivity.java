@@ -397,3 +397,4 @@ public class MainActivity extends AppCompatActivity {
             Log.e(TAG, "Init storage error", e);
         }
     }
+}
