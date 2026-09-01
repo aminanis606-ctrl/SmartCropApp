@@ -40,7 +40,7 @@ public class Pass2Optimizer {
                         Environment.DIRECTORY_DOWNLOADS);
 
         return new File(
-                new File(downloads, "SmartReframeConfig"),
+                new File(new File(downloads, "IkhlasApp"), "config"),
                 "manual_split.txt");
     }
 
@@ -300,74 +300,48 @@ public class Pass2Optimizer {
             Shot shot,
             File configFile) {
 
-        if (configFile == null ||
-                !configFile.exists()) {
-
+        if (configFile == null || !configFile.exists()) {
             return;
         }
 
         try (BufferedReader reader =
                      new BufferedReader(
-                             new FileReader(
-                                     configFile))) {
+                             new FileReader(configFile))) {
 
             String line;
 
-            while ((line =
-                    reader.readLine()) != null) {
-
+            while ((line = reader.readLine()) != null) {
                 line = line.trim();
 
-                if (line.isEmpty() ||
-                        line.startsWith("#")) {
+                if (line.isEmpty() || line.startsWith("#")) {
                     continue;
                 }
 
-                String[] parts =
-                        line.split(",");
+                String[] parts = line.split(",");
 
-                if (parts.length < 1) {
-                    continue;
+                // Format resmi: 0,2,5 = daftar Shot ID yang menjadi split.
+                if (parts.length >= 2) {
+                    for (String part : parts) {
+                        try {
+                            int id = Integer.parseInt(part.trim());
+
+                            if (id == shot.shotId) {
+                                shot.layout = "split";
+
+                                Log.i(
+                                        TAG,
+                                        "Shot " + shot.shotId +
+                                        " -> MANUAL SPLIT");
+
+                                return;
+                            }
+                        } catch (NumberFormatException ignored) {
+                        }
+                    }
                 }
-
-                int id =
-                        Integer.parseInt(
-                                parts[0].trim());
-
-                if (id != shot.shotId) {
-                    continue;
-                }
-
-                shot.layout = "split";
-
-                if (parts.length >= 3) {
-
-                    shot.topX =
-                            clamp(
-                                    Float.parseFloat(
-                                            parts[1].trim()),
-                                    0.05f,
-                                    0.95f);
-
-                    shot.bottomX =
-                            clamp(
-                                    Float.parseFloat(
-                                            parts[2].trim()),
-                                    0.05f,
-                                    0.95f);
-                }
-
-                Log.i(
-                        TAG,
-                        "Shot " +
-                        shot.shotId +
-                        " -> MANUAL SPLIT");
-
-                return;
             }
 
         } catch (Exception e) {
-
             Log.e(
                     TAG,
                     "Gagal membaca manual_split.txt",
