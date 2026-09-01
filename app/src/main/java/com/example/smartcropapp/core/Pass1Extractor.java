@@ -25,6 +25,8 @@ public class Pass1Extractor {
     private static final int PIXEL_STEP = 4;
 
     private static final float CUT_THRESHOLD = 0.12f;
+    private static final float WEAK_CUT_BRIGHTNESS = 0.085f;
+    private static final float WEAK_CUT_TEXTURE = 0.020f;
 
     private static class FrameFeature {
         long timeMs;
