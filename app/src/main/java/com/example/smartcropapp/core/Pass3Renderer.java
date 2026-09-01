@@ -16,6 +16,7 @@ import com.example.smartcropapp.render.CropShaderProgram;
 import com.example.smartcropapp.render.GlRenderContext;
 
 import java.io.File;
+import java.io.FileWriter;
 import java.nio.ByteBuffer;
 
 public class Pass3Renderer {
@@ -244,6 +245,30 @@ public class Pass3Renderer {
                                 " topY=" + topY +
                                 " botX=" + botX +
                                 " botY=" + botY);
+
+                        try {
+                            File diagDir = new File(
+                                    "/storage/emulated/0/Download/SmartReframe/diagnostics");
+                            diagDir.mkdirs();
+
+                            File diagFile = new File(
+                                    diagDir,
+                                    "render_split_diag.txt");
+
+                            FileWriter fw =
+                                    new FileWriter(diagFile, true);
+
+                            fw.write(
+                                    (info.presentationTimeUs / 1000L) +
+                                    " topX=" + topX +
+                                    " topY=" + topY +
+                                    " botX=" + botX +
+                                    " botY=" + botY +
+                                    "\\n");
+
+                            fw.close();
+                        } catch (Exception ignored) {
+                        }
 
                         // Draw Top Panel (Speaker A)
                         GLES20.glViewport(0, panelH, OUTPUT_WIDTH, panelH);
