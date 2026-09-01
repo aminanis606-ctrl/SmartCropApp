@@ -236,6 +236,15 @@ public class Pass3Renderer {
                             0.1f, 1f);
 
                     if ("split".equals(layout)) {
+                        Log.i(
+                                TAG,
+                                "RENDER_SPLIT t=" +
+                                (info.presentationTimeUs / 1000L) +
+                                " topX=" + topX +
+                                " topY=" + topY +
+                                " botX=" + botX +
+                                " botY=" + botY);
+
                         // Draw Top Panel (Speaker A)
                         GLES20.glViewport(0, panelH, OUTPUT_WIDTH, panelH);
                         shader.draw(glContext.getDecoderTextureId(), stMatrix, topX, topY, cropWidthNorm, cropHeightNorm);
