@@ -18,7 +18,7 @@ public class Pass1Extractor {
 
     private static final String TAG = "Pass1Extractor";
 
-    private static final long INTERVAL_US = 500_000L;
+    private static final long INTERVAL_US = 250_000L;
 
     private static final int GRID_X = 12;
     private static final int GRID_Y = 8;
