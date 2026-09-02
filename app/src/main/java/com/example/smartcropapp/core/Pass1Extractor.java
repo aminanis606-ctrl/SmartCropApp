@@ -32,15 +32,26 @@ public class Pass1Extractor {
         long timeMs;
         float[] brightness;
         float[] texture;
+        float[] contrast;
+        float[] edge;
+        float[] verticalEdge;
+        float[] horizontalEdge;
 
         FrameFeature(
                 long timeMs,
                 float[] brightness,
-                float[] texture) {
-
+                float[] texture,
+                float[] contrast,
+                float[] edge,
+                float[] verticalEdge,
+                float[] horizontalEdge) {
             this.timeMs = timeMs;
             this.brightness = brightness;
             this.texture = texture;
+            this.contrast = contrast;
+            this.edge = edge;
+            this.verticalEdge = verticalEdge;
+            this.horizontalEdge = horizontalEdge;
         }
     }
 
@@ -246,130 +257,128 @@ public class Pass1Extractor {
             Bitmap bitmap,
             long timeMs) {
 
-        float[] brightness =
-                new float[GRID_X * GRID_Y];
+        int cells = GRID_X * GRID_Y;
 
-        float[] texture =
-                new float[GRID_X * GRID_Y];
+        float[] brightness = new float[cells];
+        float[] texture = new float[cells];
+        float[] contrast = new float[cells];
+        float[] edge = new float[cells];
+        float[] verticalEdge = new float[cells];
+        float[] horizontalEdge = new float[cells];
 
-        int width =
-                bitmap.getWidth();
+        int width = bitmap.getWidth();
+        int height = bitmap.getHeight();
 
-        int height =
-                bitmap.getHeight();
+        int cellW = Math.max(1, width / GRID_X);
+        int cellH = Math.max(1, height / GRID_Y);
 
-        int cellW =
-                Math.max(
-                        1,
-                        width / GRID_X);
+        for (int gy = 0; gy < GRID_Y; gy++) {
+            for (int gx = 0; gx < GRID_X; gx++) {
 
-        int cellH =
-                Math.max(
-                        1,
-                        height / GRID_Y);
-
-        for (int gy = 0;
-             gy < GRID_Y;
-             gy++) {
-
-            for (int gx = 0;
-                 gx < GRID_X;
-                 gx++) {
-
-                int startX =
-                        gx * cellW;
-
-                int startY =
-                        gy * cellH;
-
-                int endX =
-                        Math.min(
-                                width,
-                                startX + cellW);
-
-                int endY =
-                        Math.min(
-                                height,
-                                startY + cellH);
+                int startX = gx * cellW;
+                int startY = gy * cellH;
+                int endX = Math.min(width, startX + cellW);
+                int endY = Math.min(height, startY + cellH);
 
                 float sum = 0f;
+                float squareSum = 0f;
                 float textureSum = 0f;
+                float edgeSum = 0f;
+                float verticalSum = 0f;
+                float horizontalSum = 0f;
                 int count = 0;
 
-                for (int y = startY;
-                     y < endY;
-                     y += PIXEL_STEP) {
+                for (int y = startY; y < endY; y += PIXEL_STEP) {
+                    for (int x = startX; x < endX; x += PIXEL_STEP) {
 
-                    for (int x = startX;
-                         x < endX;
-                         x += PIXEL_STEP) {
+                        int pixel = bitmap.getPixel(x, y);
 
-                        int pixel =
-                                bitmap.getPixel(
-                                        x,
-                                        y);
+                        int r = (pixel >> 16) & 0xff;
+                        int g = (pixel >> 8) & 0xff;
+                        int b = pixel & 0xff;
 
-                        int r =
-                                (pixel >> 16) & 0xff;
-
-                        int g =
-                                (pixel >> 8) & 0xff;
-
-                        int b =
-                                pixel & 0xff;
-
-                        float gray =
-                                (r + g + b) / 765f;
+                        float gray = (r + g + b) / 765f;
 
                         sum += gray;
+                        squareSum += gray * gray;
+
+                        float dx = 0f;
+                        float dy = 0f;
 
                         if (x + PIXEL_STEP < endX) {
+                            int p2 = bitmap.getPixel(
+                                    x + PIXEL_STEP,
+                                    y);
 
-                            int p2 =
-                                    bitmap.getPixel(
-                                            x + PIXEL_STEP,
-                                            y);
-
-                            int r2 =
-                                    (p2 >> 16) & 0xff;
-
-                            int g2 =
-                                    (p2 >> 8) & 0xff;
-
-                            int b2 =
-                                    p2 & 0xff;
+                            int r2 = (p2 >> 16) & 0xff;
+                            int g2 = (p2 >> 8) & 0xff;
+                            int b2 = p2 & 0xff;
 
                             float gray2 =
                                     (r2 + g2 + b2) / 765f;
 
-                            textureSum +=
-                                    Math.abs(
-                                            gray - gray2);
+                            dx = Math.abs(gray - gray2);
+                            horizontalSum += dx;
                         }
+
+                        if (y + PIXEL_STEP < endY) {
+                            int p3 = bitmap.getPixel(
+                                    x,
+                                    y + PIXEL_STEP);
+
+                            int r3 = (p3 >> 16) & 0xff;
+                            int g3 = (p3 >> 8) & 0xff;
+                            int b3 = p3 & 0xff;
+
+                            float gray3 =
+                                    (r3 + g3 + b3) / 765f;
+
+                            dy = Math.abs(gray - gray3);
+                            verticalSum += dy;
+                        }
+
+                        textureSum += dx;
+                        edgeSum += dx + dy;
 
                         count++;
                     }
                 }
 
-                int index =
-                        gy * GRID_X + gx;
+                int index = gy * GRID_X + gx;
 
-                brightness[index] =
-                        count == 0
-                                ? 0f
-                                : sum / count;
+                if (count == 0) {
+                    brightness[index] = 0f;
+                    texture[index] = 0f;
+                    contrast[index] = 0f;
+                    edge[index] = 0f;
+                    verticalEdge[index] = 0f;
+                    horizontalEdge[index] = 0f;
+                } else {
+                    float mean = sum / count;
+                    float variance =
+                            Math.max(
+                                    0f,
+                                    (squareSum / count)
+                                            - (mean * mean));
 
-                texture[index] =
-                        count == 0
-                                ? 0f
-                                : textureSum / count;
+                    brightness[index] = mean;
+                    texture[index] = textureSum / count;
+                    contrast[index] = (float) Math.sqrt(variance);
+                    edge[index] = edgeSum / count;
+                    verticalEdge[index] = verticalSum / count;
+                    horizontalEdge[index] = horizontalSum / count;
+                }
             }
         }
 
         return new FrameFeature(
                 timeMs,
                 brightness,
-                texture);
+                texture,
+                contrast,
+                edge,
+                verticalEdge,
+                horizontalEdge);
     }
 
     private static float histogramDiff(
@@ -457,6 +466,54 @@ public class Pass1Extractor {
             sample.put(
                     "texture",
                     texture);
+
+            JSONArray contrast =
+                    new JSONArray();
+
+            for (float value :
+                    frame.contrast) {
+                contrast.put((double) value);
+            }
+
+            JSONArray edge =
+                    new JSONArray();
+
+            for (float value :
+                    frame.edge) {
+                edge.put((double) value);
+            }
+
+            JSONArray verticalEdge =
+                    new JSONArray();
+
+            for (float value :
+                    frame.verticalEdge) {
+                verticalEdge.put((double) value);
+            }
+
+            JSONArray horizontalEdge =
+                    new JSONArray();
+
+            for (float value :
+                    frame.horizontalEdge) {
+                horizontalEdge.put((double) value);
+            }
+
+            sample.put(
+                    "contrast",
+                    contrast);
+
+            sample.put(
+                    "edge",
+                    edge);
+
+            sample.put(
+                    "verticalEdge",
+                    verticalEdge);
+
+            sample.put(
+                    "horizontalEdge",
+                    horizontalEdge);
 
             samples.put(sample);
         }

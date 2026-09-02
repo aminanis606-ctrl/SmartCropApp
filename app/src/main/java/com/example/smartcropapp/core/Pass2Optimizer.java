@@ -60,15 +60,26 @@ public class Pass2Optimizer {
         long timeMs;
         float[] brightness;
         float[] texture;
+        float[] contrast;
+        float[] edge;
+        float[] verticalEdge;
+        float[] horizontalEdge;
 
         FrameSample(
                 long timeMs,
                 float[] brightness,
-                float[] texture) {
-
+                float[] texture,
+                float[] contrast,
+                float[] edge,
+                float[] verticalEdge,
+                float[] horizontalEdge) {
             this.timeMs = timeMs;
             this.brightness = brightness;
             this.texture = texture;
+            this.contrast = contrast;
+            this.edge = edge;
+            this.verticalEdge = verticalEdge;
+            this.horizontalEdge = horizontalEdge;
         }
     }
 
@@ -247,15 +258,29 @@ public class Pass2Optimizer {
                             sample.optJSONArray(
                                     "texture");
 
-                    if (b == null ||
-                            t == null) {
+                    JSONArray c =
+                            sample.optJSONArray(
+                                    "contrast");
+
+                    JSONArray e =
+                            sample.optJSONArray(
+                                    "edge");
+
+                    JSONArray ve =
+                            sample.optJSONArray(
+                                    "verticalEdge");
+
+                    JSONArray he =
+                            sample.optJSONArray(
+                                    "horizontalEdge");
+
+                    if (b == null || t == null) {
                         continue;
                     }
 
-                    int n =
-                            Math.min(
-                                    b.length(),
-                                    t.length());
+                    int n = Math.min(
+                            b.length(),
+                            t.length());
 
                     if (n == 0) {
                         continue;
@@ -267,19 +292,47 @@ public class Pass2Optimizer {
                     float[] texture =
                             new float[n];
 
+                    float[] contrast =
+                            new float[n];
+
+                    float[] edge =
+                            new float[n];
+
+                    float[] verticalEdge =
+                            new float[n];
+
+                    float[] horizontalEdge =
+                            new float[n];
+
                     for (int k = 0;
                          k < n;
                          k++) {
 
                         brightness[k] =
-                                (float) b.optDouble(
-                                        k,
-                                        0);
+                                (float) b.optDouble(k, 0);
 
                         texture[k] =
-                                (float) t.optDouble(
-                                        k,
-                                        0);
+                                (float) t.optDouble(k, 0);
+
+                        contrast[k] =
+                                c == null
+                                        ? 0f
+                                        : (float) c.optDouble(k, 0);
+
+                        edge[k] =
+                                e == null
+                                        ? 0f
+                                        : (float) e.optDouble(k, 0);
+
+                        verticalEdge[k] =
+                                ve == null
+                                        ? 0f
+                                        : (float) ve.optDouble(k, 0);
+
+                        horizontalEdge[k] =
+                                he == null
+                                        ? 0f
+                                        : (float) he.optDouble(k, 0);
                     }
 
                     shot.samples.add(
@@ -288,7 +341,11 @@ public class Pass2Optimizer {
                                             "t",
                                             shot.startMs),
                                     brightness,
-                                    texture));
+                                    texture,
+                                    contrast,
+                                    edge,
+                                    verticalEdge,
+                                    horizontalEdge));
                 }
             }
 
@@ -470,7 +527,6 @@ public class Pass2Optimizer {
 
     private static Point estimateSubject(
             List<FrameSample> samples) {
-
         if (samples.isEmpty()) {
             return new Point(
                     DEFAULT_X,
@@ -478,45 +534,45 @@ public class Pass2Optimizer {
                     DEFAULT_SIZE);
         }
 
-        /*
-         * Cari area paling aktif secara spasial.
-         * Texture menjadi sinyal utama.
-         * Brightness hanya pendukung.
-         *
-         * Grid Pass1 = 12 x 8.
-         */
         final int gridX = 12;
         final int gridY = 8;
 
-        double[] score =
-                new double[gridX * gridY];
-
+        double[] score = new double[gridX * gridY];
         int validFrames = 0;
 
         for (FrameSample sample : samples) {
-
-            if (sample.texture == null ||
-                    sample.brightness == null) {
+            if (sample == null ||
+                    sample.edge == null ||
+                    sample.contrast == null ||
+                    sample.verticalEdge == null) {
                 continue;
             }
 
-            int n =
+            int n = Math.min(
+                    score.length,
                     Math.min(
-                            score.length,
+                            sample.edge.length,
                             Math.min(
-                                    sample.texture.length,
-                                    sample.brightness.length));
+                                    sample.contrast.length,
+                                    sample.verticalEdge.length)));
 
             for (int i = 0; i < n; i++) {
-
                 /*
-                 * Texture lebih dominan.
-                 * Brightness mencegah area yang
-                 * benar-benar datar dipilih.
+                 * V2-B:
+                 * Edge = sinyal utama struktur.
+                 * Vertical edge = pendukung bentuk tubuh.
+                 * Contrast = pemisah subjek/background.
+                 * Brightness hanya sedikit membantu.
+                 *
+                 * Tidak ada aturan khusus untuk neon.
                  */
-                score[i] +=
-                        sample.texture[i] * 0.75 +
-                        sample.brightness[i] * 0.25;
+                double value =
+                        sample.edge[i] * 0.45 +
+                        sample.verticalEdge[i] * 0.25 +
+                        sample.contrast[i] * 0.25 +
+                        sample.brightness[i] * 0.05;
+
+                score[i] += Math.max(0.0, value);
             }
 
             validFrames++;
@@ -529,52 +585,24 @@ public class Pass2Optimizer {
                     DEFAULT_SIZE);
         }
 
-        /*
-         * Hitung centroid berbobot, bukan sekadar
-         * mengambil satu cell tertinggi.
-         *
-         * Ini mengurangi kecenderungan memilih
-         * satu titik noise.
-         */
         double totalWeight = 0;
         double weightedX = 0;
         double weightedY = 0;
 
         for (int y = 1; y < gridY - 1; y++) {
-
             for (int x = 0; x < gridX; x++) {
+                int index = y * gridX + x;
 
-                int index =
-                        y * gridX + x;
-
-                double value =
-                        score[index] /
-                        validFrames;
-
-                /*
-                 * Kurangi kontribusi background
-                 * yang sangat lemah.
-                 */
-                value =
-                        Math.max(
-                                0,
-                                value);
+                double value = score[index] / validFrames;
+                value = Math.max(0, value);
 
                 totalWeight += value;
 
-                float cx =
-                        (x + 0.5f) /
-                        gridX;
+                float cx = (x + 0.5f) / gridX;
+                float cy = (y + 0.5f) / gridY;
 
-                float cy =
-                        (y + 0.5f) /
-                        gridY;
-
-                weightedX +=
-                        cx * value;
-
-                weightedY +=
-                        cy * value;
+                weightedX += cx * value;
+                weightedY += cy * value;
             }
         }
 
@@ -586,33 +614,31 @@ public class Pass2Optimizer {
         }
 
         float centerX =
-                (float)
-                (weightedX / totalWeight);
-
+                (float) (weightedX / totalWeight);
         float centerY =
-                (float)
-                (weightedY / totalWeight);
+                (float) (weightedY / totalWeight);
 
         /*
          * Subject center guard:
          * hindari centroid jatuh terlalu dekat
          * edge akibat noise.
          */
-        centerX =
-                clamp(
-                        centerX,
-                        0.12f,
-                        0.88f);
+        centerX = clamp(
+                centerX,
+                0.12f,
+                0.88f);
 
-        centerY =
-                clamp(
-                        centerY,
-                        0.15f,
-                        0.85f);
+        centerY = clamp(
+                centerY,
+                0.15f,
+                0.85f);
+
+        float x = centerX;
+        float y = centerY;
 
         return new Point(
-                centerX,
-                centerY,
+                x,
+                y,
                 DEFAULT_SIZE);
     }
 
@@ -792,67 +818,52 @@ public class Pass2Optimizer {
 
     private static Point estimateSingleFrame(
             FrameSample sample) {
-
         if (sample == null ||
-                sample.texture == null ||
-                sample.texture.length == 0) {
-
+                sample.edge == null ||
+                sample.edge.length == 0 ||
+                sample.contrast == null ||
+                sample.verticalEdge == null) {
             return new Point(
                     DEFAULT_X,
                     DEFAULT_Y,
                     DEFAULT_SIZE);
         }
 
-        int gridX = 12;
-        int gridY = 8;
+        final int gridX = 12;
+        final int gridY = 8;
 
         double total = 0;
         double weightedX = 0;
         double weightedY = 0;
 
-        int n =
+        int n = Math.min(
+                gridX * gridY,
                 Math.min(
-                        gridX * gridY,
+                        sample.edge.length,
                         Math.min(
-                                sample.texture.length,
-                                sample.brightness.length));
+                                sample.contrast.length,
+                                sample.verticalEdge.length)));
 
-        for (int index = 0;
-             index < n;
-             index++) {
+        for (int index = 0; index < n; index++) {
+            int x = index % gridX;
+            int y = index / gridX;
 
-            int x =
-                    index % gridX;
-
-            int y =
-                    index / gridX;
-
-            if (y == 0 ||
-                    y == gridY - 1) {
+            if (y == 0 || y == gridY - 1) {
                 continue;
             }
 
-            float texture =
-                    sample.texture[index];
-
-            float brightness =
-                    sample.brightness[index];
-
             double weight =
-                    texture * 0.75 +
-                    brightness * 0.25;
+                    sample.edge[index] * 0.45 +
+                    sample.verticalEdge[index] * 0.25 +
+                    sample.contrast[index] * 0.25 +
+                    sample.brightness[index] * 0.05;
 
             if (weight <= 0) {
                 continue;
             }
 
-            float cx =
-                    (x + 0.5f) /
-                    gridX;
-
-            float cy =
-                    (y + 0.5f) /
-                    gridY;
+            float cx = (x + 0.5f) / gridX;
+            float cy = (y + 0.5f) / gridY;
 
             total += weight;
             weightedX += cx * weight;
@@ -860,26 +871,21 @@ public class Pass2Optimizer {
         }
 
         if (total <= 0.00001) {
-
             return new Point(
                     DEFAULT_X,
                     DEFAULT_Y,
                     DEFAULT_SIZE);
         }
 
-        float x =
-                clamp(
-                        (float)
-                        (weightedX / total),
-                        0.12f,
-                        0.88f);
+        float x = clamp(
+                (float) (weightedX / total),
+                0.12f,
+                0.88f);
 
-        float y =
-                clamp(
-                        (float)
-                        (weightedY / total),
-                        0.15f,
-                        0.85f);
+        float y = clamp(
+                (float) (weightedY / total),
+                0.15f,
+                0.85f);
 
         return new Point(
                 x,
