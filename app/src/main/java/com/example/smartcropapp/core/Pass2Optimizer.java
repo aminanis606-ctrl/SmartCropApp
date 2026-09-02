@@ -404,11 +404,21 @@ public class Pass2Optimizer {
         int frames = 0;
 
         for (FrameSample sample : shot.samples) {
-            if (sample.texture == null || sample.brightness == null) continue;
+            if (sample.texture == null ||
+                sample.brightness == null ||
+                sample.contrast == null ||
+                sample.verticalEdge == null ||
+                sample.horizontalEdge == null) {
+                continue;
+            }
 
             int n = Math.min(
                     GRID_X * GRID_Y,
-                    Math.min(sample.texture.length, sample.brightness.length));
+                    Math.min(
+                            Math.min(sample.texture.length, sample.brightness.length),
+                            Math.min(
+                                    Math.min(sample.contrast.length, sample.verticalEdge.length),
+                                    sample.horizontalEdge.length)));
 
             for (int i = 0; i < n; i++) {
                 int x = i % GRID_X;
@@ -417,8 +427,11 @@ public class Pass2Optimizer {
                 if (y == 0 || y == GRID_Y - 1) continue;
 
                 double score =
-                        sample.texture[i] * 0.75 +
-                        sample.brightness[i] * 0.25;
+                        sample.texture[i] * 0.25 +
+                        sample.verticalEdge[i] * 0.30 +
+                        sample.horizontalEdge[i] * 0.15 +
+                        sample.contrast[i] * 0.25 +
+                        sample.brightness[i] * 0.05;
 
                 col[x] += Math.max(0, score);
             }
@@ -432,29 +445,21 @@ public class Pass2Optimizer {
             col[x] /= frames;
         }
 
-        double left = 0;
-        double right = 0;
-        double center = 0;
-
-        for (int x = 0; x < GRID_X; x++) {
-            if (x < 4) left += col[x];
-            else if (x >= 8) right += col[x];
-            else center += col[x];
-        }
-
         double leftPeak = 0;
         double rightPeak = 0;
         int leftIndex = 0;
         int rightIndex = 0;
 
-        for (int x = 1; x < 5; x++) {
+        // Left candidate: genuinely left side.
+        for (int x = 1; x <= 4; x++) {
             if (col[x] > leftPeak) {
                 leftPeak = col[x];
                 leftIndex = x;
             }
         }
 
-        for (int x = 7; x < 11; x++) {
+        // Right candidate: genuinely right side.
+        for (int x = 7; x <= 10; x++) {
             if (col[x] > rightPeak) {
                 rightPeak = col[x];
                 rightIndex = x;
@@ -468,56 +473,80 @@ public class Pass2Optimizer {
                 Math.max(leftPeak, rightPeak);
 
         double leftPos =
-                ((leftIndex - 1) * col[leftIndex - 1]
-                + leftIndex * col[leftIndex]
-                + (leftIndex + 1) * col[leftIndex + 1])
-                / (col[leftIndex - 1]
-                + col[leftIndex]
-                + col[leftIndex + 1]);
+                ((leftIndex - 1) * col[leftIndex - 1] +
+                 leftIndex * col[leftIndex] +
+                 (leftIndex + 1) * col[leftIndex + 1]) /
+                Math.max(0.0001,
+                        col[leftIndex - 1] +
+                        col[leftIndex] +
+                        col[leftIndex + 1]);
 
         double rightPos =
-                ((rightIndex - 1) * col[rightIndex - 1]
-                + rightIndex * col[rightIndex]
-                + (rightIndex + 1) * col[rightIndex + 1])
-                / (col[rightIndex - 1]
-                + col[rightIndex]
-                + col[rightIndex + 1]);
+                ((rightIndex - 1) * col[rightIndex - 1] +
+                 rightIndex * col[rightIndex] +
+                 (rightIndex + 1) * col[rightIndex + 1]) /
+                Math.max(0.0001,
+                        col[rightIndex - 1] +
+                        col[rightIndex] +
+                        col[rightIndex + 1]);
 
         double separation =
                 (rightPos - leftPos) / (double) GRID_X;
 
-        double sideStrength =
-                (left + right) /
-                Math.max(0.0001, left + right + center);
+        double center = 0;
+        for (int x = 4; x <= 7; x++) {
+            center += col[x];
+        }
+        center /= 4.0;
+
+        double peakVsCenter =
+                Math.min(leftPeak, rightPeak) /
+                Math.max(0.0001, center);
+
+        // Require a genuine valley between the two candidates.
+        double valley = Double.MAX_VALUE;
+        for (int x = leftIndex + 1; x < rightIndex; x++) {
+            valley = Math.min(valley, col[x]);
+        }
+
+        double valleyRatio =
+                valley / Math.max(0.0001, Math.min(leftPeak, rightPeak));
 
         Log.i(TAG,
                 "AUTO_SPLIT_DIAG shot=" + shot.shotId
-                + " leftIndex=" + leftIndex
-                + " rightIndex=" + rightIndex
-                + " leftPeak=" + leftPeak
-                + " rightPeak=" + rightPeak
-                + " balance=" + balance
-                + " separation=" + separation
-                + " sideStrength=" + sideStrength
-                + " col=" + java.util.Arrays.toString(col));
+                        + " leftIndex=" + leftIndex
+                        + " rightIndex=" + rightIndex
+                        + " leftPeak=" + leftPeak
+                        + " rightPeak=" + rightPeak
+                        + " balance=" + balance
+                        + " separation=" + separation
+                        + " peakVsCenter=" + peakVsCenter
+                        + " valleyRatio=" + valleyRatio
+                        + " col=" + java.util.Arrays.toString(col));
 
+        // Both sides must contain comparable strong structures.
         if (balance < 0.55) return false;
+
+        // Subjects must be spatially separated.
         if (separation < 0.60) return false;
-        if (sideStrength < 0.48) return false;
+
+        // Each side must beat the central region.
+        if (peakVsCenter < 1.15) return false;
+
+        // A single broad central subject should not become two subjects.
+        if (valleyRatio > 0.92) return false;
 
         shot.layout = "split";
 
-        shot.topX =
-                clamp(
-                        (leftIndex + 0.5f) / GRID_X,
-                        0.10f,
-                        0.45f);
+        shot.topX = clamp(
+                (leftIndex + 0.5f) / GRID_X,
+                0.10f,
+                0.45f);
 
-        shot.bottomX =
-                clamp(
-                        (rightIndex + 0.5f) / GRID_X,
-                        0.55f,
-                        0.90f);
+        shot.bottomX = clamp(
+                (rightIndex + 0.5f) / GRID_X,
+                0.55f,
+                0.90f);
 
         shot.topY = DEFAULT_Y;
         shot.bottomY = DEFAULT_Y;
