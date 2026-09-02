@@ -255,7 +255,7 @@ public class Pass3Renderer {
                     }
 
                     // Calculate aspect ratio corrected crop size
-                    float cropWidthNorm = 0.5f; // For split view
+                    float cropWidthNorm = 0.40f; // For split view
                     float cropHeightNorm = clamp(
                             cropWidthNorm * (panelH / (float) OUTPUT_WIDTH) * (srcWidth / (float) srcHeight),
                             0.1f, 1f);
