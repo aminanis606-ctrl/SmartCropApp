@@ -324,80 +324,21 @@ public class TrajectoryReader {
                 null);
     }
 
-    private Point interpolate(
-            ShotData sd,
-            long timeMs) {
-
+    private Point interpolate(ShotData sd, long timeMs) {
         if (sd.points.isEmpty()) {
-
-            return new Point(
-                    0.5f,
-                    0.4f,
-                    0.3f);
+            return new Point(0.5f, 0.4f, 0.3f);
         }
 
-        if (sd.points.size() == 1) {
-            return sd.points.get(0);
+        // No interpolation/smoothing.
+        // Use the latest trajectory point at or before this timestamp.
+        Point result = sd.points.get(0);
+
+        for (int i = 0; i < sd.points.size(); i++) {
+            if (sd.times.get(i) > timeMs) break;
+            result = sd.points.get(i);
         }
 
-        Point prev =
-                sd.points.get(0);
-
-        long prevT =
-                sd.times.get(0);
-
-        for (int i = 0;
-             i < sd.points.size();
-             i++) {
-
-            long t =
-                    sd.times.get(i);
-
-            Point p =
-                    sd.points.get(i);
-
-            if (t >= timeMs) {
-
-                if (i == 0) {
-                    return p;
-                }
-
-                long span =
-                        t - prevT;
-
-                float ratio =
-                        span <= 0
-                                ? 0f
-                                : (float)
-                                  (timeMs - prevT)
-                                  / span;
-
-                ratio =
-                        clamp(
-                                ratio,
-                                0f,
-                                1f);
-
-                return new Point(
-                        prev.x +
-                                (p.x - prev.x)
-                                * ratio,
-
-                        prev.y +
-                                (p.y - prev.y)
-                                * ratio,
-
-                        prev.size +
-                                (p.size - prev.size)
-                                * ratio);
-            }
-
-            prev = p;
-            prevT = t;
-        }
-
-        return sd.points.get(
-                sd.points.size() - 1);
+        return result;
     }
 
     private static String normalizeLayout(
