@@ -548,8 +548,8 @@ public class Pass2Optimizer {
                 0.55f,
                 0.90f);
 
-        shot.topY = DEFAULT_Y;
-        shot.bottomY = DEFAULT_Y;
+        shot.topY = 0.60f;
+        shot.bottomY = 0.60f;
 
         return true;
     }
