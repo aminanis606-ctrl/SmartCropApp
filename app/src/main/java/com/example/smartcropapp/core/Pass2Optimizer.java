@@ -539,14 +539,14 @@ public class Pass2Optimizer {
         shot.layout = "split";
 
         shot.topX = clamp(
-                (rightIndex + 0.5f) / GRID_X + 0.18f,
-                0.55f,
-                0.90f);
+                (rightIndex + 0.5f) / GRID_X - 0.18f,
+                0.20f,
+                0.85f);
 
         shot.bottomX = clamp(
-                (leftIndex + 0.5f) / GRID_X - 0.18f,
-                0.10f,
-                0.45f);
+                (leftIndex + 0.5f) / GRID_X + 0.18f,
+                0.15f,
+                0.80f);
 
         shot.topY = 0.60f;
         shot.bottomY = 0.60f;

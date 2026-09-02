@@ -16,18 +16,28 @@ public class CropShaderProgram {
             "attribute vec4 aPosition;\n" +
             "attribute vec4 aTextureCoord;\n" +
             "varying vec2 vTextureCoord;\n" +
+            "varying vec2 vPosition;\n" +
             "void main() {\n" +
             "    gl_Position = uMVPMatrix * aPosition;\n" +
             "    vTextureCoord = (uSTMatrix * aTextureCoord).xy;\n" +
+            "    vPosition = aPosition.xy * 0.5 + 0.5;\n" +
             "}\n";
 
     private static final String FRAGMENT_SHADER =
             "#extension GL_OES_EGL_image_external : require\n" +
             "precision mediump float;\n" +
             "uniform samplerExternalOES sTexture;\n" +
+            "uniform float uFeatherBottom;\n" +
             "varying vec2 vTextureCoord;\n" +
+            "varying vec2 vPosition;\n" +
             "void main() {\n" +
-            "    gl_FragColor = texture2D(sTexture, vTextureCoord);\n" +
+            "    vec4 color = texture2D(sTexture, vTextureCoord);\n" +
+            "    float alpha = 1.0;\n" +
+            "    if (uFeatherBottom > 0.0) {\n" +
+            "        float featherStart = uFeatherBottom;\n" +
+            "        alpha = smoothstep(0.0, featherStart, vPosition.y);\n" +
+            "    }\n" +
+            "    gl_FragColor = vec4(color.rgb, alpha);\n" +
             "}\n";
 
     private final FloatBuffer vertexBuffer;
@@ -37,6 +47,7 @@ public class CropShaderProgram {
     private final int aTextureCoordHandle;
     private final int uMVPMatrixHandle;
     private final int uSTMatrixHandle;
+    private final int uFeatherBottomHandle;
 
     private static final float[] VERTEX_DATA = {
             -1f, -1f, 0f, 0f, 0f,
@@ -80,6 +91,11 @@ public class CropShaderProgram {
                 GLES20.glGetUniformLocation(
                         program,
                         "uSTMatrix");
+
+        uFeatherBottomHandle =
+                GLES20.glGetUniformLocation(
+                        program,
+                        "uFeatherBottom");
     }
 
     public void draw(
@@ -89,6 +105,25 @@ public class CropShaderProgram {
             float cropCenterY,
             float cropWidthNorm,
             float cropHeightNorm) {
+
+        draw(
+                textureId,
+                stMatrix,
+                cropCenterX,
+                cropCenterY,
+                cropWidthNorm,
+                cropHeightNorm,
+                0.0f);
+    }
+
+    public void draw(
+            int textureId,
+            float[] stMatrix,
+            float cropCenterX,
+            float cropCenterY,
+            float cropWidthNorm,
+            float cropHeightNorm,
+            float featherBottom) {
 
         GLES20.glUseProgram(program);
 
@@ -226,6 +261,10 @@ public class CropShaderProgram {
                 false,
                 combinedST,
                 0);
+
+        GLES20.glUniform1f(
+                uFeatherBottomHandle,
+                featherBottom);
 
         GLES20.glActiveTexture(
                 GLES20.GL_TEXTURE0);
