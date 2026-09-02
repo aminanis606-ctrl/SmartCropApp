@@ -528,7 +528,7 @@ public class Pass2Optimizer {
         if (balance < 0.55) return false;
 
         // Subjects must be spatially separated.
-        if (separation < 0.60) return false;
+        if (separation < 0.35) return false;
 
         // Each side must beat the central region.
         if (peakVsCenter < 1.15) return false;
