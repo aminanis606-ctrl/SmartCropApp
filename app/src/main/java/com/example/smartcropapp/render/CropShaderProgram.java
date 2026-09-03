@@ -95,24 +95,6 @@ public class CropShaderProgram {
             float cropWidthNorm,
             float cropHeightNorm) {
 
-        draw(
-                textureId,
-                stMatrix,
-                cropCenterX,
-                cropCenterY,
-                cropWidthNorm,
-                cropHeightNorm,
-                0.0f);
-    }
-
-    public void draw(
-            int textureId,
-            float[] stMatrix,
-            float cropCenterX,
-            float cropCenterY,
-            float cropWidthNorm,
-            float cropHeightNorm) {
-
         GLES20.glUseProgram(program);
 
         float w = clamp(
