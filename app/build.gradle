@@ -39,7 +39,6 @@ android {
 }
 
 dependencies {
-    implementation 'com.google.mlkit:face-detection:16.1.7'
     implementation 'androidx.activity:activity:1.7.0'
     implementation 'com.google.android.material:material:1.9.0'
     implementation 'androidx.appcompat:appcompat:1.6.1'
