@@ -299,18 +299,38 @@ public class Pass3Renderer {
                         } catch (Exception ignored) {
                         }
 
-                        // Draw Top Panel
-                        GLES20.glViewport(0, panelH, OUTPUT_WIDTH, panelH);
+                        // Background video underneath feathered panels.
+                        GLES20.glViewport(0, 0, OUTPUT_WIDTH, OUTPUT_HEIGHT);
                         GLES20.glDisable(GLES20.GL_BLEND);
+                        shader.draw(
+                                glContext.getDecoderTextureId(),
+                                stMatrix,
+                                0.50f,
+                                0.50f,
+                                fullCropWidthNorm,
+                                fullCropHeightNorm);
+
+                        // Split panels: feather top + bottom only.
+                        GLES20.glEnable(GLES20.GL_BLEND);
+                        GLES20.glBlendFunc(
+                                GLES20.GL_SRC_ALPHA,
+                                GLES20.GL_ONE_MINUS_SRC_ALPHA);
+
+                        final float feather = 0.08f;
+
+                        // Top panel
+                        GLES20.glViewport(0, panelH, OUTPUT_WIDTH, panelH);
                         shader.draw(
                                 glContext.getDecoderTextureId(),
                                 stMatrix,
                                 topX,
                                 topY,
                                 cropWidthNorm,
-                                cropHeightNorm);
+                                cropHeightNorm,
+                                feather,
+                                feather);
 
-                        // Draw Bottom Panel
+                        // Bottom panel
                         GLES20.glViewport(0, 0, OUTPUT_WIDTH, panelH);
                         shader.draw(
                                 glContext.getDecoderTextureId(),
@@ -318,7 +338,11 @@ public class Pass3Renderer {
                                 botX,
                                 botY,
                                 cropWidthNorm,
-                                cropHeightNorm);
+                                cropHeightNorm,
+                                feather,
+                                feather);
+
+                        GLES20.glDisable(GLES20.GL_BLEND);
 
                     } else {
                         // Draw Single Full Screen (Center Crop)

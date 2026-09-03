@@ -24,15 +24,24 @@ public class CropShaderProgram {
             "}\n";
 
     private static final String FRAGMENT_SHADER =
-            "#extension GL_OES_EGL_image_external : require\n" +
-            "precision mediump float;\n" +
-            "uniform samplerExternalOES sTexture;\n" +
-            "varying vec2 vTextureCoord;\n" +
-            "varying vec2 vPosition;\n" +
-            "void main() {\n" +
-            "    vec4 color = texture2D(sTexture, vTextureCoord);\n" +
-            "    gl_FragColor = color;\n" +
-            "}\n";
+            "#extension GL_OES_EGL_image_external : require\\n" +
+            "precision mediump float;\\n" +
+            "uniform samplerExternalOES sTexture;\\n" +
+            "uniform float uFeatherTop;\\n" +
+            "uniform float uFeatherBottom;\\n" +
+            "varying vec2 vTextureCoord;\\n" +
+            "varying vec2 vPosition;\\n" +
+            "void main() {\\n" +
+            "    vec4 color = texture2D(sTexture, vTextureCoord);\\n" +
+            "    float alpha = 1.0;\\n" +
+            "    if (uFeatherTop > 0.0) {\\n" +
+            "        alpha *= smoothstep(0.0, uFeatherTop, 1.0 - vPosition.y);\\n" +
+            "    }\\n" +
+            "    if (uFeatherBottom > 0.0) {\\n" +
+            "        alpha *= smoothstep(0.0, uFeatherBottom, vPosition.y);\\n" +
+            "    }\\n" +
+            "    gl_FragColor = vec4(color.rgb, color.a * alpha);\\n" +
+            "}\\n";
 
     private final FloatBuffer vertexBuffer;
 
@@ -41,6 +50,8 @@ public class CropShaderProgram {
     private final int aTextureCoordHandle;
     private final int uMVPMatrixHandle;
     private final int uSTMatrixHandle;
+    private final int uFeatherTopHandle;
+    private final int uFeatherBottomHandle;
 
     private static final float[] VERTEX_DATA = {
             -1f, -1f, 0f, 0f, 0f,
@@ -85,6 +96,16 @@ public class CropShaderProgram {
                         program,
                         "uSTMatrix");
 
+        uFeatherTopHandle =
+                GLES20.glGetUniformLocation(
+                        program,
+                        "uFeatherTop");
+
+        uFeatherBottomHandle =
+                GLES20.glGetUniformLocation(
+                        program,
+                        "uFeatherBottom");
+
     }
 
     public void draw(
@@ -96,6 +117,9 @@ public class CropShaderProgram {
             float cropHeightNorm) {
 
         GLES20.glUseProgram(program);
+
+        GLES20.glUniform1f(uFeatherTopHandle, 0.0f);
+        GLES20.glUniform1f(uFeatherBottomHandle, 0.0f);
 
         float w = clamp(
                 cropWidthNorm,
@@ -249,6 +273,75 @@ public class CropShaderProgram {
 
         GLES20.glDisableVertexAttribArray(
                 aTextureCoordHandle);
+    }
+
+    public void draw(
+            int textureId,
+            float[] stMatrix,
+            float cropCenterX,
+            float cropCenterY,
+            float cropWidthNorm,
+            float cropHeightNorm,
+            float featherTop,
+            float featherBottom) {
+
+        GLES20.glUseProgram(program);
+
+        GLES20.glUniform1f(uFeatherTopHandle, featherTop);
+        GLES20.glUniform1f(uFeatherBottomHandle, featherBottom);
+
+        float w = clamp(cropWidthNorm, 0.05f, 1.0f);
+        float h = clamp(cropHeightNorm, 0.05f, 1.0f);
+
+        float halfW = w * 0.5f;
+        float halfH = h * 0.5f;
+
+        float cx = clamp(cropCenterX, halfW, 1.0f - halfW);
+        float cy = clamp(cropCenterY, halfH, 1.0f - halfH);
+
+        float left = cx - halfW;
+        float right = cx + halfW;
+        float bottom = cy - halfH;
+        float top = cy + halfH;
+
+        float sx = right - left;
+        float sy = top - bottom;
+
+        float[] cropMatrix = new float[16];
+        Matrix.setIdentityM(cropMatrix, 0);
+        Matrix.translateM(cropMatrix, 0, left, bottom, 0f);
+        Matrix.scaleM(cropMatrix, 0, sx, sy, 1f);
+
+        float[] combinedST = new float[16];
+        Matrix.multiplyMM(combinedST, 0, cropMatrix, 0, stMatrix, 0);
+
+        float[] mvpMatrix = new float[16];
+        Matrix.setIdentityM(mvpMatrix, 0);
+
+        vertexBuffer.position(0);
+        GLES20.glVertexAttribPointer(
+                aPositionHandle, 3, GLES20.GL_FLOAT, false, 20, vertexBuffer);
+        GLES20.glEnableVertexAttribArray(aPositionHandle);
+
+        vertexBuffer.position(3);
+        GLES20.glVertexAttribPointer(
+                aTextureCoordHandle, 2, GLES20.GL_FLOAT, false, 20, vertexBuffer);
+        GLES20.glEnableVertexAttribArray(aTextureCoordHandle);
+
+        GLES20.glUniformMatrix4fv(
+                uMVPMatrixHandle, 1, false, mvpMatrix, 0);
+
+        GLES20.glUniformMatrix4fv(
+                uSTMatrixHandle, 1, false, combinedST, 0);
+
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
+        GLES20.glBindTexture(
+                GLES11Ext.GL_TEXTURE_EXTERNAL_OES, textureId);
+
+        GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
+
+        GLES20.glDisableVertexAttribArray(aPositionHandle);
+        GLES20.glDisableVertexAttribArray(aTextureCoordHandle);
     }
 
     private float clamp(
