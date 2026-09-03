@@ -36,6 +36,7 @@ public class Pass1Extractor {
         float[] edge;
         float[] verticalEdge;
         float[] horizontalEdge;
+        float[] motion;
 
         FrameFeature(
                 long timeMs,
@@ -44,7 +45,8 @@ public class Pass1Extractor {
                 float[] contrast,
                 float[] edge,
                 float[] verticalEdge,
-                float[] horizontalEdge) {
+                float[] horizontalEdge,
+                float[] motion) {
             this.timeMs = timeMs;
             this.brightness = brightness;
             this.texture = texture;
@@ -52,6 +54,7 @@ public class Pass1Extractor {
             this.edge = edge;
             this.verticalEdge = verticalEdge;
             this.horizontalEdge = horizontalEdge;
+            this.motion = motion;
         }
     }
 
@@ -127,6 +130,19 @@ public class Pass1Extractor {
                         analyzeFrame(
                                 bitmap,
                                 timeUs / 1000L);
+
+                // TEMPORAL MOTION: per-cell brightness change
+                if (previousBrightness != null &&
+                        previousBrightness.length == feature.brightness.length) {
+
+                    for (int i = 0; i < feature.brightness.length; i++) {
+                        feature.motion[i] =
+                                Math.abs(
+                                        feature.brightness[i] -
+                                        previousBrightness[i]);
+                    }
+                }
+
 
                 if (previousBrightness != null) {
 
@@ -378,7 +394,8 @@ public class Pass1Extractor {
                 contrast,
                 edge,
                 verticalEdge,
-                horizontalEdge);
+                horizontalEdge,
+                new float[brightness.length]);
     }
 
     private static float histogramDiff(
@@ -514,6 +531,17 @@ public class Pass1Extractor {
             sample.put(
                     "horizontalEdge",
                     horizontalEdge);
+
+            JSONArray motion = new JSONArray();
+
+            for (float value :
+                    frame.motion) {
+                motion.put((double) value);
+            }
+
+            sample.put(
+                    "motion",
+                    motion);
 
             samples.put(sample);
         }
