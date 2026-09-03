@@ -179,14 +179,22 @@ public class Pass2Optimizer {
              * Pass 2 mengubahnya menjadi satu
              * titik subject/crop yang stabil.
              */
-            Point point =
-                    estimateSubject(
-                            shot.samples);
+            List<Point> subjectTrack =
+                estimateSubjectTrajectory(
+                        shot.samples);
 
-            writeSingleTrajectory(
-                    shot,
-                    point);
-        }
+        Point point =
+                subjectTrack.isEmpty()
+                        ? new Point(
+                                DEFAULT_X,
+                                DEFAULT_Y,
+                                DEFAULT_SIZE)
+                        : subjectTrack.get(
+                                subjectTrack.size() - 1);
+
+        writeSingleTrajectory(
+                shot,
+                point);
 
         writeTrajectory(
                 shots,
