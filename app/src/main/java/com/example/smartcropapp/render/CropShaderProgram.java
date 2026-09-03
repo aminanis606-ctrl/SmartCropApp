@@ -24,24 +24,24 @@ public class CropShaderProgram {
             "}\n";
 
     private static final String FRAGMENT_SHADER =
-            "#extension GL_OES_EGL_image_external : require\\n" +
-            "precision mediump float;\\n" +
-            "uniform samplerExternalOES sTexture;\\n" +
-            "uniform float uFeatherTop;\\n" +
-            "uniform float uFeatherBottom;\\n" +
-            "varying vec2 vTextureCoord;\\n" +
-            "varying vec2 vPosition;\\n" +
-            "void main() {\\n" +
-            "    vec4 color = texture2D(sTexture, vTextureCoord);\\n" +
-            "    float alpha = 1.0;\\n" +
-            "    if (uFeatherTop > 0.0) {\\n" +
-            "        alpha *= smoothstep(0.0, uFeatherTop, 1.0 - vPosition.y);\\n" +
-            "    }\\n" +
-            "    if (uFeatherBottom > 0.0) {\\n" +
-            "        alpha *= smoothstep(0.0, uFeatherBottom, vPosition.y);\\n" +
-            "    }\\n" +
-            "    gl_FragColor = vec4(color.rgb, color.a * alpha);\\n" +
-            "}\\n";
+            "#extension GL_OES_EGL_image_external : require\n" +
+            "precision mediump float;\n" +
+            "uniform samplerExternalOES sTexture;\n" +
+            "uniform float uFeatherTop;\n" +
+            "uniform float uFeatherBottom;\n" +
+            "varying vec2 vTextureCoord;\n" +
+            "varying vec2 vPosition;\n" +
+            "void main() {\n" +
+            "    vec4 color = texture2D(sTexture, vTextureCoord);\n" +
+            "    float alpha = 1.0;\n" +
+            "    if (uFeatherTop > 0.0) {\n" +
+            "        alpha *= smoothstep(0.0, uFeatherTop, 1.0 - vPosition.y);\n" +
+            "    }\n" +
+            "    if (uFeatherBottom > 0.0) {\n" +
+            "        alpha *= smoothstep(0.0, uFeatherBottom, vPosition.y);\n" +
+            "    }\n" +
+            "    gl_FragColor = vec4(color.rgb, color.a * alpha);\n" +
+            "}\n";
 
     private final FloatBuffer vertexBuffer;
 
