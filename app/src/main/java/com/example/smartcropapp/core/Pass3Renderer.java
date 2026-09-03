@@ -162,7 +162,15 @@ public class Pass3Renderer {
 
         extractor.selectTrack(videoTrackIndex);
 
+        long renderLoopCount = 0;
         while (!encoderDone) {
+            renderLoopCount++;
+            if ((renderLoopCount % 500) == 0) {
+                Log.w(TAG, "RENDER_LOOP count=" + renderLoopCount
+                        + " inputDone=" + inputDone
+                        + " encoderDone=" + encoderDone);
+            }
+
             if (!inputDone) {
                 int inIndex = decoder.dequeueInputBuffer(TIMEOUT_US);
                 if (inIndex >= 0) {
