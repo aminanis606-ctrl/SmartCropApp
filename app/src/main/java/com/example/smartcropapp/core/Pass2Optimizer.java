@@ -950,11 +950,11 @@ public class Pass2Optimizer {
          */
         final float MOTION_MIN = 0.018f;
 
-        final float DEAD_ZONE_X = 0.07f;
-        final float DEAD_ZONE_Y = 0.05f;
+        final float DEAD_ZONE_X = 0.035f;
+        final float DEAD_ZONE_Y = 0.035f;
 
-        final float FOLLOW_GAIN = 0.45f;
-        final float MAX_STEP = 0.055f;
+        final float FOLLOW_GAIN = 0.40f;
+        final float MAX_STEP = 0.025f;
 
         final float VELOCITY_ALPHA = 0.20f;
         final float VELOCITY_DECAY = 0.90f;
@@ -1116,8 +1116,8 @@ public class Pass2Optimizer {
                      * First valid candidate:
                      * langsung lock ke subject.
                      */
-                    trackX = candidateX;
-                    trackY = candidateY;
+                    trackX = clamp(candidateX, DEFAULT_X - MAX_STEP, DEFAULT_X + MAX_STEP);
+                    trackY = clamp(candidateY, DEFAULT_Y - MAX_STEP, DEFAULT_Y + MAX_STEP);
 
                     hasTrack = true;
 
