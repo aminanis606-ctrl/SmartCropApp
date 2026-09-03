@@ -932,13 +932,30 @@ public class Pass2Optimizer {
 
         float trackX = DEFAULT_X;
         float trackY = DEFAULT_Y;
+
         float velocityX = 0f;
         float velocityY = 0f;
+
         boolean hasTrack = false;
 
-        final float ALPHA = 0.55f;
+        /*
+         * CAMERA CONTROLLER V2
+         *
+         * Dead zone:
+         * kandidat kecil tidak menggerakkan kamera.
+         *
+         * Soft follow:
+         * semakin jauh dari dead zone,
+         * semakin besar respons kamera.
+         */
         final float MOTION_MIN = 0.018f;
-        final float JUMP_GATE = 0.28f;
+
+        final float DEAD_ZONE_X = 0.07f;
+        final float DEAD_ZONE_Y = 0.05f;
+
+        final float FOLLOW_GAIN = 0.45f;
+        final float MAX_STEP = 0.055f;
+
         final float VELOCITY_ALPHA = 0.20f;
         final float VELOCITY_DECAY = 0.90f;
 
@@ -949,17 +966,10 @@ public class Pass2Optimizer {
                     sample.edge == null ||
                     sample.contrast == null) {
 
-                if (hasTrack) {
-                    result.add(new Point(
-                            trackX,
-                            trackY,
-                            DEFAULT_SIZE));
-                } else {
-                    result.add(new Point(
-                            DEFAULT_X,
-                            DEFAULT_Y,
-                            DEFAULT_SIZE));
-                }
+                result.add(new Point(
+                        hasTrack ? trackX : DEFAULT_X,
+                        hasTrack ? trackY : DEFAULT_Y,
+                        DEFAULT_SIZE));
 
                 continue;
             }
@@ -1012,18 +1022,15 @@ public class Pass2Optimizer {
                 }
             }
 
+            /*
+             * Tidak ada evidence yang cukup:
+             * pertahankan posisi kamera,
+             * tetapi biarkan velocity mati perlahan.
+             */
             if (peakIndex < 0 || peak < MOTION_MIN) {
 
-                if (hasTrack) {
-                    trackX += velocityX;
-                    trackY += velocityY;
-
-                    velocityX *= VELOCITY_DECAY;
-                    velocityY *= VELOCITY_DECAY;
-
-                    trackX = clamp(trackX, 0.08f, 0.92f);
-                    trackY = clamp(trackY, 0.15f, 0.85f);
-                }
+                velocityX *= VELOCITY_DECAY;
+                velocityY *= VELOCITY_DECAY;
 
                 result.add(new Point(
                         hasTrack ? trackX : DEFAULT_X,
@@ -1105,71 +1112,100 @@ public class Pass2Optimizer {
 
                 if (!hasTrack) {
 
+                    /*
+                     * First valid candidate:
+                     * langsung lock ke subject.
+                     */
                     trackX = candidateX;
                     trackY = candidateY;
+
                     hasTrack = true;
+
+                    velocityX = 0f;
+                    velocityY = 0f;
 
                 } else {
 
-                    float dx =
+                    float errorX =
                             candidateX - trackX;
 
-                    float dy =
+                    float errorY =
                             candidateY - trackY;
 
-                    float distance =
-                            (float)
-                                    Math.sqrt(
-                                            dx * dx +
-                                            dy * dy);
+                    /*
+                     * DEAD ZONE:
+                     * jangan mengejar jitter kecil.
+                     */
+                    float followX =
+                            Math.abs(errorX) <= DEAD_ZONE_X
+                                    ? 0f
+                                    : errorX;
 
-                    if (distance <= JUMP_GATE) {
+                    float followY =
+                            Math.abs(errorY) <= DEAD_ZONE_Y
+                                    ? 0f
+                                    : errorY;
 
-                        float oldX = trackX;
-                        float oldY = trackY;
+                    /*
+                     * Proportional follow.
+                     */
+                    float stepX =
+                            followX * FOLLOW_GAIN;
 
-                        trackX +=
-                                (candidateX - trackX) *
-                                ALPHA;
+                    float stepY =
+                            followY * FOLLOW_GAIN;
 
-                        trackY +=
-                                (candidateY - trackY) *
-                                ALPHA;
+                    /*
+                     * Batasi kecepatan kamera.
+                     */
+                    stepX =
+                            clamp(
+                                    stepX,
+                                    -MAX_STEP,
+                                    MAX_STEP);
 
-                        float measuredVX =
-                                trackX - oldX;
+                    stepY =
+                            clamp(
+                                    stepY,
+                                    -MAX_STEP,
+                                    MAX_STEP);
 
-                        float measuredVY =
-                                trackY - oldY;
+                    float oldX = trackX;
+                    float oldY = trackY;
 
-                        velocityX +=
-                                (measuredVX - velocityX) *
-                                VELOCITY_ALPHA;
+                    trackX += stepX;
+                    trackY += stepY;
 
-                        velocityY +=
-                                (measuredVY - velocityY) *
-                                VELOCITY_ALPHA;
+                    trackX =
+                            clamp(
+                                    trackX,
+                                    0.08f,
+                                    0.92f);
 
-                    } else {
+                    trackY =
+                            clamp(
+                                    trackY,
+                                    0.15f,
+                                    0.85f);
 
-                        // Candidate terlalu jauh:
-                        // pertahankan kontinuitas dengan prediksi velocity.
-                        trackX += velocityX;
-                        trackY += velocityY;
+                    /*
+                     * Velocity hanya digunakan sebagai
+                     * informasi kontinuitas, bukan untuk
+                     * membuat kamera terus bergerak.
+                     */
+                    float measuredVX =
+                            trackX - oldX;
 
-                        velocityX *= VELOCITY_DECAY;
-                        velocityY *= VELOCITY_DECAY;
+                    float measuredVY =
+                            trackY - oldY;
 
-                        trackX = clamp(
-                                trackX,
-                                0.08f,
-                                0.92f);
+                    velocityX +=
+                            (measuredVX - velocityX) *
+                            VELOCITY_ALPHA;
 
-                        trackY = clamp(
-                                trackY,
-                                0.15f,
-                                0.85f);
-                    }
+                    velocityY +=
+                            (measuredVY - velocityY) *
+                            VELOCITY_ALPHA;
                 }
             }
 
