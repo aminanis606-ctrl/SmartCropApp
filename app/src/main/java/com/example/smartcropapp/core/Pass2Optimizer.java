@@ -934,9 +934,9 @@ public class Pass2Optimizer {
         float trackY = DEFAULT_Y;
         boolean hasTrack = false;
 
-        final float ALPHA = 0.35f;
-        final float MOTION_MIN = 0.025f;
-        final float JUMP_GATE = 0.22f;
+        final float ALPHA = 0.55f;
+        final float MOTION_MIN = 0.018f;
+        final float JUMP_GATE = 0.28f;
 
         for (FrameSample sample : samples) {
 
