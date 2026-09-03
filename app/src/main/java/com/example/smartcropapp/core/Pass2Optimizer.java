@@ -64,6 +64,7 @@ public class Pass2Optimizer {
         float[] edge;
         float[] verticalEdge;
         float[] horizontalEdge;
+        float[] motion;
 
         FrameSample(
                 long timeMs,
@@ -72,7 +73,8 @@ public class Pass2Optimizer {
                 float[] contrast,
                 float[] edge,
                 float[] verticalEdge,
-                float[] horizontalEdge) {
+                float[] horizontalEdge,
+                float[] motion) {
             this.timeMs = timeMs;
             this.brightness = brightness;
             this.texture = texture;
@@ -80,6 +82,7 @@ public class Pass2Optimizer {
             this.edge = edge;
             this.verticalEdge = verticalEdge;
             this.horizontalEdge = horizontalEdge;
+            this.motion = motion;
         }
     }
 
@@ -275,6 +278,9 @@ public class Pass2Optimizer {
                     JSONArray he =
                             sample.optJSONArray(
                                     "horizontalEdge");
+                      JSONArray m =
+                              sample.optJSONArray(
+                                      "motion");
 
                     if (b == null || t == null) {
                         continue;
@@ -306,7 +312,11 @@ public class Pass2Optimizer {
                     float[] horizontalEdge =
                             new float[n];
 
+                      float[] motion =
+                              new float[n];
+
                     for (int k = 0;
+
                          k < n;
                          k++) {
 
@@ -335,7 +345,13 @@ public class Pass2Optimizer {
                                 he == null
                                         ? 0f
                                         : (float) he.optDouble(k, 0);
+
+                          motion[k] =
+                                  m == null
+                                  ? 0f
+                                  : (float) m.optDouble(k, 0);
                     }
+
 
                     shot.samples.add(
                             new FrameSample(
@@ -347,7 +363,8 @@ public class Pass2Optimizer {
                                     contrast,
                                     edge,
                                     verticalEdge,
-                                    horizontalEdge));
+                                    horizontalEdge,
+                                      motion));
                 }
             }
 
@@ -893,7 +910,8 @@ public class Pass2Optimizer {
 
     private static Point estimateSubject(
             List<FrameSample> samples) {
-        if (samples.isEmpty()) {
+
+        if (samples == null || samples.isEmpty()) {
             return new Point(
                     DEFAULT_X,
                     DEFAULT_Y,
@@ -902,112 +920,236 @@ public class Pass2Optimizer {
 
         final int gridX = 12;
         final int gridY = 8;
+        final int cells = gridX * gridY;
 
-        double[] score = new double[gridX * gridY];
-        int validFrames = 0;
+        /*
+         * LIGHTWEIGHT HUMAN CANDIDATE TRACKER
+         *
+         * Motion:
+         *   pemicu utama lokasi kandidat.
+         *
+         * Edge + contrast:
+         *   validasi bahwa motion berada pada
+         *   struktur visual, bukan noise.
+         *
+         * Tracking:
+         *   menjaga posisi ketika manusia berhenti
+         *   atau motion sesaat melemah.
+         */
+
+        float trackX = DEFAULT_X;
+        float trackY = DEFAULT_Y;
+        boolean hasTrack = false;
+
+        final float ALPHA = 0.35f;
+        final float MOTION_MIN = 0.025f;
+        final float JUMP_GATE = 0.22f;
 
         for (FrameSample sample : samples) {
+
             if (sample == null ||
+                    sample.motion == null ||
                     sample.edge == null ||
-                    sample.contrast == null ||
-                    sample.verticalEdge == null) {
+                    sample.contrast == null) {
                 continue;
             }
 
             int n = Math.min(
-                    score.length,
+                    cells,
                     Math.min(
-                            sample.edge.length,
+                            sample.motion.length,
                             Math.min(
-                                    sample.contrast.length,
-                                    sample.verticalEdge.length)));
+                                    sample.edge.length,
+                                    sample.contrast.length)));
 
+            if (n <= 0) {
+                continue;
+            }
+
+            double peak = 0.0;
+            int peakIndex = -1;
+
+            /*
+             * Cari kandidat berdasarkan gabungan:
+             *
+             * motion  = 50%
+             * edge    = 30%
+             * contrast= 20%
+             *
+             * Motion tidak boleh berdiri sendiri.
+             */
             for (int i = 0; i < n; i++) {
-                /*
-                 * V2-B:
-                 * Edge = sinyal utama struktur.
-                 * Vertical edge = pendukung bentuk tubuh.
-                 * Contrast = pemisah subjek/background.
-                 * Brightness hanya sedikit membantu.
-                 *
-                 * Tidak ada aturan khusus untuk neon.
-                 */
+
+                int y = i / gridX;
+
+                // Hindari baris paling atas/bawah
+                // yang sering berisi background.
+                if (y == 0 || y == gridY - 1) {
+                    continue;
+                }
+
+                double motion =
+                        Math.max(0.0, sample.motion[i]);
+
+                double edge =
+                        Math.max(0.0, sample.edge[i]);
+
+                double contrast =
+                        Math.max(0.0, sample.contrast[i]);
+
+                double structure =
+                        0.30 * edge +
+                        0.20 * contrast;
+
                 double value =
-                        sample.edge[i] * 0.45 +
-                        sample.verticalEdge[i] * 0.25 +
-                        sample.contrast[i] * 0.25 +
-                        sample.brightness[i] * 0.05;
+                        motion * (0.50 + structure);
 
-                score[i] += Math.max(0.0, value);
+                if (value > peak) {
+                    peak = value;
+                    peakIndex = i;
+                }
             }
 
-            validFrames++;
+            /*
+             * Jika tidak ada motion yang cukup kuat,
+             * jangan menggeser tracker.
+             */
+            if (peakIndex < 0 ||
+                    peak < MOTION_MIN) {
+                continue;
+            }
+
+            int peakY = peakIndex / gridX;
+            int peakX = peakIndex % gridX;
+
+            /*
+             * Weighted local cluster 3x3.
+             *
+             * Ini membuat posisi mengikuti pusat
+             * kandidat, bukan terpaku pada satu cell.
+             */
+            double weightSum = 0.0;
+            double weightedX = 0.0;
+            double weightedY = 0.0;
+
+            double threshold = peak * 0.45;
+
+            for (int y = Math.max(1, peakY - 1);
+                    y <= Math.min(gridY - 2, peakY + 1);
+                    y++) {
+
+                for (int x = Math.max(0, peakX - 1);
+                        x <= Math.min(gridX - 1, peakX + 1);
+                        x++) {
+
+                    int i = y * gridX + x;
+
+                    if (i >= n) {
+                        continue;
+                    }
+
+                    double motion =
+                            Math.max(0.0, sample.motion[i]);
+
+                    double edge =
+                            Math.max(0.0, sample.edge[i]);
+
+                    double contrast =
+                            Math.max(0.0, sample.contrast[i]);
+
+                    double value =
+                            motion *
+                            (0.50 +
+                             0.30 * edge +
+                             0.20 * contrast);
+
+                    if (value < threshold) {
+                        continue;
+                    }
+
+                    float cx =
+                            (x + 0.5f) / gridX;
+
+                    float cy =
+                            (y + 0.5f) / gridY;
+
+                    weightSum += value;
+                    weightedX += cx * value;
+                    weightedY += cy * value;
+                }
+            }
+
+            if (weightSum <= 0.00001) {
+                continue;
+            }
+
+            float candidateX =
+                    (float) (weightedX / weightSum);
+
+            float candidateY =
+                    (float) (weightedY / weightSum);
+
+            candidateX =
+                    clamp(candidateX, 0.08f, 0.92f);
+
+            candidateY =
+                    clamp(candidateY, 0.15f, 0.85f);
+
+            /*
+             * First valid candidate initializes track.
+             */
+            if (!hasTrack) {
+                trackX = candidateX;
+                trackY = candidateY;
+                hasTrack = true;
+                continue;
+            }
+
+            float dx = candidateX - trackX;
+            float dy = candidateY - trackY;
+            float distance =
+                    (float) Math.sqrt(
+                            dx * dx + dy * dy);
+
+            /*
+             * Reject sudden jumps caused by
+             * background motion / lighting.
+             */
+            if (distance > JUMP_GATE) {
+                continue;
+            }
+
+            trackX +=
+                    (candidateX - trackX) * ALPHA;
+
+            trackY +=
+                    (candidateY - trackY) * ALPHA;
         }
 
-        if (validFrames == 0) {
+        if (!hasTrack) {
+            /*
+             * Tidak ada kandidat manusia yang
+             * memiliki evidence cukup.
+             *
+             * Jangan mengklaim pusat sebagai manusia.
+             * Fallback tetap netral untuk kompatibilitas
+             * pipeline lama.
+             */
             return new Point(
                     DEFAULT_X,
                     DEFAULT_Y,
                     DEFAULT_SIZE);
         }
 
-        double totalWeight = 0;
-        double weightedX = 0;
-        double weightedY = 0;
+        trackX =
+                clamp(trackX, 0.08f, 0.92f);
 
-        for (int y = 1; y < gridY - 1; y++) {
-            for (int x = 0; x < gridX; x++) {
-                int index = y * gridX + x;
-
-                double value = score[index] / validFrames;
-                value = Math.max(0, value);
-
-                totalWeight += value;
-
-                float cx = (x + 0.5f) / gridX;
-                float cy = (y + 0.5f) / gridY;
-
-                weightedX += cx * value;
-                weightedY += cy * value;
-            }
-        }
-
-        if (totalWeight <= 0.00001) {
-            return new Point(
-                    DEFAULT_X,
-                    DEFAULT_Y,
-                    DEFAULT_SIZE);
-        }
-
-        float centerX =
-                (float) (weightedX / totalWeight);
-        float centerY =
-                (float) (weightedY / totalWeight);
-
-        /*
-         * Subject center guard:
-         * hindari centroid jatuh terlalu dekat
-         * edge akibat noise.
-         */
-        centerX = clamp(
-                centerX,
-                0.12f,
-                0.88f);
-
-        // Recenter SINGLE subject toward the portrait frame center.
-        centerX += (0.50f - centerX) * 0.55f;
-
-        centerY = clamp(
-                centerY,
-                0.15f,
-                0.85f);
-
-        float x = centerX;
-        float y = centerY;
+        trackY =
+                clamp(trackY, 0.15f, 0.85f);
 
         return new Point(
-                x,
-                y,
+                trackX,
+                trackY,
                 DEFAULT_SIZE);
     }
 
