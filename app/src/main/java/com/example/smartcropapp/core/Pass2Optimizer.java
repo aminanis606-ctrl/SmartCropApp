@@ -932,11 +932,15 @@ public class Pass2Optimizer {
 
         float trackX = DEFAULT_X;
         float trackY = DEFAULT_Y;
+        float velocityX = 0f;
+        float velocityY = 0f;
         boolean hasTrack = false;
 
         final float ALPHA = 0.55f;
         final float MOTION_MIN = 0.018f;
         final float JUMP_GATE = 0.28f;
+        final float VELOCITY_ALPHA = 0.35f;
+        final float VELOCITY_DECAY = 0.82f;
 
         for (FrameSample sample : samples) {
 
@@ -1009,6 +1013,17 @@ public class Pass2Optimizer {
             }
 
             if (peakIndex < 0 || peak < MOTION_MIN) {
+
+                if (hasTrack) {
+                    trackX += velocityX;
+                    trackY += velocityY;
+
+                    velocityX *= VELOCITY_DECAY;
+                    velocityY *= VELOCITY_DECAY;
+
+                    trackX = clamp(trackX, 0.08f, 0.92f);
+                    trackY = clamp(trackY, 0.15f, 0.85f);
+                }
 
                 result.add(new Point(
                         hasTrack ? trackX : DEFAULT_X,
@@ -1110,6 +1125,9 @@ public class Pass2Optimizer {
 
                     if (distance <= JUMP_GATE) {
 
+                        float oldX = trackX;
+                        float oldY = trackY;
+
                         trackX +=
                                 (candidateX - trackX) *
                                 ALPHA;
@@ -1117,6 +1135,25 @@ public class Pass2Optimizer {
                         trackY +=
                                 (candidateY - trackY) *
                                 ALPHA;
+
+                        float measuredVX =
+                                trackX - oldX;
+
+                        float measuredVY =
+                                trackY - oldY;
+
+                        velocityX +=
+                                (measuredVX - velocityX) *
+                                VELOCITY_ALPHA;
+
+                        velocityY +=
+                                (measuredVY - velocityY) *
+                                VELOCITY_ALPHA;
+
+                    } else {
+
+                        velocityX *= VELOCITY_DECAY;
+                        velocityY *= VELOCITY_DECAY;
                     }
                 }
             }
