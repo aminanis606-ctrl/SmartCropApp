@@ -658,7 +658,7 @@ public class Pass2Optimizer {
                 0.88f);
 
         // Recenter SINGLE subject toward the portrait frame center.
-        centerX += (0.50f - centerX) * 0.35f;
+        centerX += (0.50f - centerX) * 0.55f;
 
         centerY = clamp(
                 centerY,

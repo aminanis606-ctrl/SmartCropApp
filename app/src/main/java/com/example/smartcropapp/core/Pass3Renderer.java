@@ -299,9 +299,19 @@ public class Pass3Renderer {
                         } catch (Exception ignored) {
                         }
 
-                        // Draw Bottom Panel first so the top feather can blend into it.
-                        GLES20.glViewport(0, 0, OUTPUT_WIDTH, panelH);
+                        // Draw Top Panel
+                        GLES20.glViewport(0, panelH, OUTPUT_WIDTH, panelH);
                         GLES20.glDisable(GLES20.GL_BLEND);
+                        shader.draw(
+                                glContext.getDecoderTextureId(),
+                                stMatrix,
+                                topX,
+                                topY,
+                                cropWidthNorm,
+                                cropHeightNorm);
+
+                        // Draw Bottom Panel
+                        GLES20.glViewport(0, 0, OUTPUT_WIDTH, panelH);
                         shader.draw(
                                 glContext.getDecoderTextureId(),
                                 stMatrix,
@@ -310,23 +320,6 @@ public class Pass3Renderer {
                                 cropWidthNorm,
                                 cropHeightNorm);
 
-                        // Draw Top Panel with a soft feather at the center boundary.
-                        GLES20.glViewport(0, panelH, OUTPUT_WIDTH, panelH);
-                        GLES20.glEnable(GLES20.GL_BLEND);
-                        GLES20.glBlendFunc(
-                                GLES20.GL_SRC_ALPHA,
-                                GLES20.GL_ONE_MINUS_SRC_ALPHA);
-
-                        shader.draw(
-                                glContext.getDecoderTextureId(),
-                                stMatrix,
-                                topX,
-                                topY,
-                                cropWidthNorm,
-                                cropHeightNorm,
-                                0.05f);
-
-                        GLES20.glDisable(GLES20.GL_BLEND);
                     } else {
                         // Draw Single Full Screen (Center Crop)
                         GLES20.glViewport(0, 0, OUTPUT_WIDTH, OUTPUT_HEIGHT);

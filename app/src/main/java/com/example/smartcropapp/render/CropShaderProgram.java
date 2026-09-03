@@ -27,17 +27,11 @@ public class CropShaderProgram {
             "#extension GL_OES_EGL_image_external : require\n" +
             "precision mediump float;\n" +
             "uniform samplerExternalOES sTexture;\n" +
-            "uniform float uFeatherBottom;\n" +
             "varying vec2 vTextureCoord;\n" +
             "varying vec2 vPosition;\n" +
             "void main() {\n" +
             "    vec4 color = texture2D(sTexture, vTextureCoord);\n" +
-            "    float alpha = 1.0;\n" +
-            "    if (uFeatherBottom > 0.0) {\n" +
-            "        float featherStart = uFeatherBottom;\n" +
-            "        alpha = smoothstep(0.0, featherStart, vPosition.y);\n" +
-            "    }\n" +
-            "    gl_FragColor = vec4(color.rgb, alpha);\n" +
+            "    gl_FragColor = color;\n" +
             "}\n";
 
     private final FloatBuffer vertexBuffer;
@@ -47,7 +41,6 @@ public class CropShaderProgram {
     private final int aTextureCoordHandle;
     private final int uMVPMatrixHandle;
     private final int uSTMatrixHandle;
-    private final int uFeatherBottomHandle;
 
     private static final float[] VERTEX_DATA = {
             -1f, -1f, 0f, 0f, 0f,
@@ -92,10 +85,6 @@ public class CropShaderProgram {
                         program,
                         "uSTMatrix");
 
-        uFeatherBottomHandle =
-                GLES20.glGetUniformLocation(
-                        program,
-                        "uFeatherBottom");
     }
 
     public void draw(
@@ -122,8 +111,7 @@ public class CropShaderProgram {
             float cropCenterX,
             float cropCenterY,
             float cropWidthNorm,
-            float cropHeightNorm,
-            float featherBottom) {
+            float cropHeightNorm) {
 
         GLES20.glUseProgram(program);
 
@@ -263,8 +251,6 @@ public class CropShaderProgram {
                 0);
 
         GLES20.glUniform1f(
-                uFeatherBottomHandle,
-                featherBottom);
 
         GLES20.glActiveTexture(
                 GLES20.GL_TEXTURE0);
