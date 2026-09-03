@@ -161,11 +161,13 @@ public class Pass2Optimizer {
                     videoId);
 
             if ("split".equals(shot.layout)) {
+                estimateSplitSubjects(shot);
                 continue;
             }
 
             if (detectAutoSplit(shot)) {
                 Log.i(TAG, "Shot " + shot.shotId + " -> AUTO SPLIT");
+                estimateSplitSubjects(shot);
                 continue;
             }
 
@@ -552,6 +554,270 @@ public class Pass2Optimizer {
         shot.bottomY = 0.60f;
 
         return true;
+    }
+
+    /*
+     * SPLIT subject localization:
+     *
+     * RIGHT half -> top panel
+     * LEFT half  -> bottom panel
+     *
+     * Setiap sisi dihitung secara independen agar
+     * dua subject tidak kembali menjadi satu centroid.
+     */
+    /*
+     * SPLIT subject localization.
+     *
+     * LEFT  peak -> bottom panel
+     * RIGHT peak -> top panel
+     *
+     * Localization hanya mengambil area lokal di sekitar
+     * peak masing-masing sisi agar background tidak ikut
+     * menarik centroid ke tengah.
+     */
+    private static void estimateSplitSubjects(
+            Shot shot) {
+
+        if (shot == null ||
+                shot.samples == null ||
+                shot.samples.isEmpty()) {
+            return;
+        }
+
+        final int GRID_X = 12;
+        final int GRID_Y = 8;
+
+        double[] col = new double[GRID_X];
+        int frames = 0;
+
+        for (FrameSample sample : shot.samples) {
+
+            if (sample == null ||
+                    sample.texture == null ||
+                    sample.brightness == null ||
+                    sample.contrast == null ||
+                    sample.verticalEdge == null ||
+                    sample.horizontalEdge == null) {
+                continue;
+            }
+
+            int n = Math.min(
+                    GRID_X * GRID_Y,
+                    Math.min(
+                            Math.min(
+                                    sample.texture.length,
+                                    sample.brightness.length),
+                            Math.min(
+                                    Math.min(
+                                            sample.contrast.length,
+                                            sample.verticalEdge.length),
+                                    sample.horizontalEdge.length)));
+
+            for (int i = 0; i < n; i++) {
+
+                int x = i % GRID_X;
+                int y = i / GRID_X;
+
+                if (y == 0 ||
+                        y == GRID_Y - 1) {
+                    continue;
+                }
+
+                double value =
+                        sample.texture[i] * 0.25 +
+                        sample.verticalEdge[i] * 0.30 +
+                        sample.horizontalEdge[i] * 0.15 +
+                        sample.contrast[i] * 0.25 +
+                        sample.brightness[i] * 0.05;
+
+                col[x] += Math.max(0.0, value);
+            }
+
+            frames++;
+        }
+
+        if (frames == 0) return;
+
+        for (int x = 0; x < GRID_X; x++) {
+            col[x] /= frames;
+        }
+
+        /*
+         * Cari peak kiri dan kanan menggunakan range
+         * yang sama dengan detectAutoSplit().
+         */
+        int leftIndex = 1;
+        int rightIndex = 7;
+
+        double leftPeak = 0.0;
+        double rightPeak = 0.0;
+
+        for (int x = 1; x <= 4; x++) {
+            if (col[x] > leftPeak) {
+                leftPeak = col[x];
+                leftIndex = x;
+            }
+        }
+
+        for (int x = 7; x <= 10; x++) {
+            if (col[x] > rightPeak) {
+                rightPeak = col[x];
+                rightIndex = x;
+            }
+        }
+
+        if (leftPeak <= 0.0 ||
+                rightPeak <= 0.0) {
+            return;
+        }
+
+        /*
+         * Weighted centroid hanya pada peak ±1 kolom.
+         * Ini mencegah background di seluruh half
+         * mendominasi posisi subject.
+         */
+        double leftWeight = 0.0;
+        double leftX = 0.0;
+        double leftY = 0.0;
+
+        double rightWeight = 0.0;
+        double rightX = 0.0;
+        double rightY = 0.0;
+
+        for (FrameSample sample : shot.samples) {
+
+            if (sample == null ||
+                    sample.edge == null ||
+                    sample.contrast == null ||
+                    sample.verticalEdge == null ||
+                    sample.brightness == null) {
+                continue;
+            }
+
+            int n = Math.min(
+                    GRID_X * GRID_Y,
+                    Math.min(
+                            sample.edge.length,
+                            Math.min(
+                                    sample.contrast.length,
+                                    Math.min(
+                                            sample.verticalEdge.length,
+                                            sample.brightness.length))));
+
+            for (int y = 1; y < GRID_Y - 1; y++) {
+
+                for (int x = 0; x < GRID_X; x++) {
+
+                    if (Math.abs(x - leftIndex) > 1 &&
+                            Math.abs(x - rightIndex) > 1) {
+                        continue;
+                    }
+
+                    int index = y * GRID_X + x;
+
+                    double value =
+                            sample.edge[index] * 0.45 +
+                            sample.verticalEdge[index] * 0.25 +
+                            sample.contrast[index] * 0.25 +
+                            sample.brightness[index] * 0.05;
+
+                    value = Math.max(0.0, value);
+
+                    float cx =
+                            (x + 0.5f) / GRID_X;
+
+                    float cy =
+                            (y + 0.5f) / GRID_Y;
+
+                    if (Math.abs(x - leftIndex) <= 1) {
+                        leftWeight += value;
+                        leftX += cx * value;
+                        leftY += cy * value;
+                    }
+
+                    if (Math.abs(x - rightIndex) <= 1) {
+                        rightWeight += value;
+                        rightX += cx * value;
+                        rightY += cy * value;
+                    }
+                }
+            }
+        }
+
+        if (leftWeight <= 0.00001 ||
+                rightWeight <= 0.00001) {
+            return;
+        }
+
+        float leftCenterX =
+                (float) (leftX / leftWeight);
+
+        float leftCenterY =
+                (float) (leftY / leftWeight);
+
+        float rightCenterX =
+                (float) (rightX / rightWeight);
+
+        float rightCenterY =
+                (float) (rightY / rightWeight);
+
+        leftCenterX = clamp(
+                leftCenterX,
+                0.10f,
+                0.55f);
+
+        rightCenterX = clamp(
+                rightCenterX,
+                0.45f,
+                0.90f);
+
+        leftCenterY = clamp(
+                leftCenterY,
+                0.15f,
+                0.85f);
+
+        rightCenterY = clamp(
+                rightCenterY,
+                0.15f,
+                0.85f);
+
+        /*
+         * RIGHT subject -> TOP panel.
+         * LEFT subject  -> BOTTOM panel.
+         *
+         * Offset mempertahankan subject pada sisi
+         * frame yang menghadap ke tengah.
+         */
+        shot.topX = clamp(
+                rightCenterX - 0.18f,
+                0.20f,
+                0.85f);
+
+        shot.topY = 0.60f;
+
+        shot.bottomX = clamp(
+                leftCenterX + 0.18f,
+                0.15f,
+                0.80f);
+
+        shot.bottomY = 0.60f;
+
+        Log.i(
+                TAG,
+                "SPLIT_SUBJECTS shot=" +
+                shot.shotId +
+                " leftPeak=" +
+                leftIndex +
+                " leftCenter=" +
+                leftCenterX +
+                " rightPeak=" +
+                rightIndex +
+                " rightCenter=" +
+                rightCenterX +
+                " topX=" +
+                shot.topX +
+                " bottomX=" +
+                shot.bottomX);
     }
 
     private static Point estimateSubject(
