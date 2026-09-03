@@ -195,6 +195,7 @@ public class Pass2Optimizer {
         writeSingleTrajectory(
                 shot,
                 point);
+        }
 
         writeTrajectory(
                 shots,
