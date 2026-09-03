@@ -187,6 +187,9 @@ public class Pass1Extractor {
                         current.startMs =
                                 feature.timeMs;
 
+                        // First frame after a shot cut has no valid temporal predecessor.
+                        java.util.Arrays.fill(feature.motion, 0f);
+
                         Log.i(
                                 TAG,
                                 "CUT t=" +
