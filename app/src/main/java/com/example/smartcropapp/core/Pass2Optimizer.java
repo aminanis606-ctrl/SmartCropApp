@@ -828,14 +828,14 @@ public class Pass2Optimizer {
          * left  -> crop center sedikit ke kanan
          */
         shot.topX = clamp(
-                rightCenterX - 0.18f,
+                rightCenterX,
                 0.20f,
                 0.85f);
 
         shot.topY = 0.60f;
 
         shot.bottomX = clamp(
-                leftCenterX + 0.18f,
+                leftCenterX,
                 0.15f,
                 0.80f);
 
