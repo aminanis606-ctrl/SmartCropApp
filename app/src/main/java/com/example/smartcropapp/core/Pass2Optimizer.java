@@ -939,8 +939,8 @@ public class Pass2Optimizer {
         final float ALPHA = 0.55f;
         final float MOTION_MIN = 0.018f;
         final float JUMP_GATE = 0.28f;
-        final float VELOCITY_ALPHA = 0.35f;
-        final float VELOCITY_DECAY = 0.82f;
+        final float VELOCITY_ALPHA = 0.20f;
+        final float VELOCITY_DECAY = 0.90f;
 
         for (FrameSample sample : samples) {
 
