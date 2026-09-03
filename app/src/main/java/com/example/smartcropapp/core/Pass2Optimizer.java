@@ -404,10 +404,9 @@ public class Pass2Optimizer {
 
         double[] col = new double[GRID_X];
         int frames = 0;
-        int prevLeftPeak = -1;
-        int prevRightPeak = -1;
-        int leftMovingSteps = 0;
-        int rightMovingSteps = 0;
+
+        int leftCandidateFrames = 0;
+        int rightCandidateFrames = 0;
 
         for (FrameSample sample : shot.samples) {
             if (sample.texture == null ||
@@ -446,46 +445,45 @@ public class Pass2Optimizer {
                 frameCol[x] += score;
             }
 
-            int leftPeakX = 1;
-            int rightPeakX = 7;
             double leftPeak = 0.0;
             double rightPeak = 0.0;
 
             for (int x = 1; x <= 4; x++) {
-                if (frameCol[x] > leftPeak) {
-                    leftPeak = frameCol[x];
-                    leftPeakX = x;
-                }
+                leftPeak = Math.max(leftPeak, frameCol[x]);
             }
 
             for (int x = 7; x <= 10; x++) {
-                if (frameCol[x] > rightPeak) {
-                    rightPeak = frameCol[x];
-                    rightPeakX = x;
-                }
+                rightPeak = Math.max(rightPeak, frameCol[x]);
             }
 
-            if (prevLeftPeak >= 0 && leftPeakX != prevLeftPeak) {
-                leftMovingSteps++;
-            }
-
-            if (prevRightPeak >= 0 && rightPeakX != prevRightPeak) {
-                rightMovingSteps++;
-            }
-
-            prevLeftPeak = leftPeakX;
-            prevRightPeak = rightPeakX;
+            if (leftPeak > 0.0) leftCandidateFrames++;
+            if (rightPeak > 0.0) rightCandidateFrames++;
 
             frames++;
         }
 
         if (frames == 0) return false;
 
+        double leftPersistence =
+                leftCandidateFrames / (double) frames;
+
+        double rightPersistence =
+                rightCandidateFrames / (double) frames;
+
         Log.i(TAG,
-                "AUTO_SPLIT_TEMPORAL_DIAG shot=" + shot.shotId
-                        + " leftMovingSteps=" + leftMovingSteps
-                        + " rightMovingSteps=" + rightMovingSteps
+                "AUTO_SPLIT_PERSISTENCE shot=" + shot.shotId
+                        + " left=" + leftPersistence
+                        + " right=" + rightPersistence
                         + " frames=" + frames);
+
+        /*
+         * Candidate persistence is evidence, not a human detector.
+         * Do not use motion as a hard gate.
+         */
+        if (leftPersistence < 0.55 ||
+                rightPersistence < 0.55) {
+            return false;
+        }
 
         for (int x = 0; x < GRID_X; x++) {
             col[x] /= frames;
@@ -496,7 +494,6 @@ public class Pass2Optimizer {
         int leftIndex = 0;
         int rightIndex = 0;
 
-        // Left candidate: genuinely left side.
         for (int x = 1; x <= 4; x++) {
             if (col[x] > leftPeak) {
                 leftPeak = col[x];
@@ -504,7 +501,6 @@ public class Pass2Optimizer {
             }
         }
 
-        // Right candidate: genuinely right side.
         for (int x = 7; x <= 10; x++) {
             if (col[x] > rightPeak) {
                 rightPeak = col[x];
@@ -549,14 +545,15 @@ public class Pass2Optimizer {
                 Math.min(leftPeak, rightPeak) /
                 Math.max(0.0001, center);
 
-        // Require a genuine valley between the two candidates.
         double valley = Double.MAX_VALUE;
         for (int x = leftIndex + 1; x < rightIndex; x++) {
             valley = Math.min(valley, col[x]);
         }
 
         double valleyRatio =
-                valley / Math.max(0.0001, Math.min(leftPeak, rightPeak));
+                valley / Math.max(
+                        0.0001,
+                        Math.min(leftPeak, rightPeak));
 
         Log.i(TAG,
                 "AUTO_SPLIT_DIAG shot=" + shot.shotId
@@ -567,19 +564,11 @@ public class Pass2Optimizer {
                         + " balance=" + balance
                         + " separation=" + separation
                         + " peakVsCenter=" + peakVsCenter
-                        + " valleyRatio=" + valleyRatio
-                        + " col=" + java.util.Arrays.toString(col));
+                        + " valleyRatio=" + valleyRatio);
 
-        // Both sides must contain comparable strong structures.
         if (balance < 0.55) return false;
-
-        // Subjects must be spatially separated.
         if (separation < 0.35) return false;
-
-        // Each side must beat the central region.
         if (peakVsCenter < 1.15) return false;
-
-        // A single broad central subject should not become two subjects.
         if (valleyRatio > 0.92) return false;
 
         shot.layout = "split";
