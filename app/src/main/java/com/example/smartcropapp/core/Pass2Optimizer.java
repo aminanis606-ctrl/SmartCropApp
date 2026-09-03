@@ -860,18 +860,13 @@ public class Pass2Optimizer {
          * right -> crop center sedikit ke kiri
          * left  -> crop center sedikit ke kanan
          */
-        shot.topX = clamp(
-                rightCenterX,
-                0.20f,
-                0.85f);
-
+        // CALIBRATION MODE:
+        // RIGHT subject -> TOP panel -> center frame
+        shot.topX = 0.50f;
         shot.topY = 0.60f;
 
-        shot.bottomX = clamp(
-                leftCenterX,
-                0.15f,
-                0.80f);
-
+        // LEFT subject -> BOTTOM panel -> center frame
+        shot.bottomX = 0.50f;
         shot.bottomY = 0.60f;
 
         Log.i(
