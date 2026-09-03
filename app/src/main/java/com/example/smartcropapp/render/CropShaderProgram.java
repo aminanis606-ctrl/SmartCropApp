@@ -250,8 +250,6 @@ public class CropShaderProgram {
                 combinedST,
                 0);
 
-        GLES20.glUniform1f(
-
         GLES20.glActiveTexture(
                 GLES20.GL_TEXTURE0);
 
