@@ -404,6 +404,10 @@ public class Pass2Optimizer {
 
         double[] col = new double[GRID_X];
         int frames = 0;
+        int prevLeftPeak = -1;
+        int prevRightPeak = -1;
+        int leftMovingSteps = 0;
+        int rightMovingSteps = 0;
 
         for (FrameSample sample : shot.samples) {
             if (sample.texture == null ||
@@ -422,6 +426,8 @@ public class Pass2Optimizer {
                                     Math.min(sample.contrast.length, sample.verticalEdge.length),
                                     sample.horizontalEdge.length)));
 
+            double[] frameCol = new double[GRID_X];
+
             for (int i = 0; i < n; i++) {
                 int x = i % GRID_X;
                 int y = i / GRID_X;
@@ -435,13 +441,51 @@ public class Pass2Optimizer {
                         sample.contrast[i] * 0.25 +
                         sample.brightness[i] * 0.05;
 
-                col[x] += Math.max(0, score);
+                score = Math.max(0, score);
+                col[x] += score;
+                frameCol[x] += score;
             }
+
+            int leftPeakX = 1;
+            int rightPeakX = 7;
+            double leftPeak = 0.0;
+            double rightPeak = 0.0;
+
+            for (int x = 1; x <= 4; x++) {
+                if (frameCol[x] > leftPeak) {
+                    leftPeak = frameCol[x];
+                    leftPeakX = x;
+                }
+            }
+
+            for (int x = 7; x <= 10; x++) {
+                if (frameCol[x] > rightPeak) {
+                    rightPeak = frameCol[x];
+                    rightPeakX = x;
+                }
+            }
+
+            if (prevLeftPeak >= 0 && leftPeakX != prevLeftPeak) {
+                leftMovingSteps++;
+            }
+
+            if (prevRightPeak >= 0 && rightPeakX != prevRightPeak) {
+                rightMovingSteps++;
+            }
+
+            prevLeftPeak = leftPeakX;
+            prevRightPeak = rightPeakX;
 
             frames++;
         }
 
         if (frames == 0) return false;
+
+        Log.i(TAG,
+                "AUTO_SPLIT_TEMPORAL_DIAG shot=" + shot.shotId
+                        + " leftMovingSteps=" + leftMovingSteps
+                        + " rightMovingSteps=" + rightMovingSteps
+                        + " frames=" + frames);
 
         for (int x = 0; x < GRID_X; x++) {
             col[x] /= frames;
