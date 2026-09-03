@@ -575,6 +575,18 @@ public class Pass2Optimizer {
      * peak masing-masing sisi agar background tidak ikut
      * menarik centroid ke tengah.
      */
+    /*
+     * SPLIT subject localization.
+     *
+     * IMPORTANT:
+     * LEFT dan RIGHT dianalisis sebagai dua ROI yang
+     * benar-benar independen.
+     *
+     * LEFT  ROI  = columns 0..5 -> BOTTOM panel
+     * RIGHT ROI  = columns 6..11 -> TOP panel
+     *
+     * Tidak ada centroid global.
+     */
     private static void estimateSplitSubjects(
             Shot shot) {
 
@@ -587,102 +599,18 @@ public class Pass2Optimizer {
         final int GRID_X = 12;
         final int GRID_Y = 8;
 
-        double[] col = new double[GRID_X];
-        int frames = 0;
-
-        for (FrameSample sample : shot.samples) {
-
-            if (sample == null ||
-                    sample.texture == null ||
-                    sample.brightness == null ||
-                    sample.contrast == null ||
-                    sample.verticalEdge == null ||
-                    sample.horizontalEdge == null) {
-                continue;
-            }
-
-            int n = Math.min(
-                    GRID_X * GRID_Y,
-                    Math.min(
-                            Math.min(
-                                    sample.texture.length,
-                                    sample.brightness.length),
-                            Math.min(
-                                    Math.min(
-                                            sample.contrast.length,
-                                            sample.verticalEdge.length),
-                                    sample.horizontalEdge.length)));
-
-            for (int i = 0; i < n; i++) {
-
-                int x = i % GRID_X;
-                int y = i / GRID_X;
-
-                if (y == 0 ||
-                        y == GRID_Y - 1) {
-                    continue;
-                }
-
-                double value =
-                        sample.texture[i] * 0.25 +
-                        sample.verticalEdge[i] * 0.30 +
-                        sample.horizontalEdge[i] * 0.15 +
-                        sample.contrast[i] * 0.25 +
-                        sample.brightness[i] * 0.05;
-
-                col[x] += Math.max(0.0, value);
-            }
-
-            frames++;
-        }
-
-        if (frames == 0) return;
-
-        for (int x = 0; x < GRID_X; x++) {
-            col[x] /= frames;
-        }
-
         /*
-         * Cari peak kiri dan kanan menggunakan range
-         * yang sama dengan detectAutoSplit().
+         * Dua score map terpisah.
+         * leftScore tidak pernah menerima kolom kanan.
+         * rightScore tidak pernah menerima kolom kiri.
          */
-        int leftIndex = 1;
-        int rightIndex = 7;
+        double[] leftScore =
+                new double[GRID_X * GRID_Y];
 
-        double leftPeak = 0.0;
-        double rightPeak = 0.0;
+        double[] rightScore =
+                new double[GRID_X * GRID_Y];
 
-        for (int x = 1; x <= 4; x++) {
-            if (col[x] > leftPeak) {
-                leftPeak = col[x];
-                leftIndex = x;
-            }
-        }
-
-        for (int x = 7; x <= 10; x++) {
-            if (col[x] > rightPeak) {
-                rightPeak = col[x];
-                rightIndex = x;
-            }
-        }
-
-        if (leftPeak <= 0.0 ||
-                rightPeak <= 0.0) {
-            return;
-        }
-
-        /*
-         * Weighted centroid hanya pada peak ±1 kolom.
-         * Ini mencegah background di seluruh half
-         * mendominasi posisi subject.
-         */
-        double leftWeight = 0.0;
-        double leftX = 0.0;
-        double leftY = 0.0;
-
-        double rightWeight = 0.0;
-        double rightX = 0.0;
-        double rightY = 0.0;
+        int validFrames = 0;
 
         for (FrameSample sample : shot.samples) {
 
@@ -704,43 +632,152 @@ public class Pass2Optimizer {
                                             sample.verticalEdge.length,
                                             sample.brightness.length))));
 
-            for (int y = 1; y < GRID_Y - 1; y++) {
+            for (int i = 0; i < n; i++) {
 
-                for (int x = 0; x < GRID_X; x++) {
+                int x = i % GRID_X;
+                int y = i / GRID_X;
 
-                    if (Math.abs(x - leftIndex) > 1 &&
-                            Math.abs(x - rightIndex) > 1) {
-                        continue;
-                    }
-
-                    int index = y * GRID_X + x;
-
-                    double value =
-                            sample.edge[index] * 0.45 +
-                            sample.verticalEdge[index] * 0.25 +
-                            sample.contrast[index] * 0.25 +
-                            sample.brightness[index] * 0.05;
-
-                    value = Math.max(0.0, value);
-
-                    float cx =
-                            (x + 0.5f) / GRID_X;
-
-                    float cy =
-                            (y + 0.5f) / GRID_Y;
-
-                    if (Math.abs(x - leftIndex) <= 1) {
-                        leftWeight += value;
-                        leftX += cx * value;
-                        leftY += cy * value;
-                    }
-
-                    if (Math.abs(x - rightIndex) <= 1) {
-                        rightWeight += value;
-                        rightX += cx * value;
-                        rightY += cy * value;
-                    }
+                if (y == 0 ||
+                        y == GRID_Y - 1) {
+                    continue;
                 }
+
+                double value =
+                        sample.edge[i] * 0.45 +
+                        sample.verticalEdge[i] * 0.25 +
+                        sample.contrast[i] * 0.25 +
+                        sample.brightness[i] * 0.05;
+
+                value = Math.max(0.0, value);
+
+                if (x < 6) {
+                    leftScore[i] += value;
+                } else {
+                    rightScore[i] += value;
+                }
+            }
+
+            validFrames++;
+        }
+
+        if (validFrames == 0) {
+            return;
+        }
+
+        /*
+         * Normalisasi kedua ROI secara independen.
+         */
+        for (int i = 0; i < GRID_X * GRID_Y; i++) {
+            leftScore[i] /= validFrames;
+            rightScore[i] /= validFrames;
+        }
+
+        /*
+         * Cari peak TERKUAT hanya di masing-masing ROI.
+         */
+        int leftPeakX = 0;
+        int leftPeakY = 1;
+        double leftPeak = 0.0;
+
+        int rightPeakX = 6;
+        int rightPeakY = 1;
+        double rightPeak = 0.0;
+
+        for (int y = 1; y < GRID_Y - 1; y++) {
+
+            for (int x = 0; x < 6; x++) {
+
+                int index = y * GRID_X + x;
+
+                if (leftScore[index] > leftPeak) {
+                    leftPeak = leftScore[index];
+                    leftPeakX = x;
+                    leftPeakY = y;
+                }
+            }
+
+            for (int x = 6; x < GRID_X; x++) {
+
+                int index = y * GRID_X + x;
+
+                if (rightScore[index] > rightPeak) {
+                    rightPeak = rightScore[index];
+                    rightPeakX = x;
+                    rightPeakY = y;
+                }
+            }
+        }
+
+        if (leftPeak <= 0.0 ||
+                rightPeak <= 0.0) {
+            return;
+        }
+
+        /*
+         * Local centroid di sekitar peak.
+         *
+         * Radius 1 cell.
+         *
+         * LEFT tetap dibatasi x < 6.
+         * RIGHT tetap dibatasi x >= 6.
+         *
+         * Jadi kedua analisis tidak mungkin
+         * mengambil data dari ROI lawannya.
+         */
+        double leftWeight = 0.0;
+        double leftX = 0.0;
+        double leftY = 0.0;
+
+        double rightWeight = 0.0;
+        double rightX = 0.0;
+        double rightY = 0.0;
+
+        for (int y = 1; y < GRID_Y - 1; y++) {
+
+            for (int x = 0; x < 6; x++) {
+
+                if (Math.abs(x - leftPeakX) > 1 ||
+                        Math.abs(y - leftPeakY) > 1) {
+                    continue;
+                }
+
+                int index = y * GRID_X + x;
+                double value = leftScore[index];
+
+                if (value <= 0.0) continue;
+
+                float cx =
+                        (x + 0.5f) / GRID_X;
+
+                float cy =
+                        (y + 0.5f) / GRID_Y;
+
+                leftWeight += value;
+                leftX += cx * value;
+                leftY += cy * value;
+            }
+
+            for (int x = 6; x < GRID_X; x++) {
+
+                if (Math.abs(x - rightPeakX) > 1 ||
+                        Math.abs(y - rightPeakY) > 1) {
+                    continue;
+                }
+
+                int index = y * GRID_X + x;
+                double value = rightScore[index];
+
+                if (value <= 0.0) continue;
+
+                float cx =
+                        (x + 0.5f) / GRID_X;
+
+                float cy =
+                        (y + 0.5f) / GRID_Y;
+
+                rightWeight += value;
+                rightX += cx * value;
+                rightY += cy * value;
             }
         }
 
@@ -763,13 +800,13 @@ public class Pass2Optimizer {
 
         leftCenterX = clamp(
                 leftCenterX,
-                0.10f,
-                0.55f);
+                0.08f,
+                0.49f);
 
         rightCenterX = clamp(
                 rightCenterX,
-                0.45f,
-                0.90f);
+                0.51f,
+                0.92f);
 
         leftCenterY = clamp(
                 leftCenterY,
@@ -785,8 +822,10 @@ public class Pass2Optimizer {
          * RIGHT subject -> TOP panel.
          * LEFT subject  -> BOTTOM panel.
          *
-         * Offset mempertahankan subject pada sisi
-         * frame yang menghadap ke tengah.
+         * Offset ke arah tengah frame:
+         *
+         * right -> crop center sedikit ke kiri
+         * left  -> crop center sedikit ke kanan
          */
         shot.topX = clamp(
                 rightCenterX - 0.18f,
@@ -804,17 +843,21 @@ public class Pass2Optimizer {
 
         Log.i(
                 TAG,
-                "SPLIT_SUBJECTS shot=" +
+                "SPLIT_ROI shot=" +
                 shot.shotId +
-                " leftPeak=" +
-                leftIndex +
-                " leftCenter=" +
-                leftCenterX +
-                " rightPeak=" +
-                rightIndex +
-                " rightCenter=" +
-                rightCenterX +
-                " topX=" +
+                " LEFT_peak=(" +
+                leftPeakX + "," +
+                leftPeakY +
+                ") LEFT_center=(" +
+                leftCenterX + "," +
+                leftCenterY +
+                ") RIGHT_peak=(" +
+                rightPeakX + "," +
+                rightPeakY +
+                ") RIGHT_center=(" +
+                rightCenterX + "," +
+                rightCenterY +
+                ") topX=" +
                 shot.topX +
                 " bottomX=" +
                 shot.bottomX);
