@@ -908,34 +908,18 @@ public class Pass2Optimizer {
                 shot.bottomX);
     }
 
-    private static Point estimateSubject(
+    private static List<Point> estimateSubjectTrajectory(
             List<FrameSample> samples) {
 
+        List<Point> result = new ArrayList<>();
+
         if (samples == null || samples.isEmpty()) {
-            return new Point(
-                    DEFAULT_X,
-                    DEFAULT_Y,
-                    DEFAULT_SIZE);
+            return result;
         }
 
         final int gridX = 12;
         final int gridY = 8;
         final int cells = gridX * gridY;
-
-        /*
-         * LIGHTWEIGHT HUMAN CANDIDATE TRACKER
-         *
-         * Motion:
-         *   pemicu utama lokasi kandidat.
-         *
-         * Edge + contrast:
-         *   validasi bahwa motion berada pada
-         *   struktur visual, bukan noise.
-         *
-         * Tracking:
-         *   menjaga posisi ketika manusia berhenti
-         *   atau motion sesaat melemah.
-         */
 
         float trackX = DEFAULT_X;
         float trackY = DEFAULT_Y;
@@ -951,6 +935,19 @@ public class Pass2Optimizer {
                     sample.motion == null ||
                     sample.edge == null ||
                     sample.contrast == null) {
+
+                if (hasTrack) {
+                    result.add(new Point(
+                            trackX,
+                            trackY,
+                            DEFAULT_SIZE));
+                } else {
+                    result.add(new Point(
+                            DEFAULT_X,
+                            DEFAULT_Y,
+                            DEFAULT_SIZE));
+                }
+
                 continue;
             }
 
@@ -963,27 +960,20 @@ public class Pass2Optimizer {
                                     sample.contrast.length)));
 
             if (n <= 0) {
+                result.add(new Point(
+                        hasTrack ? trackX : DEFAULT_X,
+                        hasTrack ? trackY : DEFAULT_Y,
+                        DEFAULT_SIZE));
                 continue;
             }
 
             double peak = 0.0;
             int peakIndex = -1;
 
-            /*
-             * Cari kandidat berdasarkan gabungan:
-             *
-             * motion  = 50%
-             * edge    = 30%
-             * contrast= 20%
-             *
-             * Motion tidak boleh berdiri sendiri.
-             */
             for (int i = 0; i < n; i++) {
 
                 int y = i / gridX;
 
-                // Hindari baris paling atas/bawah
-                // yang sering berisi background.
                 if (y == 0 || y == gridY - 1) {
                     continue;
                 }
@@ -997,12 +987,11 @@ public class Pass2Optimizer {
                 double contrast =
                         Math.max(0.0, sample.contrast[i]);
 
-                double structure =
-                        0.30 * edge +
-                        0.20 * contrast;
-
                 double value =
-                        motion * (0.50 + structure);
+                        motion *
+                        (0.50 +
+                         0.30 * edge +
+                         0.20 * contrast);
 
                 if (value > peak) {
                     peak = value;
@@ -1010,24 +999,19 @@ public class Pass2Optimizer {
                 }
             }
 
-            /*
-             * Jika tidak ada motion yang cukup kuat,
-             * jangan menggeser tracker.
-             */
-            if (peakIndex < 0 ||
-                    peak < MOTION_MIN) {
+            if (peakIndex < 0 || peak < MOTION_MIN) {
+
+                result.add(new Point(
+                        hasTrack ? trackX : DEFAULT_X,
+                        hasTrack ? trackY : DEFAULT_Y,
+                        DEFAULT_SIZE));
+
                 continue;
             }
 
             int peakY = peakIndex / gridX;
             int peakX = peakIndex % gridX;
 
-            /*
-             * Weighted local cluster 3x3.
-             *
-             * Ini membuat posisi mengikuti pusat
-             * kandidat, bukan terpaku pada satu cell.
-             */
             double weightSum = 0.0;
             double weightedX = 0.0;
             double weightedY = 0.0;
@@ -1079,78 +1063,62 @@ public class Pass2Optimizer {
                 }
             }
 
-            if (weightSum <= 0.00001) {
-                continue;
+            if (weightSum > 0.00001) {
+
+                float candidateX =
+                        clamp(
+                                (float)
+                                        (weightedX / weightSum),
+                                0.08f,
+                                0.92f);
+
+                float candidateY =
+                        clamp(
+                                (float)
+                                        (weightedY / weightSum),
+                                0.15f,
+                                0.85f);
+
+                if (!hasTrack) {
+
+                    trackX = candidateX;
+                    trackY = candidateY;
+                    hasTrack = true;
+
+                } else {
+
+                    float dx =
+                            candidateX - trackX;
+
+                    float dy =
+                            candidateY - trackY;
+
+                    float distance =
+                            (float)
+                                    Math.sqrt(
+                                            dx * dx +
+                                            dy * dy);
+
+                    if (distance <= JUMP_GATE) {
+
+                        trackX +=
+                                (candidateX - trackX) *
+                                ALPHA;
+
+                        trackY +=
+                                (candidateY - trackY) *
+                                ALPHA;
+                    }
+                }
             }
 
-            float candidateX =
-                    (float) (weightedX / weightSum);
-
-            float candidateY =
-                    (float) (weightedY / weightSum);
-
-            candidateX =
-                    clamp(candidateX, 0.08f, 0.92f);
-
-            candidateY =
-                    clamp(candidateY, 0.15f, 0.85f);
-
-            /*
-             * First valid candidate initializes track.
-             */
-            if (!hasTrack) {
-                trackX = candidateX;
-                trackY = candidateY;
-                hasTrack = true;
-                continue;
-            }
-
-            float dx = candidateX - trackX;
-            float dy = candidateY - trackY;
-            float distance =
-                    (float) Math.sqrt(
-                            dx * dx + dy * dy);
-
-            /*
-             * Reject sudden jumps caused by
-             * background motion / lighting.
-             */
-            if (distance > JUMP_GATE) {
-                continue;
-            }
-
-            trackX +=
-                    (candidateX - trackX) * ALPHA;
-
-            trackY +=
-                    (candidateY - trackY) * ALPHA;
+            result.add(new Point(
+                    hasTrack ? trackX : DEFAULT_X,
+                    hasTrack ? trackY : DEFAULT_Y,
+                    DEFAULT_SIZE));
         }
 
-        if (!hasTrack) {
-            /*
-             * Tidak ada kandidat manusia yang
-             * memiliki evidence cukup.
-             *
-             * Jangan mengklaim pusat sebagai manusia.
-             * Fallback tetap netral untuk kompatibilitas
-             * pipeline lama.
-             */
-            return new Point(
-                    DEFAULT_X,
-                    DEFAULT_Y,
-                    DEFAULT_SIZE);
-        }
-
-        trackX =
-                clamp(trackX, 0.08f, 0.92f);
-
-        trackY =
-                clamp(trackY, 0.15f, 0.85f);
-
-        return new Point(
-                trackX,
-                trackY,
-                DEFAULT_SIZE);
+        return result;
     }
 
     private static void writeSingleTrajectory(
@@ -1234,12 +1202,24 @@ public class Pass2Optimizer {
                 JSONArray track =
                         new JSONArray();
 
-                for (FrameSample sample :
-                        shot.samples) {
+                List<Point> subjectTrack =
+                        estimateSubjectTrajectory(
+                                shot.samples);
+
+                for (int i = 0;
+                        i < shot.samples.size();
+                        i++) {
+
+                    FrameSample sample =
+                            shot.samples.get(i);
 
                     Point point =
-                            estimateSubject(
-                                    shot.samples);
+                            i < subjectTrack.size()
+                                    ? subjectTrack.get(i)
+                                    : new Point(
+                                            DEFAULT_X,
+                                            DEFAULT_Y,
+                                            DEFAULT_SIZE);
 
                     JSONObject p =
                             new JSONObject();
