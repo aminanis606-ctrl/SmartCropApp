@@ -335,7 +335,7 @@ public class Pass3Renderer {
                                 topY,
                                 cropWidthNorm,
                                 cropHeightNorm,
-                                feather,
+                                0.0f,
                                 feather);
 
                         // Bottom panel
@@ -348,7 +348,7 @@ public class Pass3Renderer {
                                 cropWidthNorm,
                                 cropHeightNorm,
                                 feather,
-                                feather);
+                                0.0f);
 
                         GLES20.glDisable(GLES20.GL_BLEND);
 
