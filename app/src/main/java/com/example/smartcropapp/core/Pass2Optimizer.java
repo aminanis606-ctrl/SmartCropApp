@@ -1152,8 +1152,23 @@ public class Pass2Optimizer {
 
                     } else {
 
+                        // Candidate terlalu jauh:
+                        // pertahankan kontinuitas dengan prediksi velocity.
+                        trackX += velocityX;
+                        trackY += velocityY;
+
                         velocityX *= VELOCITY_DECAY;
                         velocityY *= VELOCITY_DECAY;
+
+                        trackX = clamp(
+                                trackX,
+                                0.08f,
+                                0.92f);
+
+                        trackY = clamp(
+                                trackY,
+                                0.15f,
+                                0.85f);
                     }
                 }
             }
