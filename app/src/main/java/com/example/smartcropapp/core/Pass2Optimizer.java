@@ -939,7 +939,7 @@ public class Pass2Optimizer {
         final int CONFIRM_FRAMES = 2;
 
         // Maximum accepted movement per sample (~250 ms).
-        final float MAX_STEP = 0.10f;
+        final float MAX_STEP = 0.035f;
 
         float trackX = DEFAULT_X;
         float trackY = DEFAULT_Y;
