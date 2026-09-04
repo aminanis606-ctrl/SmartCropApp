@@ -1127,10 +1127,10 @@ public class Pass2Optimizer {
                 } else {
 
                     float errorX =
-                            candidateX - trackX;
+                            candidateX - DEFAULT_X;
 
                     float errorY =
-                            candidateY - trackY;
+                            candidateY - DEFAULT_Y;
 
                     /*
                      * DEAD ZONE:
