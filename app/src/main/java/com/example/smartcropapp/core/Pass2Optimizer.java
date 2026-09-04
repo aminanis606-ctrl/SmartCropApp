@@ -926,40 +926,38 @@ public class Pass2Optimizer {
             return result;
         }
 
-        final int gridX = 12;
-        final int gridY = 8;
-        final int cells = gridX * gridY;
+        final int GRID_X = 12;
+        final int GRID_Y = 8;
+        final int CELLS = GRID_X * GRID_Y;
+
+        final float MOTION_MIN = 0.018f;
+        final int LOCK_FRAMES = 3;
 
         float trackX = DEFAULT_X;
         float trackY = DEFAULT_Y;
-
-        float velocityX = 0f;
-        float velocityY = 0f;
-
-        boolean hasTrack = false;
+        boolean locked = false;
 
         /*
-         * CAMERA CONTROLLER V2
+         * SUBJECT LOCK V1
          *
-         * Dead zone:
-         * kandidat kecil tidak menggerakkan kamera.
+         * Phase 1:
+         * beberapa sample awal digabung untuk mencari
+         * dominant region.
          *
-         * Soft follow:
-         * semakin jauh dari dead zone,
-         * semakin besar respons kamera.
+         * Phase 2:
+         * setelah lock, kandidat hanya dicari di sekitar
+         * posisi subject sebelumnya.
+         *
+         * Jadi peak baru yang jauh tidak boleh mengambil
+         * alih subject.
          */
-        final float MOTION_MIN = 0.018f;
 
-        final float DEAD_ZONE_X = 0.035f;
-        final float DEAD_ZONE_Y = 0.035f;
+        double[] lockScore = new double[CELLS];
+        int lockCount = 0;
 
-        final float FOLLOW_GAIN = 0.40f;
-        final float MAX_STEP = 0.025f;
+        for (int sampleIndex = 0; sampleIndex < samples.size(); sampleIndex++) {
 
-        final float VELOCITY_ALPHA = 0.20f;
-        final float VELOCITY_DECAY = 0.90f;
-
-        for (FrameSample sample : samples) {
+            FrameSample sample = samples.get(sampleIndex);
 
             if (sample == null ||
                     sample.motion == null ||
@@ -967,15 +965,14 @@ public class Pass2Optimizer {
                     sample.contrast == null) {
 
                 result.add(new Point(
-                        hasTrack ? trackX : DEFAULT_X,
-                        hasTrack ? trackY : DEFAULT_Y,
+                        trackX,
+                        trackY,
                         DEFAULT_SIZE));
-
                 continue;
             }
 
             int n = Math.min(
-                    cells,
+                    CELLS,
                     Math.min(
                             sample.motion.length,
                             Math.min(
@@ -984,88 +981,173 @@ public class Pass2Optimizer {
 
             if (n <= 0) {
                 result.add(new Point(
-                        hasTrack ? trackX : DEFAULT_X,
-                        hasTrack ? trackY : DEFAULT_Y,
+                        trackX,
+                        trackY,
                         DEFAULT_SIZE));
                 continue;
-            }
-
-            int motionCells = 0;
-
-            double peak = 0.0;
-            int peakIndex = -1;
-
-            for (int i = 0; i < n; i++) {
-
-                int y = i / gridX;
-
-                if (y == 0 || y == gridY - 1) {
-                    continue;
-                }
-
-                double motion =
-                        Math.max(0.0, sample.motion[i]);
-
-                if (motion >= MOTION_MIN) {
-                    motionCells++;
-                }
-
-                double edge =
-                        Math.max(0.0, sample.edge[i]);
-
-                double contrast =
-                        Math.max(0.0, sample.contrast[i]);
-
-                double value =
-                        motion *
-                        (0.50 +
-                         0.30 * edge +
-                         0.20 * contrast);
-
-                if (value > peak) {
-                    peak = value;
-                    peakIndex = i;
-                }
             }
 
             /*
-             * Tidak ada evidence yang cukup:
-             * pertahankan posisi kamera,
-             * tetapi biarkan velocity mati perlahan.
+             * ------------------------------------------------
+             * PHASE 1: DOMINANT SUBJECT LOCK
+             * ------------------------------------------------
              */
-            if (motionCells < 3 ||
-                    peakIndex < 0 ||
-                    peak < MOTION_MIN) {
+            if (!locked) {
 
-                velocityX *= VELOCITY_DECAY;
-                velocityY *= VELOCITY_DECAY;
+                for (int i = 0; i < n; i++) {
+
+                    int y = i / GRID_X;
+
+                    if (y == 0 || y == GRID_Y - 1) {
+                        continue;
+                    }
+
+                    double motion = Math.max(0.0, sample.motion[i]);
+                    double edge = Math.max(0.0, sample.edge[i]);
+                    double contrast = Math.max(0.0, sample.contrast[i]);
+
+                    if (motion < MOTION_MIN) {
+                        continue;
+                    }
+
+                    double value =
+                            motion *
+                            (0.50 +
+                             0.30 * edge +
+                             0.20 * contrast);
+
+                    lockScore[i] += value;
+                }
+
+                lockCount++;
+
+                if (lockCount < LOCK_FRAMES) {
+                    result.add(new Point(
+                            trackX,
+                            trackY,
+                            DEFAULT_SIZE));
+                    continue;
+                }
+
+                /*
+                 * Cari dominant region dari gabungan sample awal.
+                 */
+                double peak = 0.0;
+                int peakIndex = -1;
+
+                for (int i = 0; i < CELLS; i++) {
+
+                    int y = i / GRID_X;
+
+                    if (y == 0 || y == GRID_Y - 1) {
+                        continue;
+                    }
+
+                    if (lockScore[i] > peak) {
+                        peak = lockScore[i];
+                        peakIndex = i;
+                    }
+                }
+
+                if (peakIndex >= 0 && peak > 0.00001) {
+
+                    int peakY = peakIndex / GRID_X;
+                    int peakX = peakIndex % GRID_X;
+
+                    double weight = 0.0;
+                    double sumX = 0.0;
+                    double sumY = 0.0;
+
+                    double threshold = peak * 0.45;
+
+                    for (int y = Math.max(1, peakY - 1);
+                         y <= Math.min(GRID_Y - 2, peakY + 1);
+                         y++) {
+
+                        for (int x = Math.max(0, peakX - 1);
+                             x <= Math.min(GRID_X - 1, peakX + 1);
+                             x++) {
+
+                            int i = y * GRID_X + x;
+
+                            if (i >= CELLS) {
+                                continue;
+                            }
+
+                            double value = lockScore[i];
+
+                            if (value < threshold) {
+                                continue;
+                            }
+
+                            float cx = (x + 0.5f) / GRID_X;
+                            float cy = (y + 0.5f) / GRID_Y;
+
+                            weight += value;
+                            sumX += cx * value;
+                            sumY += cy * value;
+                        }
+                    }
+
+                    if (weight > 0.00001) {
+                        trackX = clamp(
+                                (float) (sumX / weight),
+                                0.08f,
+                                0.92f);
+
+                        trackY = clamp(
+                                (float) (sumY / weight),
+                                0.15f,
+                                0.85f);
+
+                        locked = true;
+                    }
+                }
 
                 result.add(new Point(
-                        hasTrack ? trackX : DEFAULT_X,
-                        hasTrack ? trackY : DEFAULT_Y,
+                        trackX,
+                        trackY,
                         DEFAULT_SIZE));
 
                 continue;
             }
 
-            int peakY = peakIndex / gridX;
-            int peakX = peakIndex % gridX;
+            /*
+             * ------------------------------------------------
+             * PHASE 2: LOCAL SUBJECT TRACKING
+             * ------------------------------------------------
+             *
+             * Jangan cari peak seluruh frame.
+             * Hanya cari kandidat di sekitar subject terakhir.
+             */
 
-            double weightSum = 0.0;
-            double weightedX = 0.0;
-            double weightedY = 0.0;
+            int centerX = Math.min(
+                    GRID_X - 1,
+                    Math.max(
+                            0,
+                            (int) (trackX * GRID_X)));
 
-            double threshold = peak * 0.45;
+            int centerY = Math.min(
+                    GRID_Y - 1,
+                    Math.max(
+                            1,
+                            (int) (trackY * GRID_Y)));
 
-            for (int y = Math.max(1, peakY - 1);
-                    y <= Math.min(gridY - 2, peakY + 1);
-                    y++) {
+            final int RADIUS_X = 2;
+            final int RADIUS_Y = 2;
 
-                for (int x = Math.max(0, peakX - 1);
-                        x <= Math.min(gridX - 1, peakX + 1);
-                        x++) {
+            double bestValue = 0.0;
+            int bestIndex = -1;
 
-                    int i = y * gridX + x;
+            for (int y = Math.max(1, centerY - RADIUS_Y);
+                 y <= Math.min(GRID_Y - 2, centerY + RADIUS_Y);
+                 y++) {
+
+                for (int x = Math.max(0, centerX - RADIUS_X);
+                     x <= Math.min(GRID_X - 1, centerX + RADIUS_X);
+                     x++) {
+
+                    int i = y * GRID_X + x;
 
                     if (i >= n) {
                         continue;
@@ -1080,173 +1162,75 @@ public class Pass2Optimizer {
                     double contrast =
                             Math.max(0.0, sample.contrast[i]);
 
+                    if (motion < MOTION_MIN) {
+                        continue;
+                    }
+
                     double value =
                             motion *
                             (0.50 +
                              0.30 * edge +
                              0.20 * contrast);
 
-                    if (value < threshold) {
-                        continue;
+                    /*
+                     * Continuity bonus:
+                     * kandidat yang dekat posisi terakhir
+                     * lebih dipercaya.
+                     */
+                    float cx = (x + 0.5f) / GRID_X;
+                    float cy = (y + 0.5f) / GRID_Y;
+
+                    float dx = cx - trackX;
+                    float dy = cy - trackY;
+
+                    double distance2 =
+                            dx * dx + dy * dy;
+
+                    double continuity =
+                            1.0 / (1.0 + distance2 * 35.0);
+
+                    value *= continuity;
+
+                    if (value > bestValue) {
+                        bestValue = value;
+                        bestIndex = i;
                     }
-
-                    float cx =
-                            (x + 0.5f) / gridX;
-
-                    float cy =
-                            (y + 0.5f) / gridY;
-
-                    weightSum += value;
-                    weightedX += cx * value;
-                    weightedY += cy * value;
                 }
             }
 
-            if (weightSum > 0.00001) {
+            /*
+             * Tidak menemukan kandidat dekat:
+             * SUBJECT TETAP DIKUNCI.
+             */
+            if (bestIndex >= 0 &&
+                    bestValue > 0.00001) {
+
+                int y = bestIndex / GRID_X;
+                int x = bestIndex % GRID_X;
 
                 float candidateX =
                         clamp(
-                                (float)
-                                        (weightedX / weightSum),
+                                (x + 0.5f) / GRID_X,
                                 0.08f,
                                 0.92f);
 
                 float candidateY =
                         clamp(
-                                (float)
-                                        (weightedY / weightSum),
+                                (y + 0.5f) / GRID_Y,
                                 0.15f,
                                 0.85f);
 
-                if (!hasTrack) {
-
-                    /*
-                     * First valid candidate:
-                     * langsung lock ke subject.
-                     */
-                    trackX = DEFAULT_X;
-                    trackY = DEFAULT_Y;
-
-                    hasTrack = true;
-
-                    velocityX = 0f;
-                    velocityY = 0f;
-
-                } else {
-
-                    float errorX =
-                            candidateX - trackX;
-
-                    float errorY =
-                            candidateY - trackY;
-
-                    /*
-                     * DEAD ZONE:
-                     * jangan mengejar jitter kecil.
-                     */
-                    float followX =
-                            Math.abs(errorX) <= DEAD_ZONE_X
-                                    ? 0f
-                                    : errorX;
-
-                    float followY =
-                            Math.abs(errorY) <= DEAD_ZONE_Y
-                                    ? 0f
-                                    : errorY;
-
-                    /*
-                     * CENTER PROTECTION V1:
-                     *
-                     * Follow tetap memakai candidate - track.
-                     * Jika subject sudah jauh dari center,
-                     * kamera perlahan ditarik kembali ke center.
-                     *
-                     * Center pull dibuat kecil agar tidak
-                     * mengalahkan tracking saat subject bergerak.
-                     */
-                    final float CENTER_PULL = 0.08f;
-
-                    float centerX =
-                            (DEFAULT_X - trackX) * CENTER_PULL;
-
-                    float centerY =
-                            (DEFAULT_Y - trackY) * CENTER_PULL;
-
-                    /*
-                     * Gabungkan follow + center protection.
-                     */
-                    float controlX =
-                            followX + centerX;
-
-                    float controlY =
-                            followY + centerY;
-
-                    /*
-                     * Proportional follow.
-                     */
-                    float stepX =
-                            controlX * FOLLOW_GAIN;
-
-                    float stepY =
-                            controlY * FOLLOW_GAIN;
-
-                    /*
-                     * Batasi kecepatan kamera.
-                     */
-                    stepX =
-                            clamp(
-                                    stepX,
-                                    -MAX_STEP,
-                                    MAX_STEP);
-
-                    stepY =
-                            clamp(
-                                    stepY,
-                                    -MAX_STEP,
-                                    MAX_STEP);
-
-                    float oldX = trackX;
-                    float oldY = trackY;
-
-                    trackX += stepX;
-                    trackY += stepY;
-
-                    trackX =
-                            clamp(
-                                    trackX,
-                                    0.08f,
-                                    0.92f);
-
-                    trackY =
-                            clamp(
-                                    trackY,
-                                    0.15f,
-                                    0.85f);
-
-                    /*
-                     * Velocity hanya digunakan sebagai
-                     * informasi kontinuitas, bukan untuk
-                     * membuat kamera terus bergerak.
-                     */
-                    float measuredVX =
-                            trackX - oldX;
-
-                    float measuredVY =
-                            trackY - oldY;
-
-                    velocityX +=
-                            (measuredVX - velocityX) *
-                            VELOCITY_ALPHA;
-
-                    velocityY +=
-                            (measuredVY - velocityY) *
-                            VELOCITY_ALPHA;
-                }
+                /*
+                 * Tracking langsung ke kandidat lokal.
+                 * Tidak ada velocity / center pull / global peak.
+                 */
+                trackX = candidateX;
+                trackY = candidateY;
             }
 
             result.add(new Point(
-                    hasTrack ? trackX : DEFAULT_X,
-                    hasTrack ? trackY : DEFAULT_Y,
+                    trackX,
+                    trackY,
                     DEFAULT_SIZE));
         }
 
