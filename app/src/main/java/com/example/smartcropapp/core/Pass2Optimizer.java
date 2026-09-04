@@ -931,33 +931,30 @@ public class Pass2Optimizer {
         final int CELLS = GRID_X * GRID_Y;
 
         final float MOTION_MIN = 0.018f;
+
+        // Initial subject lock.
         final int LOCK_FRAMES = 3;
+
+        // A new candidate must persist before taking over.
+        final int CONFIRM_FRAMES = 2;
+
+        // Maximum accepted movement per sample (~250 ms).
+        final float MAX_STEP = 0.10f;
 
         float trackX = DEFAULT_X;
         float trackY = DEFAULT_Y;
+
         boolean locked = false;
 
-        /*
-         * SUBJECT LOCK V1
-         *
-         * Phase 1:
-         * beberapa sample awal digabung untuk mencari
-         * dominant region.
-         *
-         * Phase 2:
-         * setelah lock, kandidat hanya dicari di sekitar
-         * posisi subject sebelumnya.
-         *
-         * Jadi peak baru yang jauh tidak boleh mengambil
-         * alih subject.
-         */
+        // Pending candidate waiting for temporal confirmation.
+        int pendingX = -1;
+        int pendingY = -1;
+        int pendingCount = 0;
 
         double[] lockScore = new double[CELLS];
         int lockCount = 0;
 
-        for (int sampleIndex = 0; sampleIndex < samples.size(); sampleIndex++) {
-
-            FrameSample sample = samples.get(sampleIndex);
+        for (FrameSample sample : samples) {
 
             if (sample == null ||
                     sample.motion == null ||
@@ -968,6 +965,7 @@ public class Pass2Optimizer {
                         trackX,
                         trackY,
                         DEFAULT_SIZE));
+
                 continue;
             }
 
@@ -988,9 +986,9 @@ public class Pass2Optimizer {
             }
 
             /*
-             * ------------------------------------------------
-             * PHASE 1: DOMINANT SUBJECT LOCK
-             * ------------------------------------------------
+             * =========================================================
+             * PHASE 1 — INITIAL SUBJECT LOCK
+             * =========================================================
              */
             if (!locked) {
 
@@ -1002,9 +1000,14 @@ public class Pass2Optimizer {
                         continue;
                     }
 
-                    double motion = Math.max(0.0, sample.motion[i]);
-                    double edge = Math.max(0.0, sample.edge[i]);
-                    double contrast = Math.max(0.0, sample.contrast[i]);
+                    double motion =
+                            Math.max(0.0, sample.motion[i]);
+
+                    double edge =
+                            Math.max(0.0, sample.edge[i]);
+
+                    double contrast =
+                            Math.max(0.0, sample.contrast[i]);
 
                     if (motion < MOTION_MIN) {
                         continue;
@@ -1022,16 +1025,15 @@ public class Pass2Optimizer {
                 lockCount++;
 
                 if (lockCount < LOCK_FRAMES) {
+
                     result.add(new Point(
                             trackX,
                             trackY,
                             DEFAULT_SIZE));
+
                     continue;
                 }
 
-                /*
-                 * Cari dominant region dari gabungan sample awal.
-                 */
                 double peak = 0.0;
                 int peakIndex = -1;
 
@@ -1070,18 +1072,17 @@ public class Pass2Optimizer {
 
                             int i = y * GRID_X + x;
 
-                            if (i >= CELLS) {
-                                continue;
-                            }
-
                             double value = lockScore[i];
 
                             if (value < threshold) {
                                 continue;
                             }
 
-                            float cx = (x + 0.5f) / GRID_X;
-                            float cy = (y + 0.5f) / GRID_Y;
+                            float cx =
+                                    (x + 0.5f) / GRID_X;
+
+                            float cy =
+                                    (y + 0.5f) / GRID_Y;
 
                             weight += value;
                             sumX += cx * value;
@@ -1090,6 +1091,7 @@ public class Pass2Optimizer {
                     }
 
                     if (weight > 0.00001) {
+
                         trackX = clamp(
                                 (float) (sumX / weight),
                                 0.08f,
@@ -1113,12 +1115,15 @@ public class Pass2Optimizer {
             }
 
             /*
-             * ------------------------------------------------
-             * PHASE 2: LOCAL SUBJECT TRACKING
-             * ------------------------------------------------
+             * =========================================================
+             * PHASE 2 — TEMPORAL IDENTITY TRACKING
+             * =========================================================
              *
-             * Jangan cari peak seluruh frame.
-             * Hanya cari kandidat di sekitar subject terakhir.
+             * Cari kandidat hanya di sekitar subject terakhir.
+             *
+             * Kandidat baru TIDAK langsung mengambil alih.
+             * Ia harus muncul pada posisi yang sama selama
+             * CONFIRM_FRAMES sample berturut-turut.
              */
 
             int centerX = Math.min(
@@ -1128,7 +1133,7 @@ public class Pass2Optimizer {
                             (int) (trackX * GRID_X)));
 
             int centerY = Math.min(
-                    GRID_Y - 1,
+                    GRID_Y - 2,
                     Math.max(
                             1,
                             (int) (trackY * GRID_Y)));
@@ -1137,7 +1142,8 @@ public class Pass2Optimizer {
             final int RADIUS_Y = 2;
 
             double bestValue = 0.0;
-            int bestIndex = -1;
+            int bestX = -1;
+            int bestY = -1;
 
             for (int y = Math.max(1, centerY - RADIUS_Y);
                  y <= Math.min(GRID_Y - 2, centerY + RADIUS_Y);
@@ -1166,19 +1172,11 @@ public class Pass2Optimizer {
                         continue;
                     }
 
-                    double value =
-                            motion *
-                            (0.50 +
-                             0.30 * edge +
-                             0.20 * contrast);
+                    float cx =
+                            (x + 0.5f) / GRID_X;
 
-                    /*
-                     * Continuity bonus:
-                     * kandidat yang dekat posisi terakhir
-                     * lebih dipercaya.
-                     */
-                    float cx = (x + 0.5f) / GRID_X;
-                    float cy = (y + 0.5f) / GRID_Y;
+                    float cy =
+                            (y + 0.5f) / GRID_Y;
 
                     float dx = cx - trackX;
                     float dy = cy - trackY;
@@ -1186,46 +1184,132 @@ public class Pass2Optimizer {
                     double distance2 =
                             dx * dx + dy * dy;
 
+                    /*
+                     * Strong continuity preference.
+                     */
                     double continuity =
-                            1.0 / (1.0 + distance2 * 35.0);
+                            1.0 /
+                            (1.0 + distance2 * 60.0);
 
-                    value *= continuity;
+                    double value =
+                            motion *
+                            (0.50 +
+                             0.30 * edge +
+                             0.20 * contrast) *
+                            continuity;
 
                     if (value > bestValue) {
                         bestValue = value;
-                        bestIndex = i;
+                        bestX = x;
+                        bestY = y;
                     }
                 }
             }
 
             /*
-             * Tidak menemukan kandidat dekat:
-             * SUBJECT TETAP DIKUNCI.
+             * No valid candidate:
+             *
+             * KEEP CURRENT SUBJECT.
              */
-            if (bestIndex >= 0 &&
-                    bestValue > 0.00001) {
+            if (bestX < 0 ||
+                    bestY < 0 ||
+                    bestValue <= 0.00001) {
 
-                int y = bestIndex / GRID_X;
-                int x = bestIndex % GRID_X;
+                pendingX = -1;
+                pendingY = -1;
+                pendingCount = 0;
 
-                float candidateX =
-                        clamp(
-                                (x + 0.5f) / GRID_X,
-                                0.08f,
-                                0.92f);
+                result.add(new Point(
+                        trackX,
+                        trackY,
+                        DEFAULT_SIZE));
 
-                float candidateY =
-                        clamp(
-                                (y + 0.5f) / GRID_Y,
-                                0.15f,
-                                0.85f);
+                continue;
+            }
+
+            /*
+             * Candidate position in normalized coordinates.
+             */
+            float candidateX =
+                    clamp(
+                            (bestX + 0.5f) / GRID_X,
+                            0.08f,
+                            0.92f);
+
+            float candidateY =
+                    clamp(
+                            (bestY + 0.5f) / GRID_Y,
+                            0.15f,
+                            0.85f);
+
+            /*
+             * Temporal confirmation.
+             */
+            if (bestX == pendingX &&
+                    bestY == pendingY) {
+
+                pendingCount++;
+
+            } else {
+
+                pendingX = bestX;
+                pendingY = bestY;
+                pendingCount = 1;
+            }
+
+            /*
+             * Only confirmed candidates may move the tracker.
+             */
+            if (pendingCount >= CONFIRM_FRAMES) {
+
+                float dx =
+                        candidateX - trackX;
+
+                float dy =
+                        candidateY - trackY;
+
+                float distance =
+                        (float) Math.sqrt(
+                                dx * dx + dy * dy);
 
                 /*
-                 * Tracking langsung ke kandidat lokal.
-                 * Tidak ada velocity / center pull / global peak.
+                 * Reject teleport-like changes.
+                 *
+                 * This does NOT freeze the subject.
+                 * Normal movement is still followed.
                  */
-                trackX = candidateX;
-                trackY = candidateY;
+                if (distance <= MAX_STEP) {
+
+                    trackX = candidateX;
+                    trackY = candidateY;
+
+                } else {
+
+                    /*
+                     * Follow toward the candidate,
+                     * but only by MAX_STEP.
+                     */
+                    float scale =
+                            MAX_STEP / distance;
+
+                    trackX += dx * scale;
+                    trackY += dy * scale;
+
+                    trackX = clamp(
+                            trackX,
+                            0.08f,
+                            0.92f);
+
+                    trackY = clamp(
+                            trackY,
+                            0.15f,
+                            0.85f);
+                }
+
+                /*
+                 * Candidate has been consumed.
+                 */
+                pendingCount = 0;
             }
 
             result.add(new Point(
