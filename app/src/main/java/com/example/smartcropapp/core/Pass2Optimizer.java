@@ -951,8 +951,6 @@ public class Pass2Optimizer {
         int pendingY = -1;
         int pendingCount = 0;
 
-        FrameSample previousSample = null;
-
         double[] lockScore = new double[CELLS];
         int lockCount = 0;
 
@@ -1193,51 +1191,13 @@ public class Pass2Optimizer {
                             1.0 /
                             (1.0 + distance2 * 60.0);
 
-                      double saliency =
-                              motion *
-                              (0.50 +
-                               0.30 * edge +
-                               0.20 * contrast);
+                    double value =
+                            motion *
+                            (0.50 +
+                             0.30 * edge +
+                             0.20 * contrast) *
+                            continuity;
 
-                      // Temporal correspondence: prefer a candidate
-                      // whose feature value resembles the subject cell
-                      // from the previous frame.
-                      double similarity = 0.5;
-                      if (previousSample != null &&
-                          previousSample.brightness != null &&
-                          previousSample.texture != null &&
-                          previousSample.edge != null &&
-                          previousSample.contrast != null) {
-
-                          int previousIndex = centerY * GRID_X + centerX;
-                          int candidateIndex = y * GRID_X + x;
-
-                          if (previousIndex < previousSample.brightness.length &&
-                              candidateIndex < sample.brightness.length) {
-
-                              double difference =
-                                      0.35 * Math.abs(
-                                              previousSample.brightness[previousIndex]
-                                              - sample.brightness[candidateIndex])
-                                      + 0.25 * Math.abs(
-                                              previousSample.texture[previousIndex]
-                                              - sample.texture[candidateIndex])
-                                      + 0.25 * Math.abs(
-                                              previousSample.edge[previousIndex]
-                                              - sample.edge[candidateIndex])
-                                      + 0.15 * Math.abs(
-                                              previousSample.contrast[previousIndex]
-                                              - sample.contrast[candidateIndex]);
-
-                              similarity =
-                                      1.0 / (1.0 + difference * 12.0);
-                          }
-                      }
-
-                      double value =
-                              saliency *
-                              continuity *
-                              (0.40 + 0.60 * similarity);
                     if (value > bestValue) {
                         bestValue = value;
                         bestX = x;
@@ -1356,8 +1316,6 @@ public class Pass2Optimizer {
                     trackX,
                     trackY,
                     DEFAULT_SIZE));
-
-            previousSample = sample;
         }
 
         return result;
