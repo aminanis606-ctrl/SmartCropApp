@@ -1131,6 +1131,7 @@ public class Pass2Optimizer {
                         }
                     }
                 }
+                }
 
                 result.add(new Point(
                         trackX,
