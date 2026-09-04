@@ -1307,6 +1307,76 @@ public class Pass2Optimizer {
                 }
 
                 /*
+                 * SUB-CELL X REFINEMENT
+                 *
+                 * Hanya memperhalus X dari candidate yang SUDAH
+                 * dikonfirmasi. Tidak mengubah Y.
+                 */
+                double refineTotal = 0.0;
+                double refineX = 0.0;
+
+                int refineLeft = Math.max(0, bestX - 1);
+                int refineRight = Math.min(GRID_X - 1, bestX + 1);
+
+                for (int rx = refineLeft; rx <= refineRight; rx++) {
+                    int ri = bestY * GRID_X + rx;
+
+                    if (ri < 0 || ri >= n) {
+                        continue;
+                    }
+
+                    double rm = Math.max(0.0, sample.motion[ri]);
+                    double re = Math.max(0.0, sample.edge[ri]);
+                    double rc = Math.max(0.0, sample.contrast[ri]);
+
+                    if (rm < MOTION_MIN) {
+                        continue;
+                    }
+
+                    double rv =
+                            rm *
+                            (0.50 +
+                             0.30 * re +
+                             0.20 * rc);
+
+                    if (rv <= 0.00001) {
+                        continue;
+                    }
+
+                    float rxCenter =
+                            (rx + 0.5f) / GRID_X;
+
+                    refineTotal += rv;
+                    refineX += rxCenter * rv;
+                }
+
+                if (refineTotal > 0.00001) {
+                    float refinedX =
+                            clamp(
+                                    (float)(refineX / refineTotal),
+                                    0.08f,
+                                    0.92f);
+
+                    final float MAX_REFINEMENT_X = 0.035f;
+
+                    float correction =
+                            refinedX - trackX;
+
+                    correction =
+                            clamp(
+                                    correction,
+                                    -MAX_REFINEMENT_X,
+                                    MAX_REFINEMENT_X);
+
+                    trackX += correction;
+
+                    trackX = clamp(
+                            trackX,
+                            0.08f,
+                            0.92f);
+                }
+
+                /*
                  * Candidate has been consumed.
                  */
                 pendingCount = 0;
