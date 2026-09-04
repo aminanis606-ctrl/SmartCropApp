@@ -17,6 +17,7 @@ import java.util.List;
 public class Pass1Extractor {
 
     private static final String TAG = "Pass1Extractor";
+    private static final SubjectDetector SUBJECT_DETECTOR = new SubjectDetector();
 
     private static final long INTERVAL_US = 250_000L;
 
@@ -130,6 +131,11 @@ public class Pass1Extractor {
                         analyzeFrame(
                                 bitmap,
                                 timeUs / 1000L);
+                List<SubjectDetector.Subject> subjects =
+                        SUBJECT_DETECTOR.detect(bitmap);
+
+                Log.i(TAG, "SUBJECT_DIAG t=" + (timeUs / 1000L)
+                        + " faces=" + subjects.size());
 
                 // TEMPORAL MOTION: per-cell brightness change
                 if (previousBrightness != null &&
