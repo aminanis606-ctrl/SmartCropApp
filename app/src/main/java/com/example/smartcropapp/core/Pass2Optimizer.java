@@ -1124,8 +1124,8 @@ public class Pass2Optimizer {
                      * First valid candidate:
                      * langsung lock ke subject.
                      */
-                    trackX = clamp(candidateX, DEFAULT_X - MAX_STEP, DEFAULT_X + MAX_STEP);
-                    trackY = clamp(candidateY, DEFAULT_Y - MAX_STEP, DEFAULT_Y + MAX_STEP);
+                    trackX = candidateX;
+                    trackY = candidateY;
 
                     hasTrack = true;
 
