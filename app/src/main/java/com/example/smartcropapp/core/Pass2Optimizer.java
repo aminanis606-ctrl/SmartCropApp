@@ -951,11 +951,6 @@ public class Pass2Optimizer {
         int pendingY = -1;
         int pendingCount = 0;
 
-        // Local identity signature: brightness, texture, contrast, edge.
-        float[] template = null;
-        final float TEMPLATE_ALPHA = 0.12f;
-        final double MIN_TEMPLATE_MATCH = 0.62;
-
         double[] lockScore = new double[CELLS];
         int lockCount = 0;
 
@@ -1108,27 +1103,6 @@ public class Pass2Optimizer {
                                 0.85f);
 
                         locked = true;
-
-                        template = new float[36];
-                        int tx = Math.min(GRID_X - 1,
-                                Math.max(0, (int)(trackX * GRID_X)));
-                        int ty = Math.min(GRID_Y - 2,
-                                Math.max(1, (int)(trackY * GRID_Y)));
-
-                        int k = 0;
-                        for (int py = -1; py <= 1; py++) {
-                            for (int px = -1; px <= 1; px++) {
-                                int x = Math.min(GRID_X - 1,
-                                        Math.max(0, tx + px));
-                                int y = Math.min(GRID_Y - 2,
-                                        Math.max(1, ty + py));
-                                int i = y * GRID_X + x;
-
-                                template[k++] = sample.brightness[i];
-                                template[k++] = sample.texture[i];
-                                template[k++] = sample.contrast[i];
-                                template[k++] = sample.edge[i];
-                        }
                     }
                 }
 
@@ -1217,41 +1191,7 @@ public class Pass2Optimizer {
                             1.0 /
                             (1.0 + distance2 * 60.0);
 
-                    double templateDiff = 0.0;
-                    int tk = 0;
-
-                    for (int py = -1; py <= 1; py++) {
-                        for (int px = -1; px <= 1; px++) {
-                            int sx = Math.min(GRID_X - 1,
-                                    Math.max(0, x + px));
-                            int sy = Math.min(GRID_Y - 2,
-                                    Math.max(1, y + py));
-                            int si = sy * GRID_X + sx;
-
-                            templateDiff +=
-                                    0.30 * Math.abs(
-                                            sample.brightness[si] - template[tk++]);
-                            templateDiff +=
-                                    0.20 * Math.abs(
-                                            sample.texture[si] - template[tk++]);
-                            templateDiff +=
-                                    0.25 * Math.abs(
-                                            sample.contrast[si] - template[tk++]);
-                            templateDiff +=
-                                    0.25 * Math.abs(
-                                            sample.edge[si] - template[tk++]);
-                        }
-                    }
-
-                    double templateMatch =
-                            1.0 / (1.0 + templateDiff * 12.0);
-
-                    if (templateMatch < MIN_TEMPLATE_MATCH) {
-                        continue;
-                    }
-
                     double value =
-                            templateMatch *
                             motion *
                             (0.50 +
                              0.30 * edge +
