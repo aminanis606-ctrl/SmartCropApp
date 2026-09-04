@@ -1584,6 +1584,106 @@ public class Pass2Optimizer {
                 DEFAULT_SIZE);
     }
 
+
+    /*
+     * Local feature-pattern similarity.
+     *
+     * Membandingkan pola kecil di sekitar posisi lama dengan kandidat.
+     * Dipakai hanya sebagai identitas tambahan, bukan pengganti motion.
+     */
+    private static double localPatternSimilarity(
+            FrameSample previous,
+            FrameSample current,
+            int oldX,
+            int oldY,
+            int newX,
+            int newY) {
+
+        if (previous == null || current == null ||
+                previous.motion == null || current.motion == null ||
+                previous.edge == null || current.edge == null ||
+                previous.contrast == null || current.contrast == null) {
+            return 0.0;
+        }
+
+        double sumA = 0.0;
+        double sumB = 0.0;
+        double sumAA = 0.0;
+        double sumBB = 0.0;
+        double sumAB = 0.0;
+        int count = 0;
+
+        for (int dy = -1; dy <= 1; dy++) {
+            for (int dx = -1; dx <= 1; dx++) {
+
+                int ax = oldX + dx;
+                int ay = oldY + dy;
+                int bx = newX + dx;
+                int by = newY + dy;
+
+                if (ax < 0 || ax >= GRID_X ||
+                        bx < 0 || bx >= GRID_X ||
+                        ay < 1 || ay >= GRID_Y - 1 ||
+                        by < 1 || by >= GRID_Y - 1) {
+                    continue;
+                }
+
+                int ai = ay * GRID_X + ax;
+                int bi = by * GRID_X + bx;
+
+                if (ai >= previous.motion.length ||
+                        bi >= current.motion.length ||
+                        ai >= previous.edge.length ||
+                        bi >= current.edge.length ||
+                        ai >= previous.contrast.length ||
+                        bi >= current.contrast.length) {
+                    continue;
+                }
+
+                double a =
+                        Math.max(0.0, previous.motion[ai]) * 0.50 +
+                        Math.max(0.0, previous.edge[ai]) * 0.30 +
+                        Math.max(0.0, previous.contrast[ai]) * 0.20;
+
+                double b =
+                        Math.max(0.0, current.motion[bi]) * 0.50 +
+                        Math.max(0.0, current.edge[bi]) * 0.30 +
+                        Math.max(0.0, current.contrast[bi]) * 0.20;
+
+                sumA += a;
+                sumB += b;
+                sumAA += a * a;
+                sumBB += b * b;
+                sumAB += a * b;
+                count++;
+            }
+        }
+
+        if (count < 3) {
+            return 0.0;
+        }
+
+        double numerator =
+                count * sumAB - sumA * sumB;
+
+        double denomA =
+                count * sumAA - sumA * sumA;
+
+        double denomB =
+                count * sumBB - sumB * sumB;
+
+        if (denomA <= 0.00000001 ||
+                denomB <= 0.00000001) {
+            return 0.0;
+        }
+
+        double corr =
+                numerator /
+                Math.sqrt(denomA * denomB);
+
+        return Math.max(-1.0, Math.min(1.0, corr));
+    }
+
     private static float clamp(
             float value,
             float min,
