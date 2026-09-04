@@ -1168,10 +1168,6 @@ public class Pass2Optimizer {
                     double contrast =
                             Math.max(0.0, sample.contrast[i]);
 
-                    if (motion < MOTION_MIN) {
-                        continue;
-                    }
-
                     float cx =
                             (x + 0.5f) / GRID_X;
 
