@@ -1155,13 +1155,40 @@ public class Pass2Optimizer {
                                     : errorY;
 
                     /*
+                     * CENTER PROTECTION V1:
+                     *
+                     * Follow tetap memakai candidate - track.
+                     * Jika subject sudah jauh dari center,
+                     * kamera perlahan ditarik kembali ke center.
+                     *
+                     * Center pull dibuat kecil agar tidak
+                     * mengalahkan tracking saat subject bergerak.
+                     */
+                    final float CENTER_PULL = 0.08f;
+
+                    float centerX =
+                            (DEFAULT_X - trackX) * CENTER_PULL;
+
+                    float centerY =
+                            (DEFAULT_Y - trackY) * CENTER_PULL;
+
+                    /*
+                     * Gabungkan follow + center protection.
+                     */
+                    float controlX =
+                            followX + centerX;
+
+                    float controlY =
+                            followY + centerY;
+
+                    /*
                      * Proportional follow.
                      */
                     float stepX =
-                            followX * FOLLOW_GAIN;
+                            controlX * FOLLOW_GAIN;
 
                     float stepY =
-                            followY * FOLLOW_GAIN;
+                            controlY * FOLLOW_GAIN;
 
                     /*
                      * Batasi kecepatan kamera.
