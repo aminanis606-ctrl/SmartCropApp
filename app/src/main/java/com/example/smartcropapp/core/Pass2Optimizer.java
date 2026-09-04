@@ -1124,8 +1124,8 @@ public class Pass2Optimizer {
                      * First valid candidate:
                      * langsung lock ke subject.
                      */
-                    trackX = candidateX;
-                    trackY = candidateY;
+                    trackX = DEFAULT_X;
+                    trackY = DEFAULT_Y;
 
                     hasTrack = true;
 
