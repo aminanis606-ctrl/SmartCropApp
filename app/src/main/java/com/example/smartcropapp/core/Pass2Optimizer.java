@@ -1114,8 +1114,6 @@ public class Pass2Optimizer {
                 continue;
             }
 
-            /*
-             * =========================================================
         /*
          * PHASE 2 — HOLD INITIAL DOMINANT POINT
          *
@@ -1132,6 +1130,7 @@ public class Pass2Optimizer {
             }
 
             result.add(new Point(trackX, trackY, DEFAULT_SIZE));
+        }
         }
         return result;
     }
