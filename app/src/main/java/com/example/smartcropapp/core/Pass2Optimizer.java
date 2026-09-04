@@ -990,6 +990,8 @@ public class Pass2Optimizer {
                 continue;
             }
 
+            int motionCells = 0;
+
             double peak = 0.0;
             int peakIndex = -1;
 
@@ -1003,6 +1005,10 @@ public class Pass2Optimizer {
 
                 double motion =
                         Math.max(0.0, sample.motion[i]);
+
+                if (motion >= MOTION_MIN) {
+                    motionCells++;
+                }
 
                 double edge =
                         Math.max(0.0, sample.edge[i]);
@@ -1027,7 +1033,9 @@ public class Pass2Optimizer {
              * pertahankan posisi kamera,
              * tetapi biarkan velocity mati perlahan.
              */
-            if (peakIndex < 0 || peak < MOTION_MIN) {
+            if (motionCells < 3 ||
+                    peakIndex < 0 ||
+                    peak < MOTION_MIN) {
 
                 velocityX *= VELOCITY_DECAY;
                 velocityY *= VELOCITY_DECAY;
@@ -1127,10 +1135,10 @@ public class Pass2Optimizer {
                 } else {
 
                     float errorX =
-                            candidateX - DEFAULT_X;
+                            candidateX - trackX;
 
                     float errorY =
-                            candidateY - DEFAULT_Y;
+                            candidateY - trackY;
 
                     /*
                      * DEAD ZONE:
