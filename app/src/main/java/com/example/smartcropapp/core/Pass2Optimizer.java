@@ -1116,204 +1116,23 @@ public class Pass2Optimizer {
 
             /*
              * =========================================================
-             * PHASE 2 — TEMPORAL IDENTITY TRACKING
-             * =========================================================
-             *
-             * Cari kandidat hanya di sekitar subject terakhir.
-             *
-             * Kandidat baru TIDAK langsung mengambil alih.
-             * Ia harus muncul pada posisi yang sama selama
-             * CONFIRM_FRAMES sample berturut-turut.
-             */
-
-            int centerX = Math.min(
-                    GRID_X - 1,
-                    Math.max(
-                            0,
-                            (int) (trackX * GRID_X)));
-
-            int centerY = Math.min(
-                    GRID_Y - 2,
-                    Math.max(
-                            1,
-                            (int) (trackY * GRID_Y)));
-
-            final int RADIUS_X = 2;
-            final int RADIUS_Y = 2;
-
-            double bestValue = 0.0;
-            int bestX = -1;
-            int bestY = -1;
-
-            for (int y = Math.max(1, centerY - RADIUS_Y);
-                 y <= Math.min(GRID_Y - 2, centerY + RADIUS_Y);
-                 y++) {
-
-                for (int x = Math.max(0, centerX - RADIUS_X);
-                     x <= Math.min(GRID_X - 1, centerX + RADIUS_X);
-                     x++) {
-
-                    int i = y * GRID_X + x;
-
-                    if (i >= n) {
-                        continue;
-                    }
-
-                    double motion =
-                            Math.max(0.0, sample.motion[i]);
-
-                    double edge =
-                            Math.max(0.0, sample.edge[i]);
-
-                    double contrast =
-                            Math.max(0.0, sample.contrast[i]);
-
-                    float cx =
-                            (x + 0.5f) / GRID_X;
-
-                    float cy =
-                            (y + 0.5f) / GRID_Y;
-
-                    float dx = cx - trackX;
-                    float dy = cy - trackY;
-
-                    double distance2 =
-                            dx * dx + dy * dy;
-
-                    /*
-                     * Strong continuity preference.
-                     */
-                    double continuity =
-                            1.0 /
-                            (1.0 + distance2 * 60.0);
-
-                    double value =
-                            motion *
-                            (0.50 +
-                             0.30 * edge +
-                             0.20 * contrast) *
-                            continuity;
-
-                    if (value > bestValue) {
-                        bestValue = value;
-                        bestX = x;
-                        bestY = y;
-                    }
-                }
+        /*
+         * PHASE 2 — HOLD INITIAL DOMINANT POINT
+         *
+         * SINGLE podcast mode:
+         * - subject point is selected once at shot start
+         * - after lock, position remains fixed until shot end
+         * - no temporal chasing of mouth/head movement
+         */
+        if (locked) {
+            // Backfill the initial lock across the startup samples.
+            int backfillStart = Math.max(0, result.size() - LOCK_FRAMES);
+            for (int j = backfillStart; j < result.size(); j++) {
+                result.set(j, new Point(trackX, trackY, DEFAULT_SIZE));
             }
 
-            /*
-             * No valid candidate:
-             *
-             * KEEP CURRENT SUBJECT.
-             */
-            if (bestX < 0 ||
-                    bestY < 0 ||
-                    bestValue <= 0.00001) {
-
-                pendingX = -1;
-                pendingY = -1;
-                pendingCount = 0;
-
-                result.add(new Point(
-                        trackX,
-                        trackY,
-                        DEFAULT_SIZE));
-
-                continue;
-            }
-
-            /*
-             * Candidate position in normalized coordinates.
-             */
-            float candidateX =
-                    clamp(
-                            (bestX + 0.5f) / GRID_X,
-                            0.08f,
-                            0.92f);
-
-            float candidateY =
-                    clamp(
-                            (bestY + 0.5f) / GRID_Y,
-                            0.15f,
-                            0.85f);
-
-            /*
-             * Temporal confirmation.
-             */
-            if (bestX == pendingX &&
-                    bestY == pendingY) {
-
-                pendingCount++;
-
-            } else {
-
-                pendingX = bestX;
-                pendingY = bestY;
-                pendingCount = 1;
-            }
-
-            /*
-             * Only confirmed candidates may move the tracker.
-             */
-            if (pendingCount >= CONFIRM_FRAMES) {
-
-                float dx =
-                        candidateX - trackX;
-
-                float dy =
-                        candidateY - trackY;
-
-                float distance =
-                        (float) Math.sqrt(
-                                dx * dx + dy * dy);
-
-                /*
-                 * Reject teleport-like changes.
-                 *
-                 * This does NOT freeze the subject.
-                 * Normal movement is still followed.
-                 */
-                if (distance <= MAX_STEP) {
-
-                    trackX = candidateX;
-                    trackY = candidateY;
-
-                } else {
-
-                    /*
-                     * Follow toward the candidate,
-                     * but only by MAX_STEP.
-                     */
-                    float scale =
-                            MAX_STEP / distance;
-
-                    trackX += dx * scale;
-                    trackY += dy * scale;
-
-                    trackX = clamp(
-                            trackX,
-                            0.08f,
-                            0.92f);
-
-                    trackY = clamp(
-                            trackY,
-                            0.15f,
-                            0.85f);
-                }
-
-                /*
-                 * Candidate has been consumed.
-                 */
-                pendingCount = 0;
-            }
-
-            result.add(new Point(
-                    trackX,
-                    trackY,
-                    DEFAULT_SIZE));
+            result.add(new Point(trackX, trackY, DEFAULT_SIZE));
         }
-
         return result;
     }
 
