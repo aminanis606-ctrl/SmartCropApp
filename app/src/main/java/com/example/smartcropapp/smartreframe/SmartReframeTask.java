@@ -4,13 +4,14 @@ package com.example.smartcropapp.smartreframe;
 import android.content.Context;
 import android.net.Uri;
 
-import com.example.smartcropapp.nalaros.Task;
+import com.example.smartcropapp.nalaros.Artifact;
 
 public class SmartReframeTask {
 
     private final Context context;
     private final Uri sourceVideoUri;
     private final String videoId;
+    private Artifact analysisArtifact;
 
     public SmartReframeTask(
             Context context,
@@ -32,5 +33,13 @@ public class SmartReframeTask {
 
     public String getVideoId() {
         return videoId;
+    }
+
+    public Artifact getAnalysisArtifact() {
+        return analysisArtifact;
+    }
+
+    public void setAnalysisArtifact(Artifact analysisArtifact) {
+        this.analysisArtifact = analysisArtifact;
     }
 }

@@ -15,6 +15,7 @@ public class SmartReframeOrchestrator {
     private final Context context;
     private final Uri sourceVideoUri;
     private final String videoId;
+    private Artifact analysisArtifact;
 
     public SmartReframeOrchestrator(
             Context context,
@@ -53,7 +54,16 @@ public class SmartReframeOrchestrator {
                         java.util.Collections.singletonList(
                                 new Pass1Stage(analysisFile)));
 
-        return new ExecutionEngine().execute(task);
+        analysisArtifact =
+                new ExecutionEngine().execute(task);
+
+        if (analysisArtifact == null ||
+                !analysisArtifact.isValid()) {
+            throw new IllegalStateException(
+                    "Artifact analysis dari Pass1 tidak valid.");
+        }
+
+        return analysisArtifact;
     }
 
     public Artifact runPass2AndPass3(
@@ -65,6 +75,14 @@ public class SmartReframeOrchestrator {
                         context,
                         sourceVideoUri,
                         videoId);
+
+        if (analysisArtifact == null ||
+                !analysisArtifact.isValid()) {
+            throw new IllegalStateException(
+                    "Artifact analysis dari Pass1 tidak tersedia.");
+        }
+
+        configuration.setAnalysisArtifact(analysisArtifact);
 
         Task task =
                 new Task(

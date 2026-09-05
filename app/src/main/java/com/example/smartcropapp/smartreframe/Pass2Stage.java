@@ -31,16 +31,25 @@ public class Pass2Stage implements Stage {
             Task task,
             List<Artifact> inputs) throws Exception {
 
-        if (inputs == null || inputs.isEmpty()) {
-            throw new IllegalStateException(
-                    "Pass2 membutuhkan artifact Pass1.");
-        }
+        SmartReframeTask smartReframeTask =
+                (SmartReframeTask) task.getConfiguration();
 
         Artifact analysis =
-                inputs.get(inputs.size() - 1);
+                smartReframeTask.getAnalysisArtifact();
+
+        if (analysis == null || !analysis.isValid()) {
+            throw new IllegalStateException(
+                    "Pass2 membutuhkan artifact Pass1 yang valid.");
+        }
 
         File analysisFile =
                 new File(analysis.getLocation());
+
+        if (!analysisFile.exists() || analysisFile.length() <= 0) {
+            throw new IllegalStateException(
+                    "File analysis Pass1 tidak ditemukan: "
+                            + analysisFile.getAbsolutePath());
+        }
 
         Pass2Optimizer.optimize(
                 analysisFile,
