@@ -28,6 +28,7 @@ import com.example.smartcropapp.core.Pass1Extractor;
 import com.example.smartcropapp.core.Pass2Optimizer;
 import com.example.smartcropapp.core.Pass3Renderer;
 import com.example.smartcropapp.utils.FileUtils;
+import com.example.smartcropapp.smartreframe.SmartReframeOrchestrator;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -114,28 +115,34 @@ public class MainActivity extends AppCompatActivity {
 
         isProcessing = true;
         statusText.setText("Memulai Pipeline Otomatis...");
-        
+
         new Thread(() -> {
             try {
-                // PASS 1
-                runOnUiThread(() -> statusText.setText("Pass 1: Analisis Video..."));
-                File internalAnalysis = new File(getFilesDir(), "analysis.json");
-                Pass1Extractor.extract(this, selectedVideoUri, internalAnalysis);
-                
-                // PASS 2
-                runOnUiThread(() -> statusText.setText("Pass 2: Optimasi Gerakan..."));
-                File internalTrajectory = new File(getFilesDir(), "trajectory.json");
-                Pass2Optimizer.optimize(internalAnalysis, internalTrajectory, getVideoId(selectedVideoUri));
-                
-                // PASS 3
-                runOnUiThread(() -> statusText.setText("Pass 3: Rendering Video..."));
+                SmartReframeOrchestrator orchestrator =
+                        new SmartReframeOrchestrator(
+                                this,
+                                selectedVideoUri,
+                                getVideoId(selectedVideoUri));
+
+                // PHASE 1 / PASS 1
+                runOnUiThread(() ->
+                        statusText.setText("Pass 1: Analisis Video..."));
+
+                File internalAnalysis =
+                        new File(getFilesDir(), "analysis.json");
+
+                orchestrator.runPass1(internalAnalysis);
+
+                // OUTPUT PLANNING
                 File outputDir =
                         new File(
                                 Environment.getExternalStoragePublicDirectory(
                                         Environment.DIRECTORY_MOVIES),
                                 "IkhlasApp");
 
-                if (!outputDir.exists()) outputDir.mkdirs();
+                if (!outputDir.exists()) {
+                    outputDir.mkdirs();
+                }
 
                 File outputVideo =
                         createUniqueOutputFile(
@@ -143,11 +150,20 @@ public class MainActivity extends AppCompatActivity {
                                 internalAnalysis,
                                 outputDir);
 
+                // PHASE 2 / PASS 2 + PASS 3
+                runOnUiThread(() ->
+                        statusText.setText("Pass 2: Optimasi Gerakan..."));
+
+                File internalTrajectory =
+                        new File(getFilesDir(), "trajectory.json");
+
+                runOnUiThread(() ->
+                        statusText.setText("Pass 3: Rendering Video..."));
+
                 String diagnosticBase =
                         outputVideo.getName();
 
-                int dot =
-                        diagnosticBase.lastIndexOf('.');
+                int dot = diagnosticBase.lastIndexOf('.');
 
                 if (dot > 0) {
                     diagnosticBase =
@@ -164,7 +180,6 @@ public class MainActivity extends AppCompatActivity {
                             this,
                             "trajectory.json",
                             diagnosticBase + "_trajectory.json");
-
                 } catch (Exception e) {
                     Log.w(
                             TAG,
@@ -172,23 +187,33 @@ public class MainActivity extends AppCompatActivity {
                                     + e.getMessage());
                 }
 
-                Pass3Renderer.render(
-                        this,
-                        selectedVideoUri,
+                orchestrator.runPass2AndPass3(
                         internalTrajectory,
                         outputVideo);
 
                 runOnUiThread(() -> {
-                    statusText.setText("SELESAI! Video tersimpan di Movies/IkhlasApp/");
-                    Toast.makeText(MainActivity.this, "Proses berhasil!", Toast.LENGTH_LONG).show();
+                    statusText.setText(
+                            "SELESAI! Video tersimpan di Movies/IkhlasApp/");
+
+                    Toast.makeText(
+                            MainActivity.this,
+                            "Proses berhasil!",
+                            Toast.LENGTH_LONG).show();
+
                     isProcessing = false;
                 });
 
             } catch (Exception e) {
                 Log.e(TAG, "Pipeline Fatal Error", e);
+
                 runOnUiThread(() -> {
                     statusText.setText("Error: " + e.getMessage());
-                    Toast.makeText(MainActivity.this, "Gagal: " + e.getMessage(), Toast.LENGTH_LONG).show();
+
+                    Toast.makeText(
+                            MainActivity.this,
+                            "Gagal: " + e.getMessage(),
+                            Toast.LENGTH_LONG).show();
+
                     isProcessing = false;
                 });
             }
