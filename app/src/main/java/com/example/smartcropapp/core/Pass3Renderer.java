@@ -232,6 +232,8 @@ public class Pass3Renderer {
                                             (info.presentationTimeUs / 1000L) +
                                             " layout=" +
                                             (shot != null ? shot.layout : "null") +
+                                              " singleX=" + singleX +
+                                              " singleY=" + singleY +
                                             "\n");
 
                                     fw.close();
