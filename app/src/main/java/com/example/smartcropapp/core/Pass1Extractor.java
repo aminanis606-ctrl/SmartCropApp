@@ -285,7 +285,8 @@ public class Pass1Extractor {
 
     private static FrameFeature analyzeFrame(
             Bitmap bitmap,
-            long timeMs) {
+            long timeMs,
+            List<SubjectDetector.Subject> subjects) {
 
         int cells = GRID_X * GRID_Y;
 
