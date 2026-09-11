@@ -948,6 +948,8 @@ public class Pass2Optimizer {
         // Maximum accepted movement per sample (~250 ms).
 
         float trackX = DEFAULT_X;
+        float previousTargetX = DEFAULT_X;
+        float previousTargetDeltaX = 0.0f;
         float trackY = DEFAULT_Y;
 
         boolean locked = false;
@@ -1163,7 +1165,14 @@ public class Pass2Optimizer {
                                     0.15f,
                                     0.85f);
 
-                    final float SMOOTH_ALPHA = 0.40f;
+                    float targetDeltaX = targetX - previousTargetX;
+                    boolean reversing =
+                            (targetDeltaX > 0.0f && previousTargetDeltaX < 0.0f) ||
+                            (targetDeltaX < 0.0f && previousTargetDeltaX > 0.0f);
+
+                    previousTargetX = targetX;
+                    previousTargetDeltaX = targetDeltaX;
+                    final float SMOOTH_ALPHA = reversing ? 0.70f : 0.40f;
 
                     trackX +=
                             SMOOTH_ALPHA * (targetX - trackX);
