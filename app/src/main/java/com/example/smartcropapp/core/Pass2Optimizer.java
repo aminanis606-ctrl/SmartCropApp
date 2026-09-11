@@ -1163,7 +1163,7 @@ public class Pass2Optimizer {
                                     0.15f,
                                     0.85f);
 
-                    final float SMOOTH_ALPHA = 0.45f;
+                    final float SMOOTH_ALPHA = 0.25f;
 
                     trackX +=
                             SMOOTH_ALPHA * (targetX - trackX);
