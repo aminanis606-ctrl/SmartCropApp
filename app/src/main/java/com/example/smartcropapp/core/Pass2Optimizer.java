@@ -950,6 +950,7 @@ public class Pass2Optimizer {
         float trackX = DEFAULT_X;
         float previousTargetX = DEFAULT_X;
         float previousTargetDeltaX = 0.0f;
+        int lockedTrackingId = -1;
         int reversalHold = 0;
         float trackY = DEFAULT_Y;
         long previousSampleTimeMs = -1L;
@@ -1131,26 +1132,54 @@ public class Pass2Optimizer {
             if (sample.subjects != null &&
                     sample.subjects.length() > 0) {
                 try {
-                    JSONObject best =
-                            sample.subjects.getJSONObject(0);
+                    JSONObject best = null;
+                    float bestArea = -1.0f;
 
-                    float bestArea =
-                            (float) best.optDouble("areaScore", 0.0);
+                    // Keep following the same ML Kit subject.
+                    if (lockedTrackingId >= 0) {
+                        for (int si = 0;
+                             si < sample.subjects.length();
+                             si++) {
+                            JSONObject candidate =
+                                    sample.subjects.getJSONObject(si);
 
-                    for (int si = 1;
-                         si < sample.subjects.length();
-                         si++) {
-                        JSONObject candidate =
-                                sample.subjects.getJSONObject(si);
+                            int trackingId =
+                                    candidate.optInt(
+                                            "trackingId", -1);
 
-                        float area =
-                                (float) candidate.optDouble(
-                                        "areaScore", 0.0);
-
-                        if (area > bestArea) {
-                            best = candidate;
-                            bestArea = area;
+                            if (trackingId == lockedTrackingId) {
+                                best = candidate;
+                                break;
+                            }
                         }
+                    }
+
+                    // Fallback to the largest subject if the
+                    // tracked ID is temporarily unavailable.
+                    if (best == null) {
+                        for (int si = 0;
+                             si < sample.subjects.length();
+                             si++) {
+                            JSONObject candidate =
+                                    sample.subjects.getJSONObject(si);
+
+                            float area =
+                                    (float) candidate.optDouble(
+                                            "areaScore", 0.0);
+
+                            if (best == null || area > bestArea) {
+                                best = candidate;
+                                bestArea = area;
+                            }
+                        }
+                    }
+
+                    int detectedTrackingId =
+                            best.optInt("trackingId", -1);
+
+                    if (lockedTrackingId < 0 &&
+                            detectedTrackingId >= 0) {
+                        lockedTrackingId = detectedTrackingId;
                     }
 
                     float targetX =
