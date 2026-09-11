@@ -944,10 +944,8 @@ public class Pass2Optimizer {
         final int LOCK_FRAMES = 3;
 
         // A new candidate must persist before taking over.
-        final int CONFIRM_FRAMES = 2;
 
         // Maximum accepted movement per sample (~250 ms).
-        final float MAX_STEP = 0.10f;
 
         float trackX = DEFAULT_X;
         float trackY = DEFAULT_Y;
@@ -955,9 +953,6 @@ public class Pass2Optimizer {
         boolean locked = false;
 
         // Pending candidate waiting for temporal confirmation.
-        int pendingX = -1;
-        int pendingY = -1;
-        int pendingCount = 0;
 
         double[] lockScore = new double[CELLS];
         int lockCount = 0;
@@ -1123,12 +1118,10 @@ public class Pass2Optimizer {
             }
 
         /*
-         * PHASE 2 — HOLD INITIAL DOMINANT POINT
+         * PHASE 2 — ML KIT TRACKING + SMOOTHING
          *
-         * SINGLE podcast mode:
-         * - subject point is selected once at shot start
-         * - after lock, position remains fixed until shot end
-         * - no temporal chasing of mouth/head movement
+         * ML Kit supplies the current subject position.
+         * EMA smoothing removes visible jumps between samples.
          */
         if (locked) {
             if (sample.subjects != null &&
@@ -1145,32 +1138,48 @@ public class Pass2Optimizer {
                          si++) {
                         JSONObject candidate =
                                 sample.subjects.getJSONObject(si);
+
                         float area =
-                                (float) candidate.optDouble("areaScore", 0.0);
+                                (float) candidate.optDouble(
+                                        "areaScore", 0.0);
+
                         if (area > bestArea) {
                             best = candidate;
                             bestArea = area;
                         }
                     }
 
-                    trackX = clamp(
-                            (float) best.optDouble("x", trackX),
-                            0.08f, 0.92f);
-                    trackY = clamp(
-                            (float) best.optDouble("y", trackY),
-                            0.15f, 0.85f);
+                    float targetX =
+                            clamp(
+                                    (float) best.optDouble(
+                                            "x", trackX),
+                                    0.08f,
+                                    0.92f);
 
-                    result.add(new Point(
-                            trackX, trackY, DEFAULT_SIZE));
-                    continue;
+                    float targetY =
+                            clamp(
+                                    (float) best.optDouble(
+                                            "y", trackY),
+                                    0.15f,
+                                    0.85f);
+
+                    final float SMOOTH_ALPHA = 0.45f;
+
+                    trackX +=
+                            SMOOTH_ALPHA * (targetX - trackX);
+
+                    trackY +=
+                            SMOOTH_ALPHA * (targetY - trackY);
 
                 } catch (Exception ignored) {
-                    // Fall back to the existing locked point.
+                    // Keep the last valid tracked position.
                 }
             }
 
             result.add(new Point(
-                    trackX, trackY, DEFAULT_SIZE));
+                    trackX,
+                    trackY,
+                    DEFAULT_SIZE));
         }
         }
         return result;
