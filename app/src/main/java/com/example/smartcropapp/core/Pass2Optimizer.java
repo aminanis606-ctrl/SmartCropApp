@@ -951,6 +951,7 @@ public class Pass2Optimizer {
         float previousTargetX = DEFAULT_X;
         float previousTargetDeltaX = 0.0f;
         float trackY = DEFAULT_Y;
+        long previousSampleTimeMs = -1L;
 
         boolean locked = false;
 
@@ -1172,7 +1173,22 @@ public class Pass2Optimizer {
 
                     previousTargetX = targetX;
                     previousTargetDeltaX = targetDeltaX;
-                    final float SMOOTH_ALPHA = reversing ? 0.70f : 0.40f;
+                    long currentSampleTimeMs = sample.timeMs;
+                    long dtMs = previousSampleTimeMs < 0L
+                            ? 100L
+                            : Math.max(1L, currentSampleTimeMs - previousSampleTimeMs);
+                    previousSampleTimeMs = currentSampleTimeMs;
+
+                    final float BASE_ALPHA = 0.40f;
+                    final float TIME_ALPHA = (float) (
+                            1.0 - Math.pow(
+                                    1.0 - BASE_ALPHA,
+                                    dtMs / 100.0));
+
+                    final float SMOOTH_ALPHA =
+                            reversing
+                                    ? Math.max(0.70f, TIME_ALPHA)
+                                    : Math.min(1.0f, TIME_ALPHA);
 
                     trackX +=
                             SMOOTH_ALPHA * (targetX - trackX);
