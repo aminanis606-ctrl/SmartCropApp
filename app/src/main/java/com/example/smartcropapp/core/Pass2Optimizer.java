@@ -1226,11 +1226,8 @@ public class Pass2Optimizer {
                                     ? Math.max(0.70f, TIME_ALPHA)
                                     : Math.min(1.0f, TIME_ALPHA);
 
-                    trackX +=
-                            SMOOTH_ALPHA * (targetX - trackX);
-
-                    trackY +=
-                            SMOOTH_ALPHA * (targetY - trackY);
+                    trackX = targetX;
+                    trackY = targetY;
 
                 } catch (Exception ignored) {
                     // Keep the last valid tracked position.
