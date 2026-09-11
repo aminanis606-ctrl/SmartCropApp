@@ -37,9 +37,11 @@ public class Pass3Renderer {
         
         TrajectoryReader trajectory = null;
         try {
+            File diagDir = new File(
+                    "/storage/emulated/0/Download/SmartReframe/diagnostics");
+            if (!diagDir.exists()) diagDir.mkdirs();
             File diagFile = new File(
-                    context.getExternalFilesDir(null),
-                    "trajectory_load_diag.txt");
+                    diagDir, "trajectory_load_runtime.txt");
             try (FileWriter fw = new FileWriter(diagFile, true)) {
                 fw.write("TRAJECTORY_LOAD path="
                         + trajectoryFile.getAbsolutePath()
