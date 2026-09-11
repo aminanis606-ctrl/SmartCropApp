@@ -229,6 +229,16 @@ public class Pass3Renderer {
                         try {
                             TrajectoryReader.ShotResult shot = trajectory.getShotAt(info.presentationTimeUs);
 
+                            if (shot != null && shot.single != null) {
+                                File diagPoint = new File(
+                                        "/storage/emulated/0/Download/SmartReframe/diagnostics/trajectory_runtime_point.txt");
+                                try (FileWriter fwPoint = new FileWriter(diagPoint, true)) {
+                                    fwPoint.write("t=" + (info.presentationTimeUs / 1000L)
+                                            + " x=" + shot.single.x
+                                            + " y=" + shot.single.y + "\n");
+                                }
+                            }
+
                                 try {
                                     File diagDir = new File(
                                             "/storage/emulated/0/Download/SmartReframe/diagnostics");
