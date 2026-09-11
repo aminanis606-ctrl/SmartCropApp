@@ -313,7 +313,7 @@ public class CropShaderProgram {
         Matrix.scaleM(cropMatrix, 0, sx, sy, 1f);
 
         float[] combinedST = new float[16];
-        Matrix.multiplyMM(combinedST, 0, cropMatrix, 0, stMatrix, 0);
+        Matrix.multiplyMM(combinedST, 0, stMatrix, 0, cropMatrix, 0);
 
         float[] mvpMatrix = new float[16];
         Matrix.setIdentityM(mvpMatrix, 0);
