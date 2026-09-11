@@ -37,6 +37,16 @@ public class Pass3Renderer {
         
         TrajectoryReader trajectory = null;
         try {
+            File diagFile = new File(
+                    context.getExternalFilesDir(null),
+                    "trajectory_load_diag.txt");
+            try (FileWriter fw = new FileWriter(diagFile, true)) {
+                fw.write("TRAJECTORY_LOAD path="
+                        + trajectoryFile.getAbsolutePath()
+                        + " exists=" + trajectoryFile.exists()
+                        + " size=" + trajectoryFile.length()
+                        + "\n");
+            }
             trajectory = TrajectoryReader.load(trajectoryFile);
         } catch (Exception e) {
             Log.w(TAG, "Gagal memuat trajectory, menggunakan default center crop", e);
