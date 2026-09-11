@@ -65,6 +65,7 @@ public class Pass2Optimizer {
         float[] verticalEdge;
         float[] horizontalEdge;
         float[] motion;
+        JSONArray subjects;
 
         FrameSample(
                 long timeMs,
@@ -74,7 +75,8 @@ public class Pass2Optimizer {
                 float[] edge,
                 float[] verticalEdge,
                 float[] horizontalEdge,
-                float[] motion) {
+                float[] motion,
+                JSONArray subjects) {
             this.timeMs = timeMs;
             this.brightness = brightness;
             this.texture = texture;
@@ -83,6 +85,7 @@ public class Pass2Optimizer {
             this.verticalEdge = verticalEdge;
             this.horizontalEdge = horizontalEdge;
             this.motion = motion;
+            this.subjects = subjects;
         }
     }
 
@@ -291,6 +294,10 @@ public class Pass2Optimizer {
                               sample.optJSONArray(
                                       "motion");
 
+                      JSONArray subjects =
+                              sample.optJSONArray(
+                                      "subjects");
+
                     if (b == null || t == null) {
                         continue;
                     }
@@ -373,7 +380,8 @@ public class Pass2Optimizer {
                                     edge,
                                     verticalEdge,
                                     horizontalEdge,
-                                      motion));
+                                      motion,
+                                    subjects));
                 }
             }
 
@@ -1123,13 +1131,46 @@ public class Pass2Optimizer {
          * - no temporal chasing of mouth/head movement
          */
         if (locked) {
-            // Backfill the initial lock across the startup samples.
-            int backfillStart = Math.max(0, result.size() - LOCK_FRAMES);
-            for (int j = backfillStart; j < result.size(); j++) {
-                result.set(j, new Point(trackX, trackY, DEFAULT_SIZE));
+            if (sample.subjects != null &&
+                    sample.subjects.length() > 0) {
+                try {
+                    JSONObject best =
+                            sample.subjects.getJSONObject(0);
+
+                    float bestArea =
+                            (float) best.optDouble("areaScore", 0.0);
+
+                    for (int si = 1;
+                         si < sample.subjects.length();
+                         si++) {
+                        JSONObject candidate =
+                                sample.subjects.getJSONObject(si);
+                        float area =
+                                (float) candidate.optDouble("areaScore", 0.0);
+                        if (area > bestArea) {
+                            best = candidate;
+                            bestArea = area;
+                        }
+                    }
+
+                    trackX = clamp(
+                            (float) best.optDouble("x", trackX),
+                            0.08f, 0.92f);
+                    trackY = clamp(
+                            (float) best.optDouble("y", trackY),
+                            0.15f, 0.85f);
+
+                    result.add(new Point(
+                            trackX, trackY, DEFAULT_SIZE));
+                    continue;
+
+                } catch (Exception ignored) {
+                    // Fall back to the existing locked point.
+                }
             }
 
-            result.add(new Point(trackX, trackY, DEFAULT_SIZE));
+            result.add(new Point(
+                    trackX, trackY, DEFAULT_SIZE));
         }
         }
         return result;
