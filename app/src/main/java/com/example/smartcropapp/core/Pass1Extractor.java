@@ -38,6 +38,7 @@ public class Pass1Extractor {
         float[] verticalEdge;
         float[] horizontalEdge;
         float[] motion;
+        List<SubjectDetector.Subject> subjects;
 
         FrameFeature(
                 long timeMs,
@@ -47,7 +48,8 @@ public class Pass1Extractor {
                 float[] edge,
                 float[] verticalEdge,
                 float[] horizontalEdge,
-                float[] motion) {
+                float[] motion,
+                List<SubjectDetector.Subject> subjects) {
             this.timeMs = timeMs;
             this.brightness = brightness;
             this.texture = texture;
@@ -56,6 +58,7 @@ public class Pass1Extractor {
             this.verticalEdge = verticalEdge;
             this.horizontalEdge = horizontalEdge;
             this.motion = motion;
+            this.subjects = subjects;
         }
     }
 
@@ -127,15 +130,17 @@ public class Pass1Extractor {
                     continue;
                 }
 
-                FrameFeature feature =
-                        analyzeFrame(
-                                bitmap,
-                                timeUs / 1000L);
                 List<SubjectDetector.Subject> subjects =
                         SUBJECT_DETECTOR.detect(bitmap);
 
                 Log.i(TAG, "SUBJECT_DIAG t=" + (timeUs / 1000L)
                         + " faces=" + subjects.size());
+
+                FrameFeature feature =
+                        analyzeFrame(
+                                bitmap,
+                                timeUs / 1000L,
+                                subjects);
 
                 // TEMPORAL MOTION: per-cell brightness change
                 if (previousBrightness != null &&
@@ -404,7 +409,8 @@ public class Pass1Extractor {
                 edge,
                 verticalEdge,
                 horizontalEdge,
-                new float[brightness.length]);
+                new float[brightness.length],
+                subjects);
     }
 
     private static float histogramDiff(
@@ -551,6 +557,46 @@ public class Pass1Extractor {
             sample.put(
                     "motion",
                     motion);
+
+            JSONArray subjects =
+                    new JSONArray();
+
+            for (SubjectDetector.Subject subject :
+                    frame.subjects) {
+
+                JSONObject subjectJson =
+                        new JSONObject();
+
+                subjectJson.put(
+                        "x",
+                        (double) subject.x);
+
+                subjectJson.put(
+                        "y",
+                        (double) subject.y);
+
+                subjectJson.put(
+                        "width",
+                        (double) subject.width);
+
+                subjectJson.put(
+                        "height",
+                        (double) subject.height);
+
+                subjectJson.put(
+                        "areaScore",
+                        (double) subject.areaScore);
+
+                subjectJson.put(
+                        "trackingId",
+                        subject.trackingId);
+
+                subjects.put(subjectJson);
+            }
+
+            sample.put(
+                    "subjects",
+                    subjects);
 
             samples.put(sample);
         }
