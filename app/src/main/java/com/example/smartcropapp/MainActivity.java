@@ -170,6 +170,10 @@ public class MainActivity extends AppCompatActivity {
                             diagnosticBase.substring(0, dot);
                 }
 
+                orchestrator.runPass2AndPass3(
+                        internalTrajectory,
+                        outputVideo);
+
                 try {
                     FileUtils.copyFileToPublicDownloads(
                             this,
@@ -186,10 +190,6 @@ public class MainActivity extends AppCompatActivity {
                             "Gagal copy diagnostic (diabaikan): "
                                     + e.getMessage());
                 }
-
-                orchestrator.runPass2AndPass3(
-                        internalTrajectory,
-                        outputVideo);
 
                 runOnUiThread(() -> {
                     statusText.setText(
@@ -308,12 +308,12 @@ public class MainActivity extends AppCompatActivity {
             String base =
                     String.format(
                             Locale.US,
-                            "%s_SHT%d_SPT%d_SGL%d_%s",
-                            duration,
+                            "%s_SHOT%d_SPLIT%d_SINGLE%d_%s",
+                            getVideoId(sourceUri),
                             shotCount,
                             splitCount,
                             singleCount,
-                            sourceName);
+                            duration);
 
             File result =
                     new File(
