@@ -75,6 +75,8 @@ public class Pass1Extractor {
         MediaMetadataRetriever retriever =
                 new MediaMetadataRetriever();
 
+        long pass1StartNs = System.nanoTime();
+
         try {
             Log.i(
                     TAG,
@@ -123,6 +125,10 @@ public class Pass1Extractor {
             long mlKitMinNs = Long.MAX_VALUE;
             long mlKitMaxNs = 0L;
             int perfFrames = 0;
+            int mlKitCalls = 0;
+
+            long jsonBuildStartNs = 0L;
+            long jsonBuildTotalNs = 0L;
 
             for (
                     long timeUs = 0;
@@ -179,10 +185,12 @@ public class Pass1Extractor {
 
                         if (!current.frames.isEmpty()) {
 
+                            jsonBuildStartNs = System.nanoTime();
                             shots.put(
                                     buildShot(
                                             shotId,
                                             current));
+                            jsonBuildTotalNs += System.nanoTime() - jsonBuildStartNs;
 
                             shotId++;
                         }
@@ -213,6 +221,7 @@ public class Pass1Extractor {
                 mlKitTotalNs += mlKitElapsedNs;
                 mlKitMinNs = Math.min(mlKitMinNs, mlKitElapsedNs);
                 mlKitMaxNs = Math.max(mlKitMaxNs, mlKitElapsedNs);
+                mlKitCalls++;
                 perfFrames++;
 
                 feature.subjects = subjects;
@@ -229,35 +238,12 @@ public class Pass1Extractor {
 
             if (!current.frames.isEmpty()) {
 
+                jsonBuildStartNs = System.nanoTime();
                 shots.put(
                         buildShot(
                                 shotId,
                                 current));
-            }
-
-            File perfFile = new File(
-                    outputFile.getParentFile(),
-                    outputFile.getName().replace(
-                            "_analysis.json", "_perf.txt"));
-            try (FileOutputStream fos =
-                         new FileOutputStream(perfFile)) {
-                String perf =
-                        "frames=" + perfFrames + "\n" +
-                        "analyze_avg_ms=" +
-                        (perfFrames == 0 ? 0 :
-                                (analyzeTotalNs / perfFrames) / 1_000_000L) + "\n" +
-                        "analyze_min_ms=" +
-                        (perfFrames == 0 ? 0 : analyzeMinNs / 1_000_000L) + "\n" +
-                        "analyze_max_ms=" +
-                        analyzeMaxNs / 1_000_000L + "\n" +
-                        "mlkit_avg_ms=" +
-                        (perfFrames == 0 ? 0 :
-                                (mlKitTotalNs / perfFrames) / 1_000_000L) + "\n" +
-                        "mlkit_min_ms=" +
-                        (perfFrames == 0 ? 0 : mlKitMinNs / 1_000_000L) + "\n" +
-                        "mlkit_max_ms=" +
-                        mlKitMaxNs / 1_000_000L + "\n";
-                fos.write(perf.getBytes("UTF-8"));
+                jsonBuildTotalNs += System.nanoTime() - jsonBuildStartNs;
             }
 
             JSONObject root =
@@ -271,6 +257,7 @@ public class Pass1Extractor {
                     "shots",
                     shots);
 
+            long jsonWriteStartNs = System.nanoTime();
             try (FileOutputStream fos =
                          new FileOutputStream(outputFile)) {
 
@@ -278,6 +265,7 @@ public class Pass1Extractor {
                         root.toString(2)
                                 .getBytes("UTF-8"));
             }
+            long jsonWriteElapsedNs = System.nanoTime() - jsonWriteStartNs;
 
             if (!outputFile.exists()
                     || outputFile.length() == 0) {
@@ -285,6 +273,24 @@ public class Pass1Extractor {
                 throw new Exception(
                         "analysis.json gagal ditulis.");
             }
+
+            long pass1EndNs = System.nanoTime();
+            long pass1TotalNs = pass1EndNs - pass1StartNs;
+
+            // Write comprehensive diagnostics
+            writeDiagnostics(
+                    outputFile,
+                    perfFrames,
+                    mlKitCalls,
+                    pass1TotalNs,
+                    analyzeTotalNs,
+                    analyzeMinNs,
+                    analyzeMaxNs,
+                    mlKitTotalNs,
+                    mlKitMinNs,
+                    mlKitMaxNs,
+                    jsonBuildTotalNs,
+                    jsonWriteElapsedNs);
 
             Log.i(
                     TAG,
@@ -311,6 +317,79 @@ public class Pass1Extractor {
                 retriever.release();
             } catch (Exception ignored) {
             }
+        }
+    }
+
+    private static void writeDiagnostics(
+            File outputFile,
+            int perfFrames,
+            int mlKitCalls,
+            long pass1TotalNs,
+            long analyzeTotalNs,
+            long analyzeMinNs,
+            long analyzeMaxNs,
+            long mlKitTotalNs,
+            long mlKitMinNs,
+            long mlKitMaxNs,
+            long jsonBuildTotalNs,
+            long jsonWriteElapsedNs) {
+
+        try {
+            File diagDir = new File(
+                    "/storage/emulated/0/Download/SmartReframe/diagnostics");
+            if (!diagDir.exists()) {
+                diagDir.mkdirs();
+            }
+
+            File diagFile = new File(diagDir, "pipeline_perf.txt");
+
+            long pass1Ms = pass1TotalNs / 1_000_000L;
+            long analyzeAvgMs = perfFrames == 0 ? 0 : (analyzeTotalNs / perfFrames) / 1_000_000L;
+            long analyzeMinMs = analyzeMinNs == Long.MAX_VALUE ? 0 : analyzeMinNs / 1_000_000L;
+            long analyzeMaxMs = analyzeMaxNs / 1_000_000L;
+            long mlKitAvgMs = mlKitCalls == 0 ? 0 : (mlKitTotalNs / mlKitCalls) / 1_000_000L;
+            long mlKitMinMs = mlKitMinNs == Long.MAX_VALUE ? 0 : mlKitMinNs / 1_000_000L;
+            long mlKitMaxMs = mlKitMaxNs / 1_000_000L;
+            long jsonBuildMs = jsonBuildTotalNs / 1_000_000L;
+            long jsonWriteMs = jsonWriteElapsedNs / 1_000_000L;
+
+            StringBuilder sb = new StringBuilder();
+            sb.append("=== SMARTREFRAME PIPELINE PERFORMANCE DIAGNOSTICS ===\n");
+            sb.append("\n[FRAME PROCESSING]\n");
+            sb.append("total_frames=").append(perfFrames).append("\n");
+            sb.append("\n[PASS1 TOTAL]\n");
+            sb.append("pass1_total_ms=").append(pass1Ms).append("\n");
+            sb.append("\n[ANALYZEFRAME]\n");
+            sb.append("analyze_total_ms=").append(analyzeTotalNs / 1_000_000L).append("\n");
+            sb.append("analyze_avg_ms=").append(analyzeAvgMs).append("\n");
+            sb.append("analyze_min_ms=").append(analyzeMinMs).append("\n");
+            sb.append("analyze_max_ms=").append(analyzeMaxMs).append("\n");
+            sb.append("\n[ML KIT DETECTION]\n");
+            sb.append("mlkit_calls=").append(mlKitCalls).append("\n");
+            sb.append("mlkit_total_ms=").append(mlKitTotalNs / 1_000_000L).append("\n");
+            sb.append("mlkit_avg_ms=").append(mlKitAvgMs).append("\n");
+            sb.append("mlkit_min_ms=").append(mlKitMinMs).append("\n");
+            sb.append("mlkit_max_ms=").append(mlKitMaxMs).append("\n");
+            sb.append("\n[JSON BUILD & WRITE]\n");
+            sb.append("json_build_total_ms=").append(jsonBuildMs).append("\n");
+            sb.append("json_write_ms=").append(jsonWriteMs).append("\n");
+            sb.append("\n[BREAKDOWN %]\n");
+            if (pass1Ms > 0) {
+                sb.append("analyze_pct=").append((analyzeTotalNs * 100 / pass1TotalNs)).append("%\n");
+                sb.append("mlkit_pct=").append((mlKitTotalNs * 100 / pass1TotalNs)).append("%\n");
+                sb.append("json_build_pct=").append((jsonBuildTotalNs * 100 / pass1TotalNs)).append("%\n");
+                sb.append("json_write_pct=").append((jsonWriteElapsedNs * 100 / pass1TotalNs)).append("%\n");
+            }
+            sb.append("\n");
+
+            try (FileOutputStream fos = new FileOutputStream(diagFile)) {
+                fos.write(sb.toString().getBytes("UTF-8"));
+            }
+
+            Log.i(TAG, "Diagnostics written: " + diagFile.getAbsolutePath());
+
+        } catch (Exception e) {
+            Log.w(TAG, "Failed to write diagnostics (non-blocking)", e);
         }
     }
 
