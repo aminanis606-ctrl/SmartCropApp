@@ -129,18 +129,12 @@ public class Pass1Extractor {
                 if (bitmap == null) {
                     continue;
                 }
-
-                List<SubjectDetector.Subject> subjects =
-                        SUBJECT_DETECTOR.detect(bitmap);
-
-                Log.i(TAG, "SUBJECT_DIAG t=" + (timeUs / 1000L)
-                        + " faces=" + subjects.size());
-
                 FrameFeature feature =
                         analyzeFrame(
                                 bitmap,
                                 timeUs / 1000L,
-                                subjects);
+                                new ArrayList<SubjectDetector.Subject>());
+
 
                 if (previousBrightness != null) {
 
@@ -197,6 +191,13 @@ public class Pass1Extractor {
                     }
                 }
 
+                List<SubjectDetector.Subject> subjects =
+                        SUBJECT_DETECTOR.detect(bitmap);
+
+                Log.i(TAG, "SUBJECT_DIAG t=" + (timeUs / 1000L)
+                        + " faces=" + subjects.size());
+
+                feature.subjects = subjects;
                 current.frames.add(feature);
 
                 previousBrightness =
