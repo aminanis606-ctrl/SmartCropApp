@@ -19,7 +19,7 @@ public class Pass1Extractor {
     private static final String TAG = "Pass1Extractor";
     private static final SubjectDetector SUBJECT_DETECTOR = new SubjectDetector();
 
-    private static final long INTERVAL_US = 100_000L;
+    private static final long INTERVAL_US = 50_000L;
 
     private static final int GRID_X = 12;
     private static final int GRID_Y = 8;
