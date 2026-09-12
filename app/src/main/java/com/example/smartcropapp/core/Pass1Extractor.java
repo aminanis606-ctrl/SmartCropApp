@@ -129,11 +129,14 @@ public class Pass1Extractor {
                 if (bitmap == null) {
                     continue;
                 }
+                long analyzeStartNs = System.nanoTime();
                 FrameFeature feature =
                         analyzeFrame(
                                 bitmap,
                                 timeUs / 1000L,
                                 new ArrayList<SubjectDetector.Subject>());
+                long analyzeMs =
+                        (System.nanoTime() - analyzeStartNs) / 1_000_000L;
 
 
                 if (previousBrightness != null) {
@@ -191,10 +194,15 @@ public class Pass1Extractor {
                     }
                 }
 
+                long mlKitStartNs = System.nanoTime();
                 List<SubjectDetector.Subject> subjects =
                         SUBJECT_DETECTOR.detect(bitmap);
+                long mlKitMs =
+                        (System.nanoTime() - mlKitStartNs) / 1_000_000L;
 
-                Log.i(TAG, "SUBJECT_DIAG t=" + (timeUs / 1000L)
+                Log.i(TAG, "PERF t=" + (timeUs / 1000L)
+                        + " analyzeMs=" + analyzeMs
+                        + " mlKitMs=" + mlKitMs
                         + " faces=" + subjects.size());
 
                 feature.subjects = subjects;
