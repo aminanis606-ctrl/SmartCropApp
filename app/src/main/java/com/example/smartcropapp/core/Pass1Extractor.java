@@ -126,6 +126,9 @@ public class Pass1Extractor {
             long mlKitMaxNs = 0L;
             int perfFrames = 0;
             int mlKitCalls = 0;
+            long lastMlKitTimeMs = -200L;
+            List<SubjectDetector.Subject> lastSubjects =
+                    new ArrayList<>();
 
             long getFrameTotalNs = 0L;
             long getFrameMinNs = Long.MAX_VALUE;
@@ -243,18 +246,36 @@ public class Pass1Extractor {
                     }
                 }
 
-                long mlKitStartNs = System.nanoTime();
-                List<SubjectDetector.Subject> subjects =
-                        SUBJECT_DETECTOR.detect(bitmap);
-                long mlKitElapsedNs =
-                        System.nanoTime() - mlKitStartNs;
-                mlKitTotalNs += mlKitElapsedNs;
-                mlKitMinNs = Math.min(mlKitMinNs, mlKitElapsedNs);
-                mlKitMaxNs = Math.max(mlKitMaxNs, mlKitElapsedNs);
-                mlKitCalls++;
-                perfFrames++;
+                boolean forceMlKit =
+                        current.frames.size() <= 1 ||
+                        feature.timeMs - lastMlKitTimeMs >= 200L;
 
-                feature.subjects = subjects;
+                if (previousBrightness != null) {
+                    float frameDiff =
+                            histogramDiff(
+                                    previousBrightness,
+                                    feature.brightness);
+                    if (frameDiff >= WEAK_CUT_BRIGHTNESS) {
+                        forceMlKit = true;
+                    }
+                }
+
+                if (forceMlKit) {
+                    long mlKitStartNs = System.nanoTime();
+                    List<SubjectDetector.Subject> subjects =
+                            SUBJECT_DETECTOR.detect(bitmap);
+                    long mlKitElapsedNs =
+                            System.nanoTime() - mlKitStartNs;
+                    mlKitTotalNs += mlKitElapsedNs;
+                    mlKitMinNs = Math.min(mlKitMinNs, mlKitElapsedNs);
+                    mlKitMaxNs = Math.max(mlKitMaxNs, mlKitElapsedNs);
+                    mlKitCalls++;
+                    lastMlKitTimeMs = feature.timeMs;
+                    lastSubjects = subjects;
+                }
+
+                perfFrames++;
+                feature.subjects = lastSubjects;
                 current.frames.add(feature);
 
                 previousBrightness =
