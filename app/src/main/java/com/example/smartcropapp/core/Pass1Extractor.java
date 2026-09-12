@@ -19,7 +19,7 @@ public class Pass1Extractor {
     private static final String TAG = "Pass1Extractor";
     private static final SubjectDetector SUBJECT_DETECTOR = new SubjectDetector();
 
-    private static final long INTERVAL_US = 25_000L;
+    private static final long INTERVAL_US = 50_000L;
 
     private static final int GRID_X = 12;
     private static final int GRID_Y = 8;
@@ -141,19 +141,6 @@ public class Pass1Extractor {
                                 bitmap,
                                 timeUs / 1000L,
                                 subjects);
-
-                // TEMPORAL MOTION: per-cell brightness change
-                if (previousBrightness != null &&
-                        previousBrightness.length == feature.brightness.length) {
-
-                    for (int i = 0; i < feature.brightness.length; i++) {
-                        feature.motion[i] =
-                                Math.abs(
-                                        feature.brightness[i] -
-                                        previousBrightness[i]);
-                    }
-                }
-
 
                 if (previousBrightness != null) {
 
