@@ -133,6 +133,11 @@ public class Pass1Extractor {
             int getFrameCalls = 0;
             int getFrameSuccessCount = 0;
             int getFrameFailedCount = 0;
+            long firstFailedTimeUs = -1L;
+            long lastFailedTimeUs = -1L;
+            long failedTimeMinUs = Long.MAX_VALUE;
+            long failedTimeMaxUs = Long.MIN_VALUE;
+            int failedLast10PctCount = 0;
 
             long jsonBuildStartNs = 0L;
             long jsonBuildTotalNs = 0L;
@@ -156,6 +161,13 @@ public class Pass1Extractor {
 
                 if (bitmap == null) {
                     getFrameFailedCount++;
+                    if (firstFailedTimeUs < 0) firstFailedTimeUs = timeUs;
+                    lastFailedTimeUs = timeUs;
+                    failedTimeMinUs = Math.min(failedTimeMinUs, timeUs);
+                    failedTimeMaxUs = Math.max(failedTimeMaxUs, timeUs);
+                    if (timeUs >= (durationUs * 90L) / 100L) {
+                        failedLast10PctCount++;
+                    }
                     continue;
                 }
 
@@ -314,7 +326,13 @@ public class Pass1Extractor {
                     getFrameFailedCount,
                     getFrameTotalNs,
                     getFrameMinNs,
-                    getFrameMaxNs);
+                    getFrameMaxNs,
+                    durationUs,
+                    firstFailedTimeUs,
+                    lastFailedTimeUs,
+                    failedTimeMinUs,
+                    failedTimeMaxUs,
+                    failedLast10PctCount);
 
             Log.i(
                     TAG,
@@ -362,7 +380,13 @@ public class Pass1Extractor {
             int getFrameFailedCount,
             long getFrameTotalNs,
             long getFrameMinNs,
-            long getFrameMaxNs) {
+            long getFrameMaxNs,
+            long durationUs,
+            long firstFailedTimeUs,
+            long lastFailedTimeUs,
+            long failedTimeMinUs,
+            long failedTimeMaxUs,
+            int failedLast10PctCount) {
 
         try {
             File diagDir = new File(
@@ -401,6 +425,14 @@ public class Pass1Extractor {
             sb.append("getframe_avg_ms=").append(getFrameAvgMs).append("\n");
             sb.append("getframe_min_ms=").append(getFrameMinMs).append("\n");
             sb.append("getframe_max_ms=").append(getFrameMaxMs).append("\n");
+            sb.append("duration_us=").append(durationUs).append("\n");
+            sb.append("first_failed_time_us=").append(firstFailedTimeUs).append("\n");
+            sb.append("last_failed_time_us=").append(lastFailedTimeUs).append("\n");
+            sb.append("failed_time_min_us=").append(
+                    failedTimeMinUs == Long.MAX_VALUE ? -1L : failedTimeMinUs).append("\n");
+            sb.append("failed_time_max_us=").append(
+                    failedTimeMaxUs == Long.MIN_VALUE ? -1L : failedTimeMaxUs).append("\n");
+            sb.append("failed_last_10pct_count=").append(failedLast10PctCount).append("\n");
             sb.append("\n[ANALYZEFRAME]\n");
             sb.append("analyze_total_ms=").append(analyzeTotalNs / 1_000_000L).append("\n");
             sb.append("analyze_avg_ms=").append(analyzeAvgMs).append("\n");
