@@ -329,16 +329,42 @@ public class TrajectoryReader {
             return new Point(0.5f, 0.4f, 0.3f);
         }
 
-        // No interpolation/smoothing.
-        // Use the latest trajectory point at or before this timestamp.
-        Point result = sd.points.get(0);
+        // Find two adjacent points: before and after timeMs
+        Point pointBefore = sd.points.get(0);
+        Point pointAfter = null;
+        long timeBefore = sd.times.get(0);
+        long timeAfter = -1L;
 
         for (int i = 0; i < sd.points.size(); i++) {
-            if (sd.times.get(i) > timeMs) break;
-            result = sd.points.get(i);
+            if (sd.times.get(i) <= timeMs) {
+                pointBefore = sd.points.get(i);
+                timeBefore = sd.times.get(i);
+            } else {
+                pointAfter = sd.points.get(i);
+                timeAfter = sd.times.get(i);
+                break;
+            }
         }
 
-        return result;
+        // If no point after timeMs, return last point before
+        if (pointAfter == null) {
+            return pointBefore;
+        }
+
+        // Linear interpolation between pointBefore and pointAfter
+        long deltaTime = timeAfter - timeBefore;
+        if (deltaTime <= 0) {
+            return pointBefore;
+        }
+
+        float alpha = (float)(timeMs - timeBefore) / deltaTime;
+        alpha = Math.max(0f, Math.min(1f, alpha));
+
+        float interpX = pointBefore.x + (pointAfter.x - pointBefore.x) * alpha;
+        float interpY = pointBefore.y + (pointAfter.y - pointBefore.y) * alpha;
+        float interpSize = pointBefore.size + (pointAfter.size - pointBefore.size) * alpha;
+
+        return new Point(interpX, interpY, interpSize);
     }
 
     private static String normalizeLayout(
