@@ -116,6 +116,14 @@ public class Pass1Extractor {
 
             int shotId = 0;
 
+            long analyzeTotalNs = 0L;
+            long analyzeMinNs = Long.MAX_VALUE;
+            long analyzeMaxNs = 0L;
+            long mlKitTotalNs = 0L;
+            long mlKitMinNs = Long.MAX_VALUE;
+            long mlKitMaxNs = 0L;
+            int perfFrames = 0;
+
             for (
                     long timeUs = 0;
                     timeUs <= durationUs;
@@ -135,8 +143,11 @@ public class Pass1Extractor {
                                 bitmap,
                                 timeUs / 1000L,
                                 new ArrayList<SubjectDetector.Subject>());
-                long analyzeMs =
-                        (System.nanoTime() - analyzeStartNs) / 1_000_000L;
+                long analyzeElapsedNs =
+                        System.nanoTime() - analyzeStartNs;
+                analyzeTotalNs += analyzeElapsedNs;
+                analyzeMinNs = Math.min(analyzeMinNs, analyzeElapsedNs);
+                analyzeMaxNs = Math.max(analyzeMaxNs, analyzeElapsedNs);
 
 
                 if (previousBrightness != null) {
@@ -197,13 +208,12 @@ public class Pass1Extractor {
                 long mlKitStartNs = System.nanoTime();
                 List<SubjectDetector.Subject> subjects =
                         SUBJECT_DETECTOR.detect(bitmap);
-                long mlKitMs =
-                        (System.nanoTime() - mlKitStartNs) / 1_000_000L;
-
-                Log.i(TAG, "PERF t=" + (timeUs / 1000L)
-                        + " analyzeMs=" + analyzeMs
-                        + " mlKitMs=" + mlKitMs
-                        + " faces=" + subjects.size());
+                long mlKitElapsedNs =
+                        System.nanoTime() - mlKitStartNs;
+                mlKitTotalNs += mlKitElapsedNs;
+                mlKitMinNs = Math.min(mlKitMinNs, mlKitElapsedNs);
+                mlKitMaxNs = Math.max(mlKitMaxNs, mlKitElapsedNs);
+                perfFrames++;
 
                 feature.subjects = subjects;
                 current.frames.add(feature);
@@ -223,6 +233,31 @@ public class Pass1Extractor {
                         buildShot(
                                 shotId,
                                 current));
+            }
+
+            File perfFile = new File(
+                    outputFile.getParentFile(),
+                    outputFile.getName().replace(
+                            "_analysis.json", "_perf.txt"));
+            try (FileOutputStream fos =
+                         new FileOutputStream(perfFile)) {
+                String perf =
+                        "frames=" + perfFrames + "\n" +
+                        "analyze_avg_ms=" +
+                        (perfFrames == 0 ? 0 :
+                                (analyzeTotalNs / perfFrames) / 1_000_000L) + "\n" +
+                        "analyze_min_ms=" +
+                        (perfFrames == 0 ? 0 : analyzeMinNs / 1_000_000L) + "\n" +
+                        "analyze_max_ms=" +
+                        analyzeMaxNs / 1_000_000L + "\n" +
+                        "mlkit_avg_ms=" +
+                        (perfFrames == 0 ? 0 :
+                                (mlKitTotalNs / perfFrames) / 1_000_000L) + "\n" +
+                        "mlkit_min_ms=" +
+                        (perfFrames == 0 ? 0 : mlKitMinNs / 1_000_000L) + "\n" +
+                        "mlkit_max_ms=" +
+                        mlKitMaxNs / 1_000_000L + "\n";
+                fos.write(perf.getBytes("UTF-8"));
             }
 
             JSONObject root =
