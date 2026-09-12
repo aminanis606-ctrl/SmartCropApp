@@ -127,6 +127,13 @@ public class Pass1Extractor {
             int perfFrames = 0;
             int mlKitCalls = 0;
 
+            long getFrameTotalNs = 0L;
+            long getFrameMinNs = Long.MAX_VALUE;
+            long getFrameMaxNs = 0L;
+            int getFrameCalls = 0;
+            int getFrameSuccessCount = 0;
+            int getFrameFailedCount = 0;
+
             long jsonBuildStartNs = 0L;
             long jsonBuildTotalNs = 0L;
 
@@ -135,14 +142,25 @@ public class Pass1Extractor {
                     timeUs <= durationUs;
                     timeUs += INTERVAL_US) {
 
+                long getFrameStartNs = System.nanoTime();
                 Bitmap bitmap =
                         retriever.getFrameAtTime(
                                 timeUs,
                                 MediaMetadataRetriever.OPTION_CLOSEST);
+                long getFrameElapsedNs = System.nanoTime() - getFrameStartNs;
+
+                getFrameCalls++;
+                getFrameTotalNs += getFrameElapsedNs;
+                getFrameMinNs = Math.min(getFrameMinNs, getFrameElapsedNs);
+                getFrameMaxNs = Math.max(getFrameMaxNs, getFrameElapsedNs);
 
                 if (bitmap == null) {
+                    getFrameFailedCount++;
                     continue;
                 }
+
+                getFrameSuccessCount++;
+
                 long analyzeStartNs = System.nanoTime();
                 FrameFeature feature =
                         analyzeFrame(
@@ -290,7 +308,13 @@ public class Pass1Extractor {
                     mlKitMinNs,
                     mlKitMaxNs,
                     jsonBuildTotalNs,
-                    jsonWriteElapsedNs);
+                    jsonWriteElapsedNs,
+                    getFrameCalls,
+                    getFrameSuccessCount,
+                    getFrameFailedCount,
+                    getFrameTotalNs,
+                    getFrameMinNs,
+                    getFrameMaxNs);
 
             Log.i(
                     TAG,
@@ -332,7 +356,13 @@ public class Pass1Extractor {
             long mlKitMinNs,
             long mlKitMaxNs,
             long jsonBuildTotalNs,
-            long jsonWriteElapsedNs) {
+            long jsonWriteElapsedNs,
+            int getFrameCalls,
+            int getFrameSuccessCount,
+            int getFrameFailedCount,
+            long getFrameTotalNs,
+            long getFrameMinNs,
+            long getFrameMaxNs) {
 
         try {
             File diagDir = new File(
@@ -353,12 +383,24 @@ public class Pass1Extractor {
             long jsonBuildMs = jsonBuildTotalNs / 1_000_000L;
             long jsonWriteMs = jsonWriteElapsedNs / 1_000_000L;
 
+            long getFrameAvgMs = getFrameCalls == 0 ? 0 : (getFrameTotalNs / getFrameCalls) / 1_000_000L;
+            long getFrameMinMs = getFrameMinNs == Long.MAX_VALUE ? 0 : getFrameMinNs / 1_000_000L;
+            long getFrameMaxMs = getFrameMaxNs / 1_000_000L;
+
             StringBuilder sb = new StringBuilder();
             sb.append("=== SMARTREFRAME PIPELINE PERFORMANCE DIAGNOSTICS ===\n");
             sb.append("\n[FRAME PROCESSING]\n");
             sb.append("total_frames=").append(perfFrames).append("\n");
             sb.append("\n[PASS1 TOTAL]\n");
             sb.append("pass1_total_ms=").append(pass1Ms).append("\n");
+            sb.append("\n[FRAME RETRIEVAL]\n");
+            sb.append("getframe_calls=").append(getFrameCalls).append("\n");
+            sb.append("getframe_success=").append(getFrameSuccessCount).append("\n");
+            sb.append("getframe_failed=").append(getFrameFailedCount).append("\n");
+            sb.append("getframe_total_ms=").append(getFrameTotalNs / 1_000_000L).append("\n");
+            sb.append("getframe_avg_ms=").append(getFrameAvgMs).append("\n");
+            sb.append("getframe_min_ms=").append(getFrameMinMs).append("\n");
+            sb.append("getframe_max_ms=").append(getFrameMaxMs).append("\n");
             sb.append("\n[ANALYZEFRAME]\n");
             sb.append("analyze_total_ms=").append(analyzeTotalNs / 1_000_000L).append("\n");
             sb.append("analyze_avg_ms=").append(analyzeAvgMs).append("\n");
@@ -375,6 +417,7 @@ public class Pass1Extractor {
             sb.append("json_write_ms=").append(jsonWriteMs).append("\n");
             sb.append("\n[BREAKDOWN %]\n");
             if (pass1Ms > 0) {
+                sb.append("getframe_pct=").append((getFrameTotalNs * 100 / pass1TotalNs)).append("%\n");
                 sb.append("analyze_pct=").append((analyzeTotalNs * 100 / pass1TotalNs)).append("%\n");
                 sb.append("mlkit_pct=").append((mlKitTotalNs * 100 / pass1TotalNs)).append("%\n");
                 sb.append("json_build_pct=").append((jsonBuildTotalNs * 100 / pass1TotalNs)).append("%\n");
