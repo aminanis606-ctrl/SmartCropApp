@@ -27,9 +27,6 @@ public class Pass2Optimizer {
     private static final float DEFAULT_Y = 0.45f;
     private static final float DEFAULT_SIZE = 0.30f;
     private static final long POSE_MIN_INTERVAL_MS = 50L;
-    private static final long POSE_LOW_INTERVAL_MS = 400L;
-    private static final long POSE_MEDIUM_INTERVAL_MS = 200L;
-    private static final long POSE_HIGH_INTERVAL_MS = 100L;
 
     /*
      * CONFIG dan DIAGNOSTIC SENGAJA DIPISAH.
@@ -974,7 +971,12 @@ public class Pass2Optimizer {
                     JSONArray lastSubjects = new JSONArray();
 
                     for (FrameSample sample : shot.samples) {
-                        if (lastPoseMs != Long.MIN_VALUE &&
+                        boolean isLastSample =
+                                sample == shot.samples.get(
+                                        shot.samples.size() - 1);
+
+                        if (!isLastSample &&
+                                lastPoseMs != Long.MIN_VALUE &&
                                 sample.timeMs - lastPoseMs < interval) {
                             sample.subjects =
                                     new JSONArray(lastSubjects.toString());
@@ -1078,7 +1080,7 @@ public class Pass2Optimizer {
             Shot shot) {
 
         if (shot == null || shot.samples.size() < 2) {
-            return POSE_MEDIUM_INTERVAL_MS;
+            return Long.MAX_VALUE;
         }
 
         double total = 0.0;
@@ -1095,24 +1097,36 @@ public class Pass2Optimizer {
         }
 
         if (count == 0) {
-            return POSE_MEDIUM_INTERVAL_MS;
+            return Long.MAX_VALUE;
         }
 
-        double motion = total / count;
+        double dynamicScore =
+                Math.min(1.0, total / count);
 
-        if (motion >= 0.060) {
-            return POSE_MIN_INTERVAL_MS;
+        /*
+         * Shot sangat statis:
+         * deteksi hanya di awal dan akhir shot.
+         */
+        if (dynamicScore < 0.015) {
+            return Long.MAX_VALUE;
         }
 
-        if (motion >= 0.030) {
-            return POSE_HIGH_INTERVAL_MS;
-        }
+        /*
+         * Shot dinamis:
+         * cadence kontinu, tanpa bucket 400/200/100/50 ms.
+         */
+        long maxInterval = 800L;
+        long minInterval = POSE_MIN_INTERVAL_MS;
 
-        if (motion >= 0.015) {
-            return POSE_MEDIUM_INTERVAL_MS;
-        }
+        long interval =
+                (long) (
+                        maxInterval -
+                        dynamicScore *
+                        (maxInterval - minInterval));
 
-        return POSE_LOW_INTERVAL_MS;
+        return Math.max(
+                minInterval,
+                Math.min(maxInterval, interval));
     }
 
     private static double cheapFrameMotion(
@@ -1176,21 +1190,21 @@ public class Pass2Optimizer {
             return current;
         }
 
-        double speed = distance / dt;
+        double speed =
+                Math.min(1.0, distance / dt);
 
-        if (speed >= 0.40) {
-            return POSE_MIN_INTERVAL_MS;
-        }
+        long maxInterval = 800L;
+        long minInterval = POSE_MIN_INTERVAL_MS;
 
-        if (speed >= 0.20) {
-            return POSE_HIGH_INTERVAL_MS;
-        }
+        long interval =
+                (long) (
+                        maxInterval -
+                        speed *
+                        (maxInterval - minInterval));
 
-        if (speed >= 0.08) {
-            return POSE_MEDIUM_INTERVAL_MS;
-        }
-
-        return POSE_LOW_INTERVAL_MS;
+        return Math.max(
+                minInterval,
+                Math.min(maxInterval, interval));
     }
 
     private static List<SubjectDetector.Subject> detectRoi(
