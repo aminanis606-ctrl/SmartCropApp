@@ -20,6 +20,9 @@ public class Pass1Extractor {
     private static final SubjectDetector SUBJECT_DETECTOR = new SubjectDetector();
 
     private static final long INTERVAL_US = 50_000L;
+    private static final long MLKIT_NORMAL_INTERVAL_MS = 200L;
+    private static final long MLKIT_EDGE_INTERVAL_MS = 100L;
+    private static final float MLKIT_EDGE_X = 0.82f;
 
     private static final int GRID_X = 12;
     private static final int GRID_Y = 8;
@@ -246,9 +249,26 @@ public class Pass1Extractor {
                     }
                 }
 
+                float mlKitIntervalMs =
+                        MLKIT_NORMAL_INTERVAL_MS;
+
+                if (!lastSubjects.isEmpty()) {
+                    SubjectDetector.Subject lastSubject =
+                            lastSubjects.get(0);
+
+                    boolean nearHorizontalEdge =
+                            lastSubject.x <= MLKIT_EDGE_X ||
+                            lastSubject.x >= MLKIT_EDGE_X;
+
+                    if (nearHorizontalEdge) {
+                        mlKitIntervalMs =
+                                MLKIT_EDGE_INTERVAL_MS;
+                    }
+                }
+
                 boolean forceMlKit =
                         current.frames.size() <= 1 ||
-                        feature.timeMs - lastMlKitTimeMs >= 200L;
+                        feature.timeMs - lastMlKitTimeMs >= mlKitIntervalMs;
 
                 if (previousBrightness != null) {
                     float frameDiff =
