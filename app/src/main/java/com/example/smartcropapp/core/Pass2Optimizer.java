@@ -1132,11 +1132,36 @@ public class Pass2Optimizer {
             if (sample.subjects != null &&
                     sample.subjects.length() > 0) {
                 try {
-                    JSONObject best =
-                            sample.subjects.getJSONObject(0);
+                    JSONObject best = null;
+                    float bestDistance = Float.MAX_VALUE;
+
+                    for (int i = 0; i < sample.subjects.length(); i++) {
+                        JSONObject candidate =
+                                sample.subjects.getJSONObject(i);
+                        int candidateTrackingId =
+                                candidate.optInt("trackingId", -1);
+
+                        if (lockedTrackingId >= 0 &&
+                                candidateTrackingId == lockedTrackingId) {
+                            best = candidate;
+                            break;
+                        }
+
+                        float candidateX =
+                                (float) candidate.optDouble("x", trackX);
+                        float distance =
+                                Math.abs(candidateX - trackX);
+
+                        if (distance < bestDistance) {
+                            bestDistance = distance;
+                            best = candidate;
+                        }
+                    }
 
                     int detectedTrackingId =
-                            best.optInt("trackingId", -1);
+                            best != null
+                                    ? best.optInt("trackingId", -1)
+                                    : -1;
 
                     if (lockedTrackingId < 0 &&
                             detectedTrackingId >= 0) {
