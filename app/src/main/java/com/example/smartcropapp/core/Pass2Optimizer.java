@@ -1176,7 +1176,7 @@ public class Pass2Optimizer {
 
                     final float SMOOTH_ALPHA =
                             reversalHold > 0
-                                    ? Math.max(0.70f, TIME_ALPHA)
+                                    ? Math.max(0.90f, TIME_ALPHA)
                                     : Math.min(1.0f, TIME_ALPHA);
 
                     trackX += SMOOTH_ALPHA * (targetX - trackX);
