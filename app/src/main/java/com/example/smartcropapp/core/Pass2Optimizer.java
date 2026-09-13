@@ -26,7 +26,10 @@ public class Pass2Optimizer {
     private static final float DEFAULT_X = 0.50f;
     private static final float DEFAULT_Y = 0.45f;
     private static final float DEFAULT_SIZE = 0.30f;
-    private static final long POSE_INTERVAL_MS = 200L;
+    private static final long POSE_MIN_INTERVAL_MS = 50L;
+    private static final long POSE_LOW_INTERVAL_MS = 400L;
+    private static final long POSE_MEDIUM_INTERVAL_MS = 200L;
+    private static final long POSE_HIGH_INTERVAL_MS = 100L;
 
     /*
      * CONFIG dan DIAGNOSTIC SENGAJA DIPISAH.
@@ -937,9 +940,6 @@ public class Pass2Optimizer {
                     "Context/sourceVideoUri tidak boleh null");
         }
 
-        SubjectDetector detector =
-                new SubjectDetector();
-
         MediaMetadataRetriever retriever =
                 new MediaMetadataRetriever();
 
@@ -949,19 +949,37 @@ public class Pass2Optimizer {
                     sourceVideoUri);
 
             for (Shot shot : shots) {
-
-                if (!"single".equals(shot.layout) ||
-                        shot.samples.isEmpty()) {
+                if (shot.samples.isEmpty()) {
                     continue;
                 }
 
-                long lastPoseTimeMs = Long.MIN_VALUE;
-                JSONArray lastSubjects = new JSONArray();
+                long interval =
+                        estimateInitialPoseInterval(shot);
 
-                for (FrameSample sample : shot.samples) {
+                SubjectDetector singleDetector = null;
+                SubjectDetector leftDetector = null;
+                SubjectDetector rightDetector = null;
 
-                    if (lastPoseTimeMs == Long.MIN_VALUE ||
-                            sample.timeMs - lastPoseTimeMs >= POSE_INTERVAL_MS) {
+                try {
+                    if ("split".equals(shot.layout)) {
+                        leftDetector = new SubjectDetector();
+                        rightDetector = new SubjectDetector();
+                    } else {
+                        singleDetector = new SubjectDetector();
+                    }
+
+                    long lastPoseMs = Long.MIN_VALUE;
+                    long previousTargetMs = Long.MIN_VALUE;
+                    SubjectDetector.Subject previousTarget = null;
+                    JSONArray lastSubjects = new JSONArray();
+
+                    for (FrameSample sample : shot.samples) {
+                        if (lastPoseMs != Long.MIN_VALUE &&
+                                sample.timeMs - lastPoseMs < interval) {
+                            sample.subjects =
+                                    new JSONArray(lastSubjects.toString());
+                            continue;
+                        }
 
                         Bitmap bitmap = null;
 
@@ -970,17 +988,62 @@ public class Pass2Optimizer {
                                     sample.timeMs * 1000L,
                                     MediaMetadataRetriever.OPTION_CLOSEST);
 
-                            List<SubjectDetector.Subject> detected =
-                                    detector.detect(bitmap);
+                            if (bitmap == null) {
+                                continue;
+                            }
 
-                            if (detected != null &&
-                                    !detected.isEmpty()) {
+                            if ("split".equals(shot.layout)) {
+                                List<SubjectDetector.Subject> left =
+                                        detectRoi(
+                                                leftDetector,
+                                                bitmap,
+                                                0,
+                                                bitmap.getWidth() / 2);
 
-                                lastSubjects =
-                                        subjectsToJson(detected);
+                                List<SubjectDetector.Subject> right =
+                                        detectRoi(
+                                                rightDetector,
+                                                bitmap,
+                                                bitmap.getWidth() / 2,
+                                                bitmap.getWidth()
+                                                        - bitmap.getWidth() / 2);
 
-                                lastPoseTimeMs =
-                                        sample.timeMs;
+                                JSONArray merged =
+                                        mergeSubjects(
+                                                left,
+                                                right);
+
+                                if (merged.length() > 0) {
+                                    lastSubjects = merged;
+                                    lastPoseMs = sample.timeMs;
+                                }
+
+                            } else {
+                                List<SubjectDetector.Subject> detected =
+                                        singleDetector.detect(bitmap);
+
+                                if (detected != null &&
+                                        !detected.isEmpty()) {
+                                    lastSubjects =
+                                            subjectsToJson(detected);
+                                    lastPoseMs = sample.timeMs;
+
+                                    if (detected.size() > 0) {
+                                        SubjectDetector.Subject currentTarget =
+                                                detected.get(0);
+
+                                        interval =
+                                                adaptiveInterval(
+                                                        interval,
+                                                        previousTarget,
+                                                        previousTargetMs,
+                                                        currentTarget,
+                                                        sample.timeMs);
+
+                                        previousTarget = currentTarget;
+                                        previousTargetMs = sample.timeMs;
+                                    }
+                                }
                             }
 
                         } finally {
@@ -988,17 +1051,235 @@ public class Pass2Optimizer {
                                 bitmap.recycle();
                             }
                         }
+
+                        sample.subjects =
+                                new JSONArray(lastSubjects.toString());
                     }
 
-                    sample.subjects =
-                            new JSONArray(
-                                    lastSubjects.toString());
+                } finally {
+                    if (singleDetector != null) {
+                        singleDetector.close();
+                    }
+                    if (leftDetector != null) {
+                        leftDetector.close();
+                    }
+                    if (rightDetector != null) {
+                        rightDetector.close();
+                    }
                 }
             }
 
         } finally {
             retriever.release();
         }
+    }
+
+    private static long estimateInitialPoseInterval(
+            Shot shot) {
+
+        if (shot == null || shot.samples.size() < 2) {
+            return POSE_MEDIUM_INTERVAL_MS;
+        }
+
+        double total = 0.0;
+        int count = 0;
+
+        FrameSample previous = null;
+
+        for (FrameSample sample : shot.samples) {
+            if (previous != null) {
+                total += cheapFrameMotion(previous, sample);
+                count++;
+            }
+            previous = sample;
+        }
+
+        if (count == 0) {
+            return POSE_MEDIUM_INTERVAL_MS;
+        }
+
+        double motion = total / count;
+
+        if (motion >= 0.060) {
+            return POSE_MIN_INTERVAL_MS;
+        }
+
+        if (motion >= 0.030) {
+            return POSE_HIGH_INTERVAL_MS;
+        }
+
+        if (motion >= 0.015) {
+            return POSE_MEDIUM_INTERVAL_MS;
+        }
+
+        return POSE_LOW_INTERVAL_MS;
+    }
+
+    private static double cheapFrameMotion(
+            FrameSample a,
+            FrameSample b) {
+
+        if (a == null || b == null) {
+            return 0.0;
+        }
+
+        double brightnessA =
+                averageBrightness(a);
+
+        double brightnessB =
+                averageBrightness(b);
+
+        return Math.abs(brightnessB - brightnessA);
+    }
+
+    private static double averageBrightness(
+            FrameSample sample) {
+
+        if (sample.brightness == null ||
+                sample.brightness.length == 0) {
+            return 0.0;
+        }
+
+        double sum = 0.0;
+
+        for (float value : sample.brightness) {
+            sum += value;
+        }
+
+        return sum / sample.brightness.length;
+    }
+
+    private static long adaptiveInterval(
+            long current,
+            SubjectDetector.Subject previous,
+            long previousTimeMs,
+            SubjectDetector.Subject currentSubject,
+            long currentTimeMs) {
+
+        if (currentSubject == null ||
+                previous == null ||
+                previousTimeMs == Long.MIN_VALUE ||
+                currentTimeMs <= previousTimeMs) {
+            return current;
+        }
+
+        float dx = currentSubject.x - previous.x;
+        float dy = currentSubject.y - previous.y;
+
+        double distance =
+                Math.sqrt(dx * dx + dy * dy);
+
+        double dt =
+                (currentTimeMs - previousTimeMs) / 1000.0;
+
+        if (dt <= 0.0) {
+            return current;
+        }
+
+        double speed = distance / dt;
+
+        if (speed >= 0.40) {
+            return POSE_MIN_INTERVAL_MS;
+        }
+
+        if (speed >= 0.20) {
+            return POSE_HIGH_INTERVAL_MS;
+        }
+
+        if (speed >= 0.08) {
+            return POSE_MEDIUM_INTERVAL_MS;
+        }
+
+        return POSE_LOW_INTERVAL_MS;
+    }
+
+    private static List<SubjectDetector.Subject> detectRoi(
+            SubjectDetector detector,
+            Bitmap source,
+            int left,
+            int width) {
+
+        List<SubjectDetector.Subject> result =
+                new ArrayList<>();
+
+        if (detector == null ||
+                source == null ||
+                width <= 0) {
+            return result;
+        }
+
+        Bitmap roi = null;
+
+        try {
+            roi = Bitmap.createBitmap(
+                    source,
+                    left,
+                    0,
+                    width,
+                    source.getHeight());
+
+            List<SubjectDetector.Subject> local =
+                    detector.detect(roi);
+
+            for (SubjectDetector.Subject subject : local) {
+                result.add(
+                        new SubjectDetector.Subject(
+                                (left + subject.x * width)
+                                        / source.getWidth(),
+                                subject.y,
+                                subject.width * width
+                                        / source.getWidth(),
+                                subject.height,
+                                subject.areaScore,
+                                subject.trackingId));
+            }
+
+        } catch (Exception ignored) {
+        } finally {
+            if (roi != null) {
+                roi.recycle();
+            }
+        }
+
+        return result;
+    }
+
+    private static JSONArray mergeSubjects(
+            List<SubjectDetector.Subject> left,
+            List<SubjectDetector.Subject> right)
+            throws Exception {
+
+        JSONArray result = new JSONArray();
+
+        if (left != null) {
+            for (SubjectDetector.Subject subject : left) {
+                result.put(subjectToJson(subject));
+            }
+        }
+
+        if (right != null) {
+            for (SubjectDetector.Subject subject : right) {
+                result.put(subjectToJson(subject));
+            }
+        }
+
+        return result;
+    }
+
+    private static JSONObject subjectToJson(
+            SubjectDetector.Subject subject)
+            throws Exception {
+
+        JSONObject item = new JSONObject();
+
+        item.put("x", subject.x);
+        item.put("y", subject.y);
+        item.put("width", subject.width);
+        item.put("height", subject.height);
+        item.put("areaScore", subject.areaScore);
+        item.put("trackingId", subject.trackingId);
+
+        return item;
     }
 
     private static JSONArray subjectsToJson(
