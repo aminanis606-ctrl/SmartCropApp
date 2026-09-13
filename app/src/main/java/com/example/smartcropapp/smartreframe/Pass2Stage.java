@@ -52,9 +52,11 @@ public class Pass2Stage implements Stage {
         }
 
         Pass2Optimizer.optimize(
+                smartReframeTask.getContext(),
+                smartReframeTask.getSourceVideoUri(),
                 analysisFile,
                 trajectoryFile,
-                ((SmartReframeTask) task.getConfiguration()).getVideoId());
+                smartReframeTask.getVideoId());
 
         return new Artifact(
                 "trajectory",

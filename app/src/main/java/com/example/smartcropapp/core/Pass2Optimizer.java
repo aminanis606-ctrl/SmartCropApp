@@ -1,5 +1,9 @@
 package com.example.smartcropapp.core;
 
+import android.content.Context;
+import android.graphics.Bitmap;
+import android.media.MediaMetadataRetriever;
+import android.net.Uri;
 import android.os.Environment;
 import android.util.Log;
 
@@ -22,6 +26,7 @@ public class Pass2Optimizer {
     private static final float DEFAULT_X = 0.50f;
     private static final float DEFAULT_Y = 0.45f;
     private static final float DEFAULT_SIZE = 0.30f;
+    private static final long POSE_INTERVAL_MS = 200L;
 
     /*
      * CONFIG dan DIAGNOSTIC SENGAJA DIPISAH.
@@ -104,6 +109,8 @@ public class Pass2Optimizer {
     }
 
     public static void optimize(
+            Context context,
+            Uri sourceVideoUri,
             File analysisFile,
             File trajectoryFile,
             String videoId)
@@ -159,6 +166,11 @@ public class Pass2Optimizer {
                 "Config: " +
                 configFile.getAbsolutePath());
 
+        /*
+         * TAHAP 1:
+         * Finalisasi layout seluruh shot terlebih dahulu.
+         * Pose ML belum boleh berjalan di tahap ini.
+         */
         for (Shot shot : shots) {
 
             applyManualConfig(
@@ -172,33 +184,22 @@ public class Pass2Optimizer {
             }
 
             if (detectAutoSplit(shot)) {
-                Log.i(TAG, "Shot " + shot.shotId + " -> AUTO SPLIT");
+                Log.i(
+                        TAG,
+                        "Shot " + shot.shotId + " -> AUTO SPLIT");
                 estimateSplitSubjects(shot);
-                continue;
             }
-
-            /*
-             * Pass 1 memberikan spatial grid.
-             * Pass 2 mengubahnya menjadi satu
-             * titik subject/crop yang stabil.
-             */
-            List<Point> subjectTrack =
-                estimateSubjectTrajectory(
-                        shot.samples);
-
-        Point point =
-                subjectTrack.isEmpty()
-                        ? new Point(
-                                DEFAULT_X,
-                                DEFAULT_Y,
-                                DEFAULT_SIZE)
-                        : subjectTrack.get(
-                                subjectTrack.size() - 1);
-
-        writeSingleTrajectory(
-                shot,
-                point);
         }
+
+        /*
+         * TAHAP 2:
+         * Pose ML hanya dijalankan setelah layout final.
+         * Hanya shot single yang membutuhkan subject tracking.
+         */
+        runPoseOnFinalizedShots(
+                context,
+                sourceVideoUri,
+                shots);
 
         writeTrajectory(
                 shots,
@@ -923,6 +924,104 @@ public class Pass2Optimizer {
                 shot.topX +
                 " bottomX=" +
                 shot.bottomX);
+    }
+
+    private static void runPoseOnFinalizedShots(
+            Context context,
+            Uri sourceVideoUri,
+            List<Shot> shots)
+            throws Exception {
+
+        if (context == null || sourceVideoUri == null) {
+            throw new IllegalArgumentException(
+                    "Context/sourceVideoUri tidak boleh null");
+        }
+
+        SubjectDetector detector =
+                new SubjectDetector();
+
+        MediaMetadataRetriever retriever =
+                new MediaMetadataRetriever();
+
+        try {
+            retriever.setDataSource(
+                    context,
+                    sourceVideoUri);
+
+            for (Shot shot : shots) {
+
+                if (!"single".equals(shot.layout) ||
+                        shot.samples.isEmpty()) {
+                    continue;
+                }
+
+                long lastPoseTimeMs = Long.MIN_VALUE;
+                JSONArray lastSubjects = new JSONArray();
+
+                for (FrameSample sample : shot.samples) {
+
+                    if (lastPoseTimeMs == Long.MIN_VALUE ||
+                            sample.timeMs - lastPoseTimeMs >= POSE_INTERVAL_MS) {
+
+                        Bitmap bitmap = null;
+
+                        try {
+                            bitmap = retriever.getFrameAtTime(
+                                    sample.timeMs * 1000L,
+                                    MediaMetadataRetriever.OPTION_CLOSEST);
+
+                            List<SubjectDetector.Subject> detected =
+                                    detector.detect(bitmap);
+
+                            if (detected != null &&
+                                    !detected.isEmpty()) {
+
+                                lastSubjects =
+                                        subjectsToJson(detected);
+
+                                lastPoseTimeMs =
+                                        sample.timeMs;
+                            }
+
+                        } finally {
+                            if (bitmap != null) {
+                                bitmap.recycle();
+                            }
+                        }
+                    }
+
+                    sample.subjects =
+                            new JSONArray(
+                                    lastSubjects.toString());
+                }
+            }
+
+        } finally {
+            retriever.release();
+        }
+    }
+
+    private static JSONArray subjectsToJson(
+            List<SubjectDetector.Subject> subjects)
+            throws Exception {
+
+        JSONArray result = new JSONArray();
+
+        for (SubjectDetector.Subject subject : subjects) {
+
+            JSONObject item = new JSONObject();
+
+            item.put("x", subject.x);
+            item.put("y", subject.y);
+            item.put("width", subject.width);
+            item.put("height", subject.height);
+            item.put("areaScore", subject.areaScore);
+            item.put("trackingId", subject.trackingId);
+
+            result.put(item);
+        }
+
+        return result;
     }
 
     private static List<Point> estimateSubjectTrajectory(
