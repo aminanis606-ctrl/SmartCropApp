@@ -1,14 +1,15 @@
 package com.example.smartcropapp.core;
 
 import android.graphics.Bitmap;
-import android.graphics.Rect;
+import android.graphics.PointF;
 
 import com.google.android.gms.tasks.Tasks;
 import com.google.mlkit.vision.common.InputImage;
-import com.google.mlkit.vision.face.Face;
-import com.google.mlkit.vision.face.FaceDetection;
-import com.google.mlkit.vision.face.FaceDetector;
-import com.google.mlkit.vision.face.FaceDetectorOptions;
+import com.google.mlkit.vision.pose.Pose;
+import com.google.mlkit.vision.pose.PoseDetection;
+import com.google.mlkit.vision.pose.PoseDetector;
+import com.google.mlkit.vision.pose.PoseDetectorOptions;
+import com.google.mlkit.vision.pose.PoseLandmark;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -40,22 +41,16 @@ public final class SubjectDetector {
         }
     }
 
-    private final FaceDetector detector;
+    private final PoseDetector detector;
 
     public SubjectDetector() {
-        FaceDetectorOptions options =
-                new FaceDetectorOptions.Builder()
-                        .setPerformanceMode(
-                                FaceDetectorOptions.PERFORMANCE_MODE_FAST)
-                        .setLandmarkMode(
-                                FaceDetectorOptions.LANDMARK_MODE_NONE)
-                        .setClassificationMode(
-                                FaceDetectorOptions.CLASSIFICATION_MODE_NONE)
-                        .enableTracking()
-                        .setMinFaceSize(0.08f)
+        PoseDetectorOptions options =
+                new PoseDetectorOptions.Builder()
+                        .setDetectorMode(
+                                PoseDetectorOptions.STREAM_MODE)
                         .build();
 
-        detector = FaceDetection.getClient(options);
+        detector = PoseDetection.getClient(options);
     }
 
     public List<Subject> detect(Bitmap bitmap) {
@@ -66,52 +61,111 @@ public final class SubjectDetector {
         }
 
         try {
-            InputImage image = InputImage.fromBitmap(bitmap, 0);
+            InputImage image =
+                    InputImage.fromBitmap(bitmap, 0);
 
-            List<Face> faces =
+            List<Pose> poses =
                     Tasks.await(
                             detector.process(image),
                             2,
                             TimeUnit.SECONDS);
 
-            int imageWidth = bitmap.getWidth();
-            int imageHeight = bitmap.getHeight();
-
-            for (Face face : faces) {
-                Rect box = face.getBoundingBox();
-
-                float x =
-                        box.centerX() / (float) imageWidth;
-
-                float y =
-                        box.centerY() / (float) imageHeight;
-
-                float width =
-                        box.width() / (float) imageWidth;
-
-                float height =
-                        box.height() / (float) imageHeight;
-
-                Integer trackingId =
-                        face.getTrackingId();
-
-                result.add(
-                        new Subject(
-                                clamp01(x),
-                                clamp01(y),
-                                clamp01(width),
-                                clamp01(height),
-                                width * height,
-                                trackingId == null
-                                        ? -1
-                                        : trackingId));
+            if (poses.isEmpty()) {
+                return result;
             }
+
+            Pose pose = poses.get(0);
+
+            List<PointF> torsoPoints = new ArrayList<>();
+
+            addLandmark(
+                    pose,
+                    PoseLandmark.LEFT_SHOULDER,
+                    torsoPoints);
+
+            addLandmark(
+                    pose,
+                    PoseLandmark.RIGHT_SHOULDER,
+                    torsoPoints);
+
+            addLandmark(
+                    pose,
+                    PoseLandmark.LEFT_HIP,
+                    torsoPoints);
+
+            addLandmark(
+                    pose,
+                    PoseLandmark.RIGHT_HIP,
+                    torsoPoints);
+
+            if (torsoPoints.isEmpty()) {
+                return result;
+            }
+
+            float minX = Float.MAX_VALUE;
+            float maxX = -Float.MAX_VALUE;
+            float minY = Float.MAX_VALUE;
+            float maxY = -Float.MAX_VALUE;
+
+            float centerX = 0f;
+            float centerY = 0f;
+
+            for (PointF point : torsoPoints) {
+                centerX += point.x;
+                centerY += point.y;
+                minX = Math.min(minX, point.x);
+                maxX = Math.max(maxX, point.x);
+                minY = Math.min(minY, point.y);
+                maxY = Math.max(maxY, point.y);
+            }
+
+            centerX /= torsoPoints.size();
+            centerY /= torsoPoints.size();
+
+            float imageWidth = bitmap.getWidth();
+            float imageHeight = bitmap.getHeight();
+
+            float x = centerX / imageWidth;
+            float y = centerY / imageHeight;
+            float width = (maxX - minX) / imageWidth;
+            float height = (maxY - minY) / imageHeight;
+
+            result.add(
+                    new Subject(
+                            clamp01(x),
+                            clamp01(y),
+                            clamp01(width),
+                            clamp01(height),
+                            width * height,
+                            -1));
 
         } catch (Exception ignored) {
             // Detector failure must not break Pass1.
         }
 
         return result;
+    }
+
+    private static void addLandmark(
+            Pose pose,
+            int type,
+            List<PointF> points) {
+
+        PoseLandmark landmark =
+                pose.getPoseLandmark(type);
+
+        if (landmark == null) {
+            return;
+        }
+
+        float confidence =
+                landmark.getInFrameLikelihood();
+
+        if (confidence < 0.30f) {
+            return;
+        }
+
+        points.add(landmark.getPosition());
     }
 
     public void close() {
