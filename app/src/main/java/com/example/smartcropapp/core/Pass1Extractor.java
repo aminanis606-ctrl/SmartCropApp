@@ -17,12 +17,7 @@ import java.util.List;
 public class Pass1Extractor {
 
     private static final String TAG = "Pass1Extractor";
-    private static final SubjectDetector SUBJECT_DETECTOR = new SubjectDetector();
-
     private static final long INTERVAL_US = 50_000L;
-    private static final long MLKIT_NORMAL_INTERVAL_MS = 200L;
-    private static final long MLKIT_EDGE_INTERVAL_MS = 100L;
-    private static final float MLKIT_EDGE_X = 0.82f;
 
     private static final int GRID_X = 12;
     private static final int GRID_Y = 8;
@@ -124,15 +119,7 @@ public class Pass1Extractor {
             long analyzeTotalNs = 0L;
             long analyzeMinNs = Long.MAX_VALUE;
             long analyzeMaxNs = 0L;
-            long mlKitTotalNs = 0L;
-            long mlKitMinNs = Long.MAX_VALUE;
-            long mlKitMaxNs = 0L;
             int perfFrames = 0;
-            int mlKitCalls = 0;
-            long lastMlKitTimeMs = -200L;
-            List<SubjectDetector.Subject> lastSubjects =
-                    new ArrayList<>();
-
             long getFrameTotalNs = 0L;
             long getFrameMinNs = Long.MAX_VALUE;
             long getFrameMaxNs = 0L;
@@ -249,53 +236,7 @@ public class Pass1Extractor {
                     }
                 }
 
-                float mlKitIntervalMs =
-                        MLKIT_NORMAL_INTERVAL_MS;
-
-                if (!lastSubjects.isEmpty()) {
-                    SubjectDetector.Subject lastSubject =
-                            lastSubjects.get(0);
-
-                    boolean nearHorizontalEdge =
-                            lastSubject.x <= MLKIT_EDGE_X ||
-                            lastSubject.x >= MLKIT_EDGE_X;
-
-                    if (nearHorizontalEdge) {
-                        mlKitIntervalMs =
-                                MLKIT_EDGE_INTERVAL_MS;
-                    }
-                }
-
-                boolean forceMlKit =
-                        current.frames.size() <= 1 ||
-                        feature.timeMs - lastMlKitTimeMs >= mlKitIntervalMs;
-
-                if (previousBrightness != null) {
-                    float frameDiff =
-                            histogramDiff(
-                                    previousBrightness,
-                                    feature.brightness);
-                    if (frameDiff >= WEAK_CUT_BRIGHTNESS) {
-                        forceMlKit = true;
-                    }
-                }
-
-                if (forceMlKit) {
-                    long mlKitStartNs = System.nanoTime();
-                    List<SubjectDetector.Subject> subjects =
-                            SUBJECT_DETECTOR.detect(bitmap);
-                    long mlKitElapsedNs =
-                            System.nanoTime() - mlKitStartNs;
-                    mlKitTotalNs += mlKitElapsedNs;
-                    mlKitMinNs = Math.min(mlKitMinNs, mlKitElapsedNs);
-                    mlKitMaxNs = Math.max(mlKitMaxNs, mlKitElapsedNs);
-                    mlKitCalls++;
-                    lastMlKitTimeMs = feature.timeMs;
-                    lastSubjects = subjects;
-                }
-
                 perfFrames++;
-                feature.subjects = lastSubjects;
                 current.frames.add(feature);
 
                 previousBrightness =
@@ -352,14 +293,14 @@ public class Pass1Extractor {
             writeDiagnostics(
                     outputFile,
                     perfFrames,
-                    mlKitCalls,
+                    0,
                     pass1TotalNs,
                     analyzeTotalNs,
                     analyzeMinNs,
                     analyzeMaxNs,
-                    mlKitTotalNs,
-                    mlKitMinNs,
-                    mlKitMaxNs,
+                    0L,
+                    Long.MAX_VALUE,
+                    0L,
                     jsonBuildTotalNs,
                     jsonWriteElapsedNs,
                     getFrameCalls,
