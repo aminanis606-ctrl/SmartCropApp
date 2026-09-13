@@ -239,6 +239,25 @@ public class Pass3Renderer {
                                 }
                             }
 
+                                if (shot != null) {
+                                    Log.i(TAG,
+                                            "RENDER_LAYOUT t=" +
+                                            (info.presentationTimeUs / 1000L) +
+                                            " layout=" +
+                                            shot.layout);
+                                }
+                            if (shot != null) {
+                                layout = shot.layout;
+                                if ("split".equals(layout)) {
+                                    topX = shot.top.x;
+                                    topY = shot.top.y;
+                                    botX = shot.bottom.x;
+                                    botY = shot.bottom.y;
+                                } else {
+                                    singleX = shot.single.x;
+                                    singleY = shot.single.y;
+                                }
+
                                 try {
                                     File diagDir = new File(
                                             "/storage/emulated/0/Download/SmartReframe/diagnostics");
@@ -262,24 +281,6 @@ public class Pass3Renderer {
                                 } catch (Exception ignored) {
                                 }
 
-                                if (shot != null) {
-                                    Log.i(TAG,
-                                            "RENDER_LAYOUT t=" +
-                                            (info.presentationTimeUs / 1000L) +
-                                            " layout=" +
-                                            shot.layout);
-                                }
-                            if (shot != null) {
-                                layout = shot.layout;
-                                if ("split".equals(layout)) {
-                                    topX = shot.top.x;
-                                    topY = shot.top.y;
-                                    botX = shot.bottom.x;
-                                    botY = shot.bottom.y;
-                                } else {
-                                    singleX = shot.single.x;
-                                    singleY = shot.single.y;
-                                }
                             }
                         } catch (Exception e) {
                             Log.w(TAG, "Error reading trajectory, using default", e);
