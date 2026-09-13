@@ -1180,7 +1180,7 @@ public class Pass2Optimizer {
                             (targetDeltaX < 0.0f && previousTargetDeltaX > 0.0f);
 
                     if (reversing) {
-                        reversalHold = 2;
+                        reversalHold = 8;
                     } else if (reversalHold > 0) {
                         reversalHold--;
                     }
