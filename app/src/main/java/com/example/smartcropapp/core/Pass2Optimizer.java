@@ -1394,64 +1394,106 @@ public class Pass2Optimizer {
             File outputFile)
             throws Exception {
 
-        JSONObject root =
-                new JSONObject();
-
-        JSONArray shotsJson =
-                new JSONArray();
+        JSONObject root = new JSONObject();
+        JSONArray shotsJson = new JSONArray();
 
         for (Shot shot : shots) {
 
-            JSONObject shotObj =
-                    new JSONObject();
+            JSONObject shotObj = new JSONObject();
 
-            shotObj.put(
-                    "shotId",
-                    shot.shotId);
+            shotObj.put("shotId", shot.shotId);
+            shotObj.put("startMs", shot.startMs);
+            shotObj.put("layout", shot.layout);
 
-            shotObj.put(
-                    "startMs",
-                    shot.startMs);
+            if ("split".equals(shot.layout)) {
 
-            shotObj.put(
-                    "layout",
-                    shot.layout);
+                JSONArray track = new JSONArray();
 
-            if ("split".equals(
-                    shot.layout)) {
+                float lastTopX = shot.topX;
+                float lastTopY = shot.topY;
+                float lastBottomX = shot.bottomX;
+                float lastBottomY = shot.bottomY;
 
-                shotObj.put(
-                        "topX",
-                        shot.topX);
+                for (FrameSample sample : shot.samples) {
 
-                shotObj.put(
-                        "topY",
-                        shot.topY);
+                    if (sample.subjects != null) {
 
-                shotObj.put(
-                        "bottomX",
-                        shot.bottomX);
+                        for (int i = 0;
+                             i < sample.subjects.length();
+                             i++) {
 
-                shotObj.put(
-                        "bottomY",
-                        shot.bottomY);
+                            JSONObject subject =
+                                    sample.subjects.optJSONObject(i);
+
+                            if (subject == null) continue;
+
+                            float x = (float) subject.optDouble(
+                                    "x",
+                                    DEFAULT_X);
+
+                            float y = (float) subject.optDouble(
+                                    "y",
+                                    DEFAULT_Y);
+
+                            /*
+                             * Split mapping:
+                             * right subject -> top panel
+                             * left subject  -> bottom panel
+                             */
+                            if (x >= 0.50f) {
+                                lastTopX = x;
+                                lastTopY = y;
+                            } else {
+                                lastBottomX = x;
+                                lastBottomY = y;
+                            }
+                        }
+                    }
+
+                    JSONObject frame = new JSONObject();
+
+                    frame.put("t", sample.timeMs);
+
+                    frame.put("topX", lastTopX);
+                    frame.put("topY", lastTopY);
+
+                    frame.put("botX", lastBottomX);
+                    frame.put("botY", lastBottomY);
+
+                    track.put(frame);
+                }
+
+                if (track.length() == 0) {
+
+                    JSONObject frame = new JSONObject();
+
+                    frame.put("t", shot.startMs);
+
+                    frame.put("topX", lastTopX);
+                    frame.put("topY", lastTopY);
+
+                    frame.put("botX", lastBottomX);
+                    frame.put("botY", lastBottomY);
+
+                    track.put(frame);
+                }
+
+                shotObj.put("track", track);
 
             } else {
 
                 /*
-                 * Recompute subject trajectory
-                 * sebagai titik per sample.
+                 * Single-shot subject trajectory.
                  */
-                JSONArray track =
-                        new JSONArray();
+                JSONArray track = new JSONArray();
 
                 List<Point> subjectTrack =
                         estimateSubjectTrajectory(
                                 shot.samples);
 
                 for (int i = 0;
-                        i < shot.samples.size();
-                        i++) {
+                     i < shot.samples.size();
+                     i++) {
 
                     FrameSample sample =
                             shot.samples.get(i);
@@ -1464,84 +1506,47 @@ public class Pass2Optimizer {
                                             DEFAULT_Y,
                                             DEFAULT_SIZE);
 
-                    JSONObject p =
-                            new JSONObject();
+                    JSONObject p = new JSONObject();
 
-                    p.put(
-                            "t",
-                            sample.timeMs);
-
-                    p.put(
-                            "x",
-                            point.x);
-
-                    p.put(
-                            "y",
-                            point.y);
-
-                    p.put(
-                            "size",
-                            point.size);
+                    p.put("t", sample.timeMs);
+                    p.put("x", point.x);
+                    p.put("y", point.y);
+                    p.put("size", point.size);
 
                     track.put(p);
                 }
 
                 if (track.length() == 0) {
 
-                    JSONObject p =
-                            new JSONObject();
+                    JSONObject p = new JSONObject();
 
-                    p.put(
-                            "t",
-                            shot.startMs);
-
-                    p.put(
-                            "x",
-                            DEFAULT_X);
-
-                    p.put(
-                            "y",
-                            DEFAULT_Y);
-
-                    p.put(
-                            "size",
-                            DEFAULT_SIZE);
+                    p.put("t", shot.startMs);
+                    p.put("x", DEFAULT_X);
+                    p.put("y", DEFAULT_Y);
+                    p.put("size", DEFAULT_SIZE);
 
                     track.put(p);
                 }
 
-                shotObj.put(
-                        "track",
-                        track);
+                shotObj.put("track", track);
             }
 
-            shotsJson.put(
-                    shotObj);
+            shotsJson.put(shotObj);
         }
 
-        root.put(
-                "version",
-                2);
+        root.put("version", 2);
+        root.put("shots", shotsJson);
 
-        root.put(
-                "shots",
-                shotsJson);
+        File parent = outputFile.getParentFile();
 
-        File parent =
-                outputFile.getParentFile();
-
-        if (parent != null &&
-                !parent.exists()) {
-
+        if (parent != null && !parent.exists()) {
             parent.mkdirs();
         }
 
         try (FileWriter writer =
-                     new FileWriter(
-                             outputFile)) {
+                     new FileWriter(outputFile)) {
 
-            writer.write(
-                    root.toString(2));
+            writer.write(root.toString(2));
         }
 
         Log.i(
