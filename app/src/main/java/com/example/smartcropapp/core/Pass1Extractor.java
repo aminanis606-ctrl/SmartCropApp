@@ -509,6 +509,11 @@ public class Pass1Extractor {
         int cellW = Math.max(1, width / GRID_X);
         int cellH = Math.max(1, height / GRID_Y);
 
+        int sampleWidth =
+                Math.max(1, (cellW + PIXEL_STEP - 1) / PIXEL_STEP);
+        float[] currentGray = new float[sampleWidth];
+        float[] nextGray = new float[sampleWidth];
+
         for (int gy = 0; gy < GRID_Y; gy++) {
             for (int gx = 0; gx < GRID_X; gx++) {
 
@@ -526,15 +531,46 @@ public class Pass1Extractor {
                 int count = 0;
 
                 for (int y = startY; y < endY; y += PIXEL_STEP) {
-                    for (int x = startX; x < endX; x += PIXEL_STEP) {
 
+                    int sampleCount = 0;
+
+                    for (int x = startX; x < endX; x += PIXEL_STEP) {
                         int pixel = bitmap.getPixel(x, y);
 
                         int r = (pixel >> 16) & 0xff;
                         int g = (pixel >> 8) & 0xff;
                         int b = pixel & 0xff;
 
-                        float gray = (r + g + b) / 765f;
+                        currentGray[sampleCount++] =
+                                (r + g + b) / 765f;
+                    }
+
+                    boolean hasNextRow =
+                            y + PIXEL_STEP < endY;
+
+                    if (hasNextRow) {
+                        int nextCount = 0;
+
+                        for (int x = startX;
+                             x < endX;
+                             x += PIXEL_STEP) {
+
+                            int pixel =
+                                    bitmap.getPixel(
+                                            x,
+                                            y + PIXEL_STEP);
+
+                            int r = (pixel >> 16) & 0xff;
+                            int g = (pixel >> 8) & 0xff;
+                            int b = pixel & 0xff;
+
+                            nextGray[nextCount++] =
+                                    (r + g + b) / 765f;
+                        }
+                    }
+
+                    for (int i = 0; i < sampleCount; i++) {
+                        float gray = currentGray[i];
 
                         sum += gray;
                         squareSum += gray * gray;
@@ -542,35 +578,15 @@ public class Pass1Extractor {
                         float dx = 0f;
                         float dy = 0f;
 
-                        if (x + PIXEL_STEP < endX) {
-                            int p2 = bitmap.getPixel(
-                                    x + PIXEL_STEP,
-                                    y);
-
-                            int r2 = (p2 >> 16) & 0xff;
-                            int g2 = (p2 >> 8) & 0xff;
-                            int b2 = p2 & 0xff;
-
-                            float gray2 =
-                                    (r2 + g2 + b2) / 765f;
-
-                            dx = Math.abs(gray - gray2);
+                        if (i + 1 < sampleCount) {
+                            dx = Math.abs(
+                                    gray - currentGray[i + 1]);
                             horizontalSum += dx;
                         }
 
-                        if (y + PIXEL_STEP < endY) {
-                            int p3 = bitmap.getPixel(
-                                    x,
-                                    y + PIXEL_STEP);
-
-                            int r3 = (p3 >> 16) & 0xff;
-                            int g3 = (p3 >> 8) & 0xff;
-                            int b3 = p3 & 0xff;
-
-                            float gray3 =
-                                    (r3 + g3 + b3) / 765f;
-
-                            dy = Math.abs(gray - gray3);
+                        if (hasNextRow) {
+                            dy = Math.abs(
+                                    gray - nextGray[i]);
                             verticalSum += dy;
                         }
 
@@ -579,6 +595,10 @@ public class Pass1Extractor {
 
                         count++;
                     }
+
+                    float[] swap = currentGray;
+                    currentGray = nextGray;
+                    nextGray = swap;
                 }
 
                 int index = gy * GRID_X + gx;
