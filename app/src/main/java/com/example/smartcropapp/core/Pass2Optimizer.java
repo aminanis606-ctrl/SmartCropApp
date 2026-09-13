@@ -934,290 +934,53 @@ public class Pass2Optimizer {
             return result;
         }
 
-        final int GRID_X = 12;
-        final int GRID_Y = 8;
-        final int CELLS = GRID_X * GRID_Y;
-
-        final float MOTION_MIN = 0.018f;
-
-        // Initial subject lock.
-        final int LOCK_FRAMES = 3;
-
-        // A new candidate must persist before taking over.
-
-        // Maximum accepted movement per sample (~250 ms).
-
-        float trackX = DEFAULT_X;
-        float previousTargetX = DEFAULT_X;
-        float previousTargetDeltaX = 0.0f;
-        int lockedTrackingId = -1;
-        int reversalHold = 0;
-        float trackY = DEFAULT_Y;
-        long previousSampleTimeMs = -1L;
-
-        boolean locked = true;
-
-        // Pending candidate waiting for temporal confirmation.
-
-        double[] lockScore = new double[CELLS];
-        int lockCount = 0;
+        /*
+         * RAW ML KIT MODE
+         *
+         * Semua tuning Pass 2 sengaja OFF:
+         * - initial motion lock
+         * - LOCK_FRAMES
+         * - candidate distance selection
+         * - EMA smoothing
+         * - reversal hold
+         * - reversal acceleration
+         *
+         * Posisi crop mengikuti langsung x/y dari
+         * Pose Detector.
+         */
 
         for (FrameSample sample : samples) {
 
-            if (sample == null ||
-                    sample.motion == null ||
-                    sample.edge == null ||
-                    sample.contrast == null) {
+            float x = DEFAULT_X;
+            float y = DEFAULT_Y;
 
-                result.add(new Point(
-                        trackX,
-                        trackY,
-                        DEFAULT_SIZE));
-
-                continue;
-            }
-
-            int n = Math.min(
-                    CELLS,
-                    Math.min(
-                            sample.motion.length,
-                            Math.min(
-                                    sample.edge.length,
-                                    sample.contrast.length)));
-
-            if (n <= 0) {
-                result.add(new Point(
-                        trackX,
-                        trackY,
-                        DEFAULT_SIZE));
-                continue;
-            }
-
-            /*
-             * =========================================================
-             * PHASE 1 — INITIAL SUBJECT LOCK
-             * =========================================================
-             */
-            if (!locked) {
-
-                for (int i = 0; i < n; i++) {
-
-                    int y = i / GRID_X;
-
-                    if (y == 0 || y == GRID_Y - 1) {
-                        continue;
-                    }
-
-                    double motion =
-                            Math.max(0.0, sample.motion[i]);
-
-                    double edge =
-                            Math.max(0.0, sample.edge[i]);
-
-                    double contrast =
-                            Math.max(0.0, sample.contrast[i]);
-
-                    if (motion < MOTION_MIN) {
-                        continue;
-                    }
-
-                    double value =
-                            motion *
-                            (0.50 +
-                             0.30 * edge +
-                             0.20 * contrast);
-
-                    lockScore[i] += value;
-                }
-
-                lockCount++;
-
-                if (lockCount < LOCK_FRAMES) {
-
-                    result.add(new Point(
-                            trackX,
-                            trackY,
-                            DEFAULT_SIZE));
-
-                    continue;
-                }
-
-                double peak = 0.0;
-                int peakIndex = -1;
-
-                for (int i = 0; i < CELLS; i++) {
-
-                    int y = i / GRID_X;
-
-                    if (y == 0 || y == GRID_Y - 1) {
-                        continue;
-                    }
-
-                    if (lockScore[i] > peak) {
-                        peak = lockScore[i];
-                        peakIndex = i;
-                    }
-                }
-
-                if (peakIndex >= 0 && peak > 0.00001) {
-
-                    int peakY = peakIndex / GRID_X;
-                    int peakX = peakIndex % GRID_X;
-
-                    double weight = 0.0;
-                    double sumX = 0.0;
-                    double sumY = 0.0;
-
-                    double threshold = peak * 0.45;
-
-                    for (int y = Math.max(1, peakY - 1);
-                         y <= Math.min(GRID_Y - 2, peakY + 1);
-                         y++) {
-
-                        for (int x = Math.max(0, peakX - 1);
-                             x <= Math.min(GRID_X - 1, peakX + 1);
-                             x++) {
-
-                            int i = y * GRID_X + x;
-
-                            double value = lockScore[i];
-
-                            if (value < threshold) {
-                                continue;
-                            }
-
-                            float cx =
-                                    (x + 0.5f) / GRID_X;
-
-                            float cy =
-                                    (y + 0.5f) / GRID_Y;
-
-                            weight += value;
-                            sumX += cx * value;
-                            sumY += cy * value;
-                        }
-                    }
-
-                    if (weight > 0.00001) {
-
-                        trackX = clamp(
-                                (float) (sumX / weight),
-                                0.08f,
-                                0.92f);
-
-                        trackY = clamp(
-                                (float) (sumY / weight),
-                                0.15f,
-                                0.85f);
-
-                        locked = true;
-                    }
-                }
-
-                result.add(new Point(
-                        trackX,
-                        trackY,
-                        DEFAULT_SIZE));
-
-                continue;
-            }
-
-        /*
-         * PHASE 2 — ML KIT TRACKING + SMOOTHING
-         *
-         * ML Kit supplies the current subject position.
-         * EMA smoothing removes visible jumps between samples.
-         */
-        if (locked) {
-            if (sample.subjects != null &&
+            if (sample != null &&
+                    sample.subjects != null &&
                     sample.subjects.length() > 0) {
+
                 try {
-                    JSONObject best = null;
-                    float bestDistance = Float.MAX_VALUE;
+                    JSONObject subject =
+                            sample.subjects.getJSONObject(0);
 
-                    for (int i = 0; i < sample.subjects.length(); i++) {
-                        JSONObject candidate =
-                                sample.subjects.getJSONObject(i);
-                        int candidateTrackingId =
-                                candidate.optInt("trackingId", -1);
+                    x = (float) subject.optDouble(
+                            "x",
+                            DEFAULT_X);
 
-                        if (lockedTrackingId >= 0 &&
-                                candidateTrackingId == lockedTrackingId) {
-                            best = candidate;
-                            break;
-                        }
-
-                        float candidateX =
-                                (float) candidate.optDouble("x", trackX);
-                        float distance =
-                                Math.abs(candidateX - trackX);
-
-                        if (distance < bestDistance) {
-                            bestDistance = distance;
-                            best = candidate;
-                        }
-                    }
-
-                    int detectedTrackingId =
-                            best != null
-                                    ? best.optInt("trackingId", -1)
-                                    : -1;
-
-                    if (lockedTrackingId < 0 &&
-                            detectedTrackingId >= 0) {
-                        lockedTrackingId = detectedTrackingId;
-                    }
-
-                    float targetX =
-                            (float) best.optDouble("x", trackX);
-
-                    float targetY =
-                            (float) best.optDouble("y", trackY);
-
-                    float targetDeltaX = targetX - previousTargetX;
-                    boolean reversing =
-                            (targetDeltaX > 0.0f && previousTargetDeltaX < 0.0f) ||
-                            (targetDeltaX < 0.0f && previousTargetDeltaX > 0.0f);
-
-                    if (reversing) {
-                        reversalHold = 8;
-                    } else if (reversalHold > 0) {
-                        reversalHold--;
-                    }
-
-                    previousTargetX = targetX;
-                    previousTargetDeltaX = targetDeltaX;
-                    long currentSampleTimeMs = sample.timeMs;
-                    long dtMs = previousSampleTimeMs < 0L
-                            ? 100L
-                            : Math.max(1L, currentSampleTimeMs - previousSampleTimeMs);
-                    previousSampleTimeMs = currentSampleTimeMs;
-
-                    final float BASE_ALPHA = 0.40f;
-                    final float TIME_ALPHA = (float) (
-                            1.0 - Math.pow(
-                                    1.0 - BASE_ALPHA,
-                                    dtMs / 100.0));
-
-                    final float SMOOTH_ALPHA =
-                            reversalHold > 0
-                                    ? Math.max(0.90f, TIME_ALPHA)
-                                    : Math.min(1.0f, TIME_ALPHA);
-
-                    trackX += SMOOTH_ALPHA * (targetX - trackX);
-                    trackY += SMOOTH_ALPHA * (targetY - trackY);
+                    y = (float) subject.optDouble(
+                            "y",
+                            DEFAULT_Y);
 
                 } catch (Exception ignored) {
-                    // Keep the last valid tracked position.
+                    // Keep default position.
                 }
             }
 
             result.add(new Point(
-                    trackX,
-                    trackY,
+                    x,
+                    y,
                     DEFAULT_SIZE));
         }
-        }
+
         return result;
     }
 
