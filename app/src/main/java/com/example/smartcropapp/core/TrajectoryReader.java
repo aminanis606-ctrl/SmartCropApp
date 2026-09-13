@@ -57,6 +57,9 @@ public class TrajectoryReader {
 
         Point topPoint;
         Point bottomPoint;
+        List<Long> splitTimes = new ArrayList<>();
+        List<Point> topPoints = new ArrayList<>();
+        List<Point> bottomPoints = new ArrayList<>();
     }
 
     private final List<ShotData> shots =
@@ -155,6 +158,48 @@ public class TrajectoryReader {
                                 bottomX,
                                 bottomY,
                                 0.5f);
+
+                JSONArray splitTrack =
+                        shotObj.optJSONArray(
+                                "track");
+
+                if (splitTrack != null) {
+                    for (int j = 0;
+                         j < splitTrack.length();
+                         j++) {
+
+                        JSONObject frame =
+                                splitTrack.optJSONObject(j);
+                        if (frame == null) continue;
+
+                        sd.splitTimes.add(
+                                frame.optLong("t", 0));
+
+                        sd.topPoints.add(
+                                new Point(
+                                        clamp(
+                                                (float) frame.optDouble("topX", topX),
+                                                0f,
+                                                1f),
+                                        clamp(
+                                                (float) frame.optDouble("topY", topY),
+                                                0f,
+                                                1f),
+                                        0.5f));
+
+                        sd.bottomPoints.add(
+                                new Point(
+                                        clamp(
+                                                (float) frame.optDouble("botX", bottomX),
+                                                0f,
+                                                1f),
+                                        clamp(
+                                                (float) frame.optDouble("botY", bottomY),
+                                                0f,
+                                                1f),
+                                        0.5f));
+                    }
+                }
 
             } else {
 
@@ -289,21 +334,15 @@ public class TrajectoryReader {
         if ("split".equals(
                 active.layout)) {
 
-            Point top =
-                    active.topPoint != null
-                            ? active.topPoint
-                            : new Point(
-                                    0.25f,
-                                    0.5f,
-                                    0.5f);
+            Point top = interpolateSplit(
+                    active,
+                    timeMs,
+                    true);
 
-            Point bottom =
-                    active.bottomPoint != null
-                            ? active.bottomPoint
-                            : new Point(
-                                    0.75f,
-                                    0.5f,
-                                    0.5f);
+            Point bottom = interpolateSplit(
+                    active,
+                    timeMs,
+                    false);
 
             return new ShotResult(
                     "split",
@@ -365,6 +404,69 @@ public class TrajectoryReader {
         float interpSize = pointBefore.size + (pointAfter.size - pointBefore.size) * alpha;
 
         return new Point(interpX, interpY, interpSize);
+    }
+
+    private Point interpolateSplit(
+            ShotData sd,
+            long timeMs,
+            boolean top) {
+
+        List<Long> times = sd.splitTimes;
+        List<Point> points =
+                top ? sd.topPoints : sd.bottomPoints;
+
+        if (times.isEmpty() || points.isEmpty()) {
+            return top
+                    ? (sd.topPoint != null
+                        ? sd.topPoint
+                        : new Point(0.25f, 0.5f, 0.5f))
+                    : (sd.bottomPoint != null
+                        ? sd.bottomPoint
+                        : new Point(0.75f, 0.5f, 0.5f));
+        }
+
+        if (timeMs <= times.get(0)) {
+            return points.get(0);
+        }
+
+        int last = times.size() - 1;
+
+        if (timeMs >= times.get(last)) {
+            return points.get(last);
+        }
+
+        for (int i = 1; i < times.size(); i++) {
+            long t1 = times.get(i);
+
+            if (timeMs <= t1) {
+                long t0 = times.get(i - 1);
+
+                Point p0 = points.get(i - 1);
+                Point p1 = points.get(i);
+
+                long deltaTime = t1 - t0;
+
+                if (deltaTime <= 0) {
+                    return p0;
+                }
+
+                float alpha =
+                        (float)(timeMs - t0) / deltaTime;
+
+                alpha =
+                        Math.max(
+                                0f,
+                                Math.min(1f, alpha));
+
+                return new Point(
+                        p0.x + (p1.x - p0.x) * alpha,
+                        p0.y + (p1.y - p0.y) * alpha,
+                        p0.size
+                                + (p1.size - p0.size) * alpha);
+            }
+        }
+
+        return points.get(last);
     }
 
     private static String normalizeLayout(
