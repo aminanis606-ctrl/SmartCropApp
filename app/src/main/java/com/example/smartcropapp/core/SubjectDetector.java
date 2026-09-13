@@ -8,8 +8,8 @@ import com.google.mlkit.vision.common.InputImage;
 import com.google.mlkit.vision.pose.Pose;
 import com.google.mlkit.vision.pose.PoseDetection;
 import com.google.mlkit.vision.pose.PoseDetector;
-import com.google.mlkit.vision.pose.PoseDetectorOptions;
 import com.google.mlkit.vision.pose.PoseLandmark;
+import com.google.mlkit.vision.pose.defaults.PoseDetectorOptions;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -64,17 +64,11 @@ public final class SubjectDetector {
             InputImage image =
                     InputImage.fromBitmap(bitmap, 0);
 
-            List<Pose> poses =
+            Pose pose =
                     Tasks.await(
                             detector.process(image),
                             2,
                             TimeUnit.SECONDS);
-
-            if (poses.isEmpty()) {
-                return result;
-            }
-
-            Pose pose = poses.get(0);
 
             List<PointF> torsoPoints = new ArrayList<>();
 
@@ -113,6 +107,7 @@ public final class SubjectDetector {
             for (PointF point : torsoPoints) {
                 centerX += point.x;
                 centerY += point.y;
+
                 minX = Math.min(minX, point.x);
                 maxX = Math.max(maxX, point.x);
                 minY = Math.min(minY, point.y);
