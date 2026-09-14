@@ -21,6 +21,11 @@ jobs:
           java-version: '17'
           cache: gradle
 
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: ''
+
       - name: Install SDK
         run: |
           sdkmanager "platform-tools"
