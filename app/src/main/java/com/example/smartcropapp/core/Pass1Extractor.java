@@ -644,7 +644,7 @@ public class Pass1Extractor {
 
         result.put(
                 "layout",
-                "single");
+                classifyLayout(shot));
 
         JSONArray samples =
                 new JSONArray();
