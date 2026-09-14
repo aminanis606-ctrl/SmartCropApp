@@ -263,7 +263,7 @@ public class Pass3Renderer {
                                 GLES20.GL_SRC_ALPHA,
                                 GLES20.GL_ONE_MINUS_SRC_ALPHA);
 
-                        final float feather = 0.04f;
+                        final float feather = 0.02f;
 
                         // Top panel
                         GLES20.glViewport(0, panelH, OUTPUT_WIDTH, panelH);

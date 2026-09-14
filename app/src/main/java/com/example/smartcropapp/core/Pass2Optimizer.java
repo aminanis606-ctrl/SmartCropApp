@@ -878,12 +878,12 @@ public class Pass2Optimizer {
                 0.92f);
 
         leftCenterY = clamp(
-                leftCenterY,
+                leftCenterY - 0.05f,
                 0.15f,
                 0.85f);
 
         rightCenterY = clamp(
-                rightCenterY,
+                rightCenterY - 0.05f,
                 0.15f,
                 0.85f);
 
