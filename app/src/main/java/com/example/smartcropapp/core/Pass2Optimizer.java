@@ -179,7 +179,6 @@ public class Pass2Optimizer {
                     videoId);
 
             if ("split".equals(shot.layout)) {
-                estimateSplitSubjects(shot);
                 continue;
             }
 
@@ -187,7 +186,6 @@ public class Pass2Optimizer {
                 Log.i(
                         TAG,
                         "Shot " + shot.shotId + " -> AUTO SPLIT");
-                estimateSplitSubjects(shot);
             }
 
         }
@@ -966,6 +964,7 @@ public class Pass2Optimizer {
                     long previousTargetMs = Long.MIN_VALUE;
                     SubjectDetector.Subject previousTarget = null;
                     JSONArray lastSubjects = new JSONArray();
+                    boolean splitPoseAttempted = false;
 
                     for (FrameSample sample : shot.samples) {
                         if (lastPoseMs != Long.MIN_VALUE &&
@@ -987,6 +986,8 @@ public class Pass2Optimizer {
                             }
 
                             if ("split".equals(shot.layout)) {
+                                splitPoseAttempted = true;
+
                                 List<SubjectDetector.Subject> left =
                                         detectRoi(
                                                 leftDetector,
@@ -1002,16 +1003,45 @@ public class Pass2Optimizer {
                                                 bitmap.getWidth()
                                                         - bitmap.getWidth() / 2);
 
-                                JSONArray merged =
-                                        mergeSubjects(
-                                                left,
-                                                right);
-
-                                if (merged.length() > 0) {
-                                    lastSubjects = merged;
-                                    lastPoseMs = sample.timeMs;
+                                SubjectDetector.Subject bestLeft = null;
+                                if (left != null) {
+                                    for (SubjectDetector.Subject subject : left) {
+                                        if (bestLeft == null ||
+                                                subject.areaScore > bestLeft.areaScore) {
+                                            bestLeft = subject;
+                                        }
+                                    }
                                 }
 
+                                SubjectDetector.Subject bestRight = null;
+                                if (right != null) {
+                                    for (SubjectDetector.Subject subject : right) {
+                                        if (bestRight == null ||
+                                                subject.areaScore > bestRight.areaScore) {
+                                            bestRight = subject;
+                                        }
+                                    }
+                                }
+
+                                if (bestLeft != null) {
+                                    shot.bottomX =
+                                            clamp(bestLeft.x, 0.08f, 0.49f);
+                                    shot.bottomY =
+                                            clamp(bestLeft.y, 0.15f, 0.85f);
+                                }
+
+                                if (bestRight != null) {
+                                    shot.topX =
+                                            clamp(bestRight.x, 0.51f, 0.92f);
+                                    shot.topY =
+                                            clamp(bestRight.y, 0.15f, 0.85f);
+                                }
+
+                                JSONArray merged =
+                                        mergeSubjects(left, right);
+
+                                lastSubjects = merged;
+                                lastPoseMs = sample.timeMs;
                             } else {
                                 List<SubjectDetector.Subject> detected =
                                         singleDetector.detect(bitmap);
