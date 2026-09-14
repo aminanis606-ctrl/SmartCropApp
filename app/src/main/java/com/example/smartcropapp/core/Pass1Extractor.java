@@ -239,36 +239,6 @@ public class Pass1Extractor {
                         "analysis.json gagal ditulis.");
             }
 
-            long pass1EndNs = System.nanoTime();
-            long pass1TotalNs = pass1EndNs - pass1StartNs;
-
-            // Write comprehensive diagnostics
-            writeDiagnostics(
-                    outputFile,
-                    perfFrames,
-                    0,
-                    pass1TotalNs,
-                    analyzeTotalNs,
-                    analyzeMinNs,
-                    analyzeMaxNs,
-                    0L,
-                    Long.MAX_VALUE,
-                    0L,
-                    jsonBuildTotalNs,
-                    jsonWriteElapsedNs,
-                    getFrameCalls,
-                    getFrameSuccessCount,
-                    getFrameFailedCount,
-                    getFrameTotalNs,
-                    getFrameMinNs,
-                    getFrameMaxNs,
-                    durationUs,
-                    firstFailedTimeUs,
-                    lastFailedTimeUs,
-                    failedTimeMinUs,
-                    failedTimeMaxUs,
-                    failedLast10PctCount);
-
             Log.i(
                     TAG,
                     "PASS1 DONE shots=" +
