@@ -27,7 +27,6 @@ import androidx.core.content.ContextCompat;
 import com.example.smartcropapp.core.Pass1Extractor;
 import com.example.smartcropapp.core.Pass2Optimizer;
 import com.example.smartcropapp.core.Pass3Renderer;
-import com.example.smartcropapp.utils.FileUtils;
 import com.example.smartcropapp.smartreframe.SmartReframeOrchestrator;
 
 import java.io.File;
@@ -159,37 +158,6 @@ public class MainActivity extends AppCompatActivity {
 
                 runOnUiThread(() ->
                         statusText.setText("Pass 3: Rendering Video..."));
-
-                String diagnosticBase =
-                        outputVideo.getName();
-
-                int dot = diagnosticBase.lastIndexOf('.');
-
-                if (dot > 0) {
-                    diagnosticBase =
-                            diagnosticBase.substring(0, dot);
-                }
-
-                orchestrator.runPass2AndPass3(
-                        internalTrajectory,
-                        outputVideo);
-
-                try {
-                    FileUtils.copyFileToPublicDownloads(
-                            this,
-                            "analysis.json",
-                            diagnosticBase + "_analysis.json");
-
-                    FileUtils.copyFileToPublicDownloads(
-                            this,
-                            "trajectory.json",
-                            diagnosticBase + "_trajectory.json");
-                } catch (Exception e) {
-                    Log.w(
-                            TAG,
-                            "Gagal copy diagnostic (diabaikan): "
-                                    + e.getMessage());
-                }
 
                 runOnUiThread(() -> {
                     statusText.setText(
