@@ -208,6 +208,9 @@ public class Pass1Extractor {
 
                         if (!current.frames.isEmpty()) {
 
+                            long previousTimeMs =
+                                    current.frames.get(current.frames.size() - 1).timeMs;
+
                             jsonBuildStartNs = System.nanoTime();
                             shots.put(
                                     buildShot(
@@ -216,14 +219,13 @@ public class Pass1Extractor {
                             jsonBuildTotalNs += System.nanoTime() - jsonBuildStartNs;
 
                             shotId++;
+
+                            current =
+                                    new ShotBuffer();
+
+                            current.startMs =
+                                    (feature.timeMs + previousTimeMs) / 2L;
                         }
-
-                        current =
-                                new ShotBuffer();
-
-                        current.startMs =
-                                (feature.timeMs +
-                                 current.frames.get(current.frames.size() - 1).timeMs) / 2L;
 
                         // First frame after a shot cut has no valid temporal predecessor.
                         java.util.Arrays.fill(feature.motion, 0f);
