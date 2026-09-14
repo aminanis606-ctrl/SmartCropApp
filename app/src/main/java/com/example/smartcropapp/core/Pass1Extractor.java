@@ -73,8 +73,6 @@ public class Pass1Extractor {
         MediaMetadataRetriever retriever =
                 new MediaMetadataRetriever();
 
-        long pass1StartNs = System.nanoTime();
-
         try {
             Log.i(
                     TAG,
@@ -116,67 +114,25 @@ public class Pass1Extractor {
 
             int shotId = 0;
 
-            long analyzeTotalNs = 0L;
-            long analyzeMinNs = Long.MAX_VALUE;
-            long analyzeMaxNs = 0L;
-            int perfFrames = 0;
-            long getFrameTotalNs = 0L;
-            long getFrameMinNs = Long.MAX_VALUE;
-            long getFrameMaxNs = 0L;
-            int getFrameCalls = 0;
-            int getFrameSuccessCount = 0;
-            int getFrameFailedCount = 0;
-            long firstFailedTimeUs = -1L;
-            long lastFailedTimeUs = -1L;
-            long failedTimeMinUs = Long.MAX_VALUE;
-            long failedTimeMaxUs = Long.MIN_VALUE;
-            int failedLast10PctCount = 0;
-
-            long jsonBuildStartNs = 0L;
-            long jsonBuildTotalNs = 0L;
-
             for (
                     long timeUs = 0;
                     timeUs <= durationUs;
                     timeUs += INTERVAL_US) {
 
-                long getFrameStartNs = System.nanoTime();
                 Bitmap bitmap =
                         retriever.getFrameAtTime(
                                 timeUs,
                                 MediaMetadataRetriever.OPTION_CLOSEST);
-                long getFrameElapsedNs = System.nanoTime() - getFrameStartNs;
-
-                getFrameCalls++;
-                getFrameTotalNs += getFrameElapsedNs;
-                getFrameMinNs = Math.min(getFrameMinNs, getFrameElapsedNs);
-                getFrameMaxNs = Math.max(getFrameMaxNs, getFrameElapsedNs);
 
                 if (bitmap == null) {
-                    getFrameFailedCount++;
-                    if (firstFailedTimeUs < 0) firstFailedTimeUs = timeUs;
-                    lastFailedTimeUs = timeUs;
-                    failedTimeMinUs = Math.min(failedTimeMinUs, timeUs);
-                    failedTimeMaxUs = Math.max(failedTimeMaxUs, timeUs);
-                    if (timeUs >= (durationUs * 90L) / 100L) {
-                        failedLast10PctCount++;
-                    }
                     continue;
                 }
 
-                getFrameSuccessCount++;
-
-                long analyzeStartNs = System.nanoTime();
                 FrameFeature feature =
                         analyzeFrame(
                                 bitmap,
                                 timeUs / 1000L,
                                 new ArrayList<SubjectDetector.Subject>());
-                long analyzeElapsedNs =
-                        System.nanoTime() - analyzeStartNs;
-                analyzeTotalNs += analyzeElapsedNs;
-                analyzeMinNs = Math.min(analyzeMinNs, analyzeElapsedNs);
-                analyzeMaxNs = Math.max(analyzeMaxNs, analyzeElapsedNs);
 
 
                 if (previousBrightness != null) {
@@ -204,19 +160,17 @@ public class Pass1Extractor {
                             " diff=" +
                             diff);
 
-                    if (diff > CUT_THRESHOLD || weakCut) {
+                        if (diff > CUT_THRESHOLD || weakCut) {
 
                         if (!current.frames.isEmpty()) {
 
                             long previousTimeMs =
                                     current.frames.get(current.frames.size() - 1).timeMs;
 
-                            jsonBuildStartNs = System.nanoTime();
                             shots.put(
                                     buildShot(
                                             shotId,
                                             current));
-                            jsonBuildTotalNs += System.nanoTime() - jsonBuildStartNs;
 
                             shotId++;
 
@@ -236,10 +190,10 @@ public class Pass1Extractor {
                                 feature.timeMs +
                                 " diff=" +
                                 diff);
+
                     }
                 }
 
-                perfFrames++;
                 current.frames.add(feature);
 
                 previousBrightness =
@@ -253,12 +207,10 @@ public class Pass1Extractor {
 
             if (!current.frames.isEmpty()) {
 
-                jsonBuildStartNs = System.nanoTime();
                 shots.put(
                         buildShot(
                                 shotId,
                                 current));
-                jsonBuildTotalNs += System.nanoTime() - jsonBuildStartNs;
             }
 
             JSONObject root =
@@ -272,7 +224,6 @@ public class Pass1Extractor {
                     "shots",
                     shots);
 
-            long jsonWriteStartNs = System.nanoTime();
             try (FileOutputStream fos =
                          new FileOutputStream(outputFile)) {
 
@@ -280,7 +231,6 @@ public class Pass1Extractor {
                         root.toString(2)
                                 .getBytes("UTF-8"));
             }
-            long jsonWriteElapsedNs = System.nanoTime() - jsonWriteStartNs;
 
             if (!outputFile.exists()
                     || outputFile.length() == 0) {
@@ -344,112 +294,6 @@ public class Pass1Extractor {
                 retriever.release();
             } catch (Exception ignored) {
             }
-        }
-    }
-
-    private static void writeDiagnostics(
-            File outputFile,
-            int perfFrames,
-            int mlKitCalls,
-            long pass1TotalNs,
-            long analyzeTotalNs,
-            long analyzeMinNs,
-            long analyzeMaxNs,
-            long mlKitTotalNs,
-            long mlKitMinNs,
-            long mlKitMaxNs,
-            long jsonBuildTotalNs,
-            long jsonWriteElapsedNs,
-            int getFrameCalls,
-            int getFrameSuccessCount,
-            int getFrameFailedCount,
-            long getFrameTotalNs,
-            long getFrameMinNs,
-            long getFrameMaxNs,
-            long durationUs,
-            long firstFailedTimeUs,
-            long lastFailedTimeUs,
-            long failedTimeMinUs,
-            long failedTimeMaxUs,
-            int failedLast10PctCount) {
-
-        try {
-            File diagDir = new File(
-                    "/storage/emulated/0/Download/SmartReframe/diagnostics");
-            if (!diagDir.exists()) {
-                diagDir.mkdirs();
-            }
-
-            File diagFile = new File(diagDir, "pipeline_perf.txt");
-
-            long pass1Ms = pass1TotalNs / 1_000_000L;
-            long analyzeAvgMs = perfFrames == 0 ? 0 : (analyzeTotalNs / perfFrames) / 1_000_000L;
-            long analyzeMinMs = analyzeMinNs == Long.MAX_VALUE ? 0 : analyzeMinNs / 1_000_000L;
-            long analyzeMaxMs = analyzeMaxNs / 1_000_000L;
-            long mlKitAvgMs = mlKitCalls == 0 ? 0 : (mlKitTotalNs / mlKitCalls) / 1_000_000L;
-            long mlKitMinMs = mlKitMinNs == Long.MAX_VALUE ? 0 : mlKitMinNs / 1_000_000L;
-            long mlKitMaxMs = mlKitMaxNs / 1_000_000L;
-            long jsonBuildMs = jsonBuildTotalNs / 1_000_000L;
-            long jsonWriteMs = jsonWriteElapsedNs / 1_000_000L;
-
-            long getFrameAvgMs = getFrameCalls == 0 ? 0 : (getFrameTotalNs / getFrameCalls) / 1_000_000L;
-            long getFrameMinMs = getFrameMinNs == Long.MAX_VALUE ? 0 : getFrameMinNs / 1_000_000L;
-            long getFrameMaxMs = getFrameMaxNs / 1_000_000L;
-
-            StringBuilder sb = new StringBuilder();
-            sb.append("=== SMARTREFRAME PIPELINE PERFORMANCE DIAGNOSTICS ===\n");
-            sb.append("\n[FRAME PROCESSING]\n");
-            sb.append("total_frames=").append(perfFrames).append("\n");
-            sb.append("\n[PASS1 TOTAL]\n");
-            sb.append("pass1_total_ms=").append(pass1Ms).append("\n");
-            sb.append("\n[FRAME RETRIEVAL]\n");
-            sb.append("getframe_calls=").append(getFrameCalls).append("\n");
-            sb.append("getframe_success=").append(getFrameSuccessCount).append("\n");
-            sb.append("getframe_failed=").append(getFrameFailedCount).append("\n");
-            sb.append("getframe_total_ms=").append(getFrameTotalNs / 1_000_000L).append("\n");
-            sb.append("getframe_avg_ms=").append(getFrameAvgMs).append("\n");
-            sb.append("getframe_min_ms=").append(getFrameMinMs).append("\n");
-            sb.append("getframe_max_ms=").append(getFrameMaxMs).append("\n");
-            sb.append("duration_us=").append(durationUs).append("\n");
-            sb.append("first_failed_time_us=").append(firstFailedTimeUs).append("\n");
-            sb.append("last_failed_time_us=").append(lastFailedTimeUs).append("\n");
-            sb.append("failed_time_min_us=").append(
-                    failedTimeMinUs == Long.MAX_VALUE ? -1L : failedTimeMinUs).append("\n");
-            sb.append("failed_time_max_us=").append(
-                    failedTimeMaxUs == Long.MIN_VALUE ? -1L : failedTimeMaxUs).append("\n");
-            sb.append("failed_last_10pct_count=").append(failedLast10PctCount).append("\n");
-            sb.append("\n[ANALYZEFRAME]\n");
-            sb.append("analyze_total_ms=").append(analyzeTotalNs / 1_000_000L).append("\n");
-            sb.append("analyze_avg_ms=").append(analyzeAvgMs).append("\n");
-            sb.append("analyze_min_ms=").append(analyzeMinMs).append("\n");
-            sb.append("analyze_max_ms=").append(analyzeMaxMs).append("\n");
-            sb.append("\n[ML KIT DETECTION]\n");
-            sb.append("mlkit_calls=").append(mlKitCalls).append("\n");
-            sb.append("mlkit_total_ms=").append(mlKitTotalNs / 1_000_000L).append("\n");
-            sb.append("mlkit_avg_ms=").append(mlKitAvgMs).append("\n");
-            sb.append("mlkit_min_ms=").append(mlKitMinMs).append("\n");
-            sb.append("mlkit_max_ms=").append(mlKitMaxMs).append("\n");
-            sb.append("\n[JSON BUILD & WRITE]\n");
-            sb.append("json_build_total_ms=").append(jsonBuildMs).append("\n");
-            sb.append("json_write_ms=").append(jsonWriteMs).append("\n");
-            sb.append("\n[BREAKDOWN %]\n");
-            if (pass1Ms > 0) {
-                sb.append("getframe_pct=").append((getFrameTotalNs * 100 / pass1TotalNs)).append("%\n");
-                sb.append("analyze_pct=").append((analyzeTotalNs * 100 / pass1TotalNs)).append("%\n");
-                sb.append("mlkit_pct=").append((mlKitTotalNs * 100 / pass1TotalNs)).append("%\n");
-                sb.append("json_build_pct=").append((jsonBuildTotalNs * 100 / pass1TotalNs)).append("%\n");
-                sb.append("json_write_pct=").append((jsonWriteElapsedNs * 100 / pass1TotalNs)).append("%\n");
-            }
-            sb.append("\n");
-
-            try (FileOutputStream fos = new FileOutputStream(diagFile)) {
-                fos.write(sb.toString().getBytes("UTF-8"));
-            }
-
-            Log.i(TAG, "Diagnostics written: " + diagFile.getAbsolutePath());
-
-        } catch (Exception e) {
-            Log.w(TAG, "Failed to write diagnostics (non-blocking)", e);
         }
     }
 
