@@ -183,12 +183,6 @@ public class Pass2Optimizer {
                 continue;
             }
 
-            if (detectAutoSplit(shot)) {
-                Log.i(
-                        TAG,
-                        "Shot " + shot.shotId + " -> AUTO SPLIT");
-                estimateSplitSubjects(shot);
-            }
         }
 
         /*
