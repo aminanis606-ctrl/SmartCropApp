@@ -222,7 +222,8 @@ public class Pass1Extractor {
                                 new ShotBuffer();
 
                         current.startMs =
-                                feature.timeMs;
+                                (feature.timeMs +
+                                 current.frames.get(current.frames.size() - 1).timeMs) / 2L;
 
                         // First frame after a shot cut has no valid temporal predecessor.
                         java.util.Arrays.fill(feature.motion, 0f);
