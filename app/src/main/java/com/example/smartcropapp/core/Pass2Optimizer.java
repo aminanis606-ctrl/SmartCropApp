@@ -1505,6 +1505,21 @@ public class Pass2Optimizer {
                                     "y",
                                     DEFAULT_Y);
 
+                            float height = (float) subject.optDouble(
+                                    "height",
+                                    0.0f);
+
+                            /*
+                             * SubjectDetector memberi pusat torso.
+                             * Naikkan crop center berdasarkan tinggi
+                             * torso agar kepala mendapat headroom.
+                             */
+                            float framingY =
+                                    clamp(
+                                            y - height * 0.35f,
+                                            0.15f,
+                                            0.85f);
+
                             /*
                              * Split mapping:
                              * right subject -> top panel
@@ -1512,10 +1527,10 @@ public class Pass2Optimizer {
                              */
                             if (x >= 0.50f) {
                                 lastTopX = x;
-                                lastTopY = y;
+                                lastTopY = framingY;
                             } else {
                                 lastBottomX = x;
-                                lastBottomY = y;
+                                lastBottomY = framingY;
                             }
                         }
                     }
