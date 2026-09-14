@@ -1143,7 +1143,41 @@ public class Pass2Optimizer {
         double brightnessB =
                 averageBrightness(b);
 
-        return Math.abs(brightnessB - brightnessA);
+        double brightnessDiff =
+                Math.abs(brightnessB - brightnessA);
+
+        double spatialDiff = 0.0;
+
+        if (a.edge != null &&
+                b.edge != null &&
+                a.edge.length > 0 &&
+                b.edge.length > 0) {
+
+            int n =
+                    Math.min(
+                            a.edge.length,
+                            b.edge.length);
+
+            double sum = 0.0;
+
+            for (int i = 0; i < n; i++) {
+                sum +=
+                        Math.abs(
+                                a.edge[i] -
+                                b.edge[i]);
+            }
+
+            spatialDiff =
+                    n == 0
+                            ? 0.0
+                            : sum / n;
+        }
+
+        return Math.min(
+                1.0,
+                Math.max(
+                        brightnessDiff,
+                        spatialDiff * 2.0));
     }
 
     private static double averageBrightness(
