@@ -291,6 +291,7 @@ public class Pass1Extractor {
                 Math.max(1, (cellW + PIXEL_STEP - 1) / PIXEL_STEP);
         float[] currentGray = new float[sampleWidth];
         float[] nextGray = new float[sampleWidth];
+        int[] pixelBuffer = new int[cellW];
 
         for (int gy = 0; gy < GRID_Y; gy++) {
             for (int gx = 0; gx < GRID_X; gx++) {
@@ -312,8 +313,18 @@ public class Pass1Extractor {
 
                     int sampleCount = 0;
 
-                    for (int x = startX; x < endX; x += PIXEL_STEP) {
-                        int pixel = bitmap.getPixel(x, y);
+                    int rowWidth = endX - startX;
+                    bitmap.getPixels(
+                            pixelBuffer,
+                            0,
+                            rowWidth,
+                            startX,
+                            y,
+                            rowWidth,
+                            1);
+
+                    for (int x = 0; x < rowWidth; x += PIXEL_STEP) {
+                        int pixel = pixelBuffer[x];
 
                         int r = (pixel >> 16) & 0xff;
                         int g = (pixel >> 8) & 0xff;
@@ -329,14 +340,17 @@ public class Pass1Extractor {
                     if (hasNextRow) {
                         int nextCount = 0;
 
-                        for (int x = startX;
-                             x < endX;
-                             x += PIXEL_STEP) {
+                        bitmap.getPixels(
+                                pixelBuffer,
+                                0,
+                                rowWidth,
+                                startX,
+                                y + PIXEL_STEP,
+                                rowWidth,
+                                1);
 
-                            int pixel =
-                                    bitmap.getPixel(
-                                            x,
-                                            y + PIXEL_STEP);
+                        for (int x = 0; x < rowWidth; x += PIXEL_STEP) {
+                            int pixel = pixelBuffer[x];
 
                             int r = (pixel >> 16) & 0xff;
                             int g = (pixel >> 8) & 0xff;
