@@ -159,6 +159,10 @@ public class MainActivity extends AppCompatActivity {
                 runOnUiThread(() ->
                         statusText.setText("Pass 3: Rendering Video..."));
 
+                orchestrator.runPass2AndPass3(
+                        internalTrajectory,
+                        outputVideo);
+
                 runOnUiThread(() -> {
                     statusText.setText(
                             "SELESAI! Video tersimpan di Movies/IkhlasApp/");
