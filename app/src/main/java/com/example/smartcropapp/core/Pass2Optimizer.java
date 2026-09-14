@@ -966,7 +966,29 @@ public class Pass2Optimizer {
                     JSONArray lastSubjects = new JSONArray();
                     boolean splitPoseAttempted = false;
 
+                    FrameSample splitPoseSample = null;
+
+                    if ("split".equals(shot.layout)) {
+                        long splitPoseTargetMs = shot.startMs + 500L;
+
+                        for (FrameSample candidate : shot.samples) {
+                            splitPoseSample = candidate;
+
+                            if (candidate.timeMs >= splitPoseTargetMs) {
+                                break;
+                            }
+                        }
+                    }
+
                     for (FrameSample sample : shot.samples) {
+
+                        if ("split".equals(shot.layout) &&
+                                sample != splitPoseSample) {
+                            sample.subjects =
+                                    new JSONArray(lastSubjects.toString());
+                            continue;
+                        }
+
                         if (lastPoseMs != Long.MIN_VALUE &&
                                 sample.timeMs - lastPoseMs < interval) {
                             sample.subjects =
