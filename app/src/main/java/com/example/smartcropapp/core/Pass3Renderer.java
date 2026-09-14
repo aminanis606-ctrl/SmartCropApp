@@ -229,23 +229,6 @@ public class Pass3Renderer {
                         try {
                             TrajectoryReader.ShotResult shot = trajectory.getShotAt(info.presentationTimeUs);
 
-                            if (shot != null && shot.single != null) {
-                                File diagPoint = new File(
-                                        "/storage/emulated/0/Download/SmartReframe/diagnostics/trajectory_runtime_point.txt");
-                                try (FileWriter fwPoint = new FileWriter(diagPoint, true)) {
-                                    fwPoint.write("t=" + (info.presentationTimeUs / 1000L)
-                                            + " x=" + shot.single.x
-                                            + " y=" + shot.single.y + "\n");
-                                }
-                            }
-
-                                if (shot != null) {
-                                    Log.i(TAG,
-                                            "RENDER_LAYOUT t=" +
-                                            (info.presentationTimeUs / 1000L) +
-                                            " layout=" +
-                                            shot.layout);
-                                }
                             if (shot != null) {
                                 layout = shot.layout;
                                 if ("split".equals(layout)) {
@@ -256,29 +239,6 @@ public class Pass3Renderer {
                                 } else {
                                     singleX = shot.single.x;
                                     singleY = shot.single.y;
-                                }
-
-                                try {
-                                    File diagDir = new File(
-                                            "/storage/emulated/0/Download/SmartReframe/diagnostics");
-                                    diagDir.mkdirs();
-
-                                    File diagFile = new File(
-                                            diagDir,
-                                            "render_layout_diag.txt");
-
-                                    FileWriter fw = new FileWriter(diagFile, true);
-
-                                    fw.write(
-                                            (info.presentationTimeUs / 1000L) +
-                                            " layout=" +
-                                            (shot != null ? shot.layout : "null") +
-                                              " singleX=" + singleX +
-                                              " singleY=" + singleY +
-                                            "\n");
-
-                                    fw.close();
-                                } catch (Exception ignored) {
                                 }
 
                             }
@@ -299,39 +259,6 @@ public class Pass3Renderer {
                             0.1f, 1f);
 
                     if ("split".equals(layout)) {
-                        Log.i(
-                                TAG,
-                                "RENDER_SPLIT t=" +
-                                (info.presentationTimeUs / 1000L) +
-                                " topX=" + topX +
-                                " topY=" + topY +
-                                " botX=" + botX +
-                                " botY=" + botY);
-
-                        try {
-                            File diagDir = new File(
-                                    "/storage/emulated/0/Download/SmartReframe/diagnostics");
-                            diagDir.mkdirs();
-
-                            File diagFile = new File(
-                                    diagDir,
-                                    "render_split_diag.txt");
-
-                            FileWriter fw =
-                                    new FileWriter(diagFile, true);
-
-                            fw.write(
-                                    (info.presentationTimeUs / 1000L) +
-                                    " topX=" + topX +
-                                    " topY=" + topY +
-                                    " botX=" + botX +
-                                    " botY=" + botY +
-                                    "\\n");
-
-                            fw.close();
-                        } catch (Exception ignored) {
-                        }
-
                         // Background video underneath feathered panels.
                         GLES20.glViewport(0, 0, OUTPUT_WIDTH, OUTPUT_HEIGHT);
                         GLES20.glDisable(GLES20.GL_BLEND);
