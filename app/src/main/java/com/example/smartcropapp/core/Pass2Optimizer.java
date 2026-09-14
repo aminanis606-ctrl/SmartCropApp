@@ -951,8 +951,7 @@ public class Pass2Optimizer {
                     continue;
                 }
 
-                long interval =
-                        estimateInitialPoseInterval(shot);
+                long interval = Long.MAX_VALUE;
 
                 SubjectDetector singleDetector = null;
                 SubjectDetector leftDetector = null;
@@ -972,13 +971,7 @@ public class Pass2Optimizer {
                     JSONArray lastSubjects = new JSONArray();
 
                     for (FrameSample sample : shot.samples) {
-                        boolean isLastSample =
-                                sample == shot.samples.get(
-                                        shot.samples.size() - 1);
-
-                        if (!isLastSample &&
-                                lastPoseMs != Long.MIN_VALUE &&
-                                sample.timeMs - lastPoseMs < interval) {
+                        if (lastPoseMs != Long.MIN_VALUE) {
                             sample.subjects =
                                     new JSONArray(lastSubjects.toString());
                             continue;
