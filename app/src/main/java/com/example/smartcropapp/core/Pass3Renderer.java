@@ -16,7 +16,6 @@ import com.example.smartcropapp.render.CropShaderProgram;
 import com.example.smartcropapp.render.GlRenderContext;
 
 import java.io.File;
-import java.io.FileWriter;
 import java.nio.ByteBuffer;
 
 public class Pass3Renderer {
@@ -37,18 +36,6 @@ public class Pass3Renderer {
         
         TrajectoryReader trajectory = null;
         try {
-            File diagDir = new File(
-                    "/storage/emulated/0/Download/SmartReframe/diagnostics");
-            if (!diagDir.exists()) diagDir.mkdirs();
-            File diagFile = new File(
-                    diagDir, "trajectory_load_runtime.txt");
-            try (FileWriter fw = new FileWriter(diagFile, true)) {
-                fw.write("TRAJECTORY_LOAD path="
-                        + trajectoryFile.getAbsolutePath()
-                        + " exists=" + trajectoryFile.exists()
-                        + " size=" + trajectoryFile.length()
-                        + "\n");
-            }
             trajectory = TrajectoryReader.load(trajectoryFile);
         } catch (Exception e) {
             Log.w(TAG, "Gagal memuat trajectory, menggunakan default center crop", e);

@@ -4,7 +4,6 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.File;
-import java.io.FileWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.ArrayList;
@@ -283,31 +282,6 @@ public class TrajectoryReader {
 
             reader.shots.add(
                     fallback);
-        }
-
-        try {
-            File diagDir = new File(
-                    "/storage/emulated/0/Download/SmartReframe/diagnostics");
-            diagDir.mkdirs();
-
-            File diagFile = new File(
-                    diagDir,
-                    "trajectory_load_diag.txt");
-
-            FileWriter fw = new FileWriter(diagFile, true);
-
-            for (int i = 0; i < reader.shots.size(); i++) {
-                ShotData sd = reader.shots.get(i);
-
-                fw.write(
-                        "SHOT id=" + i
-                        + " startMs=" + sd.startMs
-                        + " layout=" + sd.layout
-                        + "\n");
-            }
-
-            fw.close();
-        } catch (Exception ignored) {
         }
 
         return reader;
