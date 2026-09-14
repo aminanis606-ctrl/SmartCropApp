@@ -1026,21 +1026,29 @@ public class Pass2Optimizer {
                                                         - bitmap.getWidth() / 2);
 
                                 SubjectDetector.Subject bestLeft = null;
+                                float bestLeftScore = -1.0f;
                                 if (left != null) {
                                     for (SubjectDetector.Subject subject : left) {
-                                        if (bestLeft == null ||
-                                                subject.areaScore > bestLeft.areaScore) {
+                                        float distance = Math.abs(subject.x - 0.25f);
+                                        float score = subject.areaScore / (1.0f + distance * 2.0f);
+
+                                        if (score > bestLeftScore) {
                                             bestLeft = subject;
+                                            bestLeftScore = score;
                                         }
                                     }
                                 }
 
                                 SubjectDetector.Subject bestRight = null;
+                                float bestRightScore = -1.0f;
                                 if (right != null) {
                                     for (SubjectDetector.Subject subject : right) {
-                                        if (bestRight == null ||
-                                                subject.areaScore > bestRight.areaScore) {
+                                        float distance = Math.abs(subject.x - 0.75f);
+                                        float score = subject.areaScore / (1.0f + distance * 2.0f);
+
+                                        if (score > bestRightScore) {
                                             bestRight = subject;
+                                            bestRightScore = score;
                                         }
                                     }
                                 }
