@@ -971,7 +971,8 @@ public class Pass2Optimizer {
                     JSONArray lastSubjects = new JSONArray();
 
                     for (FrameSample sample : shot.samples) {
-                        if (lastPoseMs != Long.MIN_VALUE) {
+                        if (lastPoseMs != Long.MIN_VALUE &&
+                                sample.timeMs - lastPoseMs < interval) {
                             sample.subjects =
                                     new JSONArray(lastSubjects.toString());
                             continue;
