@@ -104,6 +104,9 @@ public class Pass2Optimizer {
         float bottomX = 0.75f;
         float bottomY = 0.50f;
 
+        float lockX = Float.NaN;
+        boolean centerLocked = false;
+
         final List<FrameSample> samples =
                 new ArrayList<>();
     }
@@ -1108,6 +1111,8 @@ public class Pass2Optimizer {
                                                     stableCenterSumX /
                                                     stableCenterCount;
                                             centerLocked = true;
+                                            shot.lockX = lockedCenterX;
+                                            shot.centerLocked = true;
 
                                             List<SubjectDetector.Subject> lockedSubjects =
                                                     new ArrayList<>(detected);
@@ -1554,6 +1559,13 @@ public class Pass2Optimizer {
             shotObj.put("shotId", shot.shotId);
             shotObj.put("startMs", shot.startMs);
             shotObj.put("layout", shot.layout);
+
+            if (shot.centerLocked) {
+                shotObj.put("centerLocked", true);
+                shotObj.put("lockX", shot.lockX);
+            } else {
+                shotObj.put("centerLocked", false);
+            }
 
             if ("split".equals(shot.layout)) {
 
