@@ -65,6 +65,66 @@ public class Pass1Extractor {
         List<FrameFeature> frames = new ArrayList<>();
     }
 
+    private static long refineCutTimeMs(
+            MediaMetadataRetriever retriever,
+            FrameFeature previous,
+            FrameFeature current) {
+
+        long startMs = previous.timeMs;
+        long endMs = current.timeMs;
+
+        if (endMs <= startMs) {
+            return (startMs + endMs) / 2L;
+        }
+
+        FrameFeature left = previous;
+        long bestCutMs = (startMs + endMs) / 2L;
+        float bestScore = -1f;
+
+        for (int i = 1; i <= 4; i++) {
+            long rightMs =
+                    startMs + ((endMs - startMs) * i) / 4L;
+
+            Bitmap bitmap =
+                    retriever.getFrameAtTime(
+                            rightMs * 1000L,
+                            MediaMetadataRetriever.OPTION_CLOSEST);
+
+            if (bitmap == null) {
+                continue;
+            }
+
+            FrameFeature right =
+                    analyzeFrame(
+                            bitmap,
+                            rightMs,
+                            new ArrayList<SubjectDetector.Subject>());
+
+            float diff =
+                    histogramDiff(
+                            left.brightness,
+                            right.brightness);
+
+            float textureDiff =
+                    histogramDiff(
+                            left.texture,
+                            right.texture);
+
+            float score = diff + textureDiff;
+
+            if (score > bestScore) {
+                bestScore = score;
+                bestCutMs =
+                        (left.timeMs + right.timeMs) / 2L;
+            }
+
+            bitmap.recycle();
+            left = right;
+        }
+
+        return bestCutMs;
+    }
+
     public static File extract(
             Context context,
             Uri sourceVideoUri,
@@ -164,9 +224,6 @@ public class Pass1Extractor {
 
                         if (!current.frames.isEmpty()) {
 
-                            long previousTimeMs =
-                                    current.frames.get(current.frames.size() - 1).timeMs;
-
                             shots.put(
                                     buildShot(
                                             shotId,
@@ -174,11 +231,17 @@ public class Pass1Extractor {
 
                             shotId++;
 
+                            FrameFeature previousFrame =
+                                    current.frames.get(current.frames.size() - 1);
+
                             current =
                                     new ShotBuffer();
 
                             current.startMs =
-                                    (feature.timeMs + previousTimeMs) / 2L;
+                                    refineCutTimeMs(
+                                            retriever,
+                                            previousFrame,
+                                            feature);
                         }
 
                         // First frame after a shot cut has no valid temporal predecessor.
