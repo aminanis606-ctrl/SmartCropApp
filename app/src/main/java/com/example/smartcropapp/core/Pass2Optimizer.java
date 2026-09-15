@@ -1093,8 +1093,6 @@ public class Pass2Optimizer {
 
                                 if (detected != null &&
                                         !detected.isEmpty()) {
-                                    lastSubjects =
-                                            subjectsToJson(detected);
                                     lastPoseMs = sample.timeMs;
 
                                     SubjectDetector.Subject currentTarget =
