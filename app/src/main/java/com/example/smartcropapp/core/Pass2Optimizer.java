@@ -1111,9 +1111,19 @@ public class Pass2Optimizer {
                                                     stableCenterCount;
                                             centerLocked = true;
 
-                                            currentTarget.x = lockedCenterX;
+                                            List<SubjectDetector.Subject> lockedSubjects =
+                                                    new ArrayList<>(detected);
+                                            lockedSubjects.set(
+                                                    0,
+                                                    new SubjectDetector.Subject(
+                                                            lockedCenterX,
+                                                            currentTarget.y,
+                                                            currentTarget.width,
+                                                            currentTarget.height,
+                                                            currentTarget.areaScore,
+                                                            currentTarget.trackingId));
                                             lastSubjects =
-                                                    subjectsToJson(detected);
+                                                    subjectsToJson(lockedSubjects);
 
                                             Log.i(
                                                     TAG,
