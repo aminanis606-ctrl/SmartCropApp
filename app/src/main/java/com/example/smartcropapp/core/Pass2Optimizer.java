@@ -966,6 +966,15 @@ public class Pass2Optimizer {
                     JSONArray lastSubjects = new JSONArray();
                     boolean splitPoseAttempted = false;
 
+                    // Single-shot calibration:
+                    // lock after 2 consecutive Pose detections near center.
+                    final float CENTER_MIN_X = 0.47f;
+                    final float CENTER_MAX_X = 0.53f;
+                    int stableCenterCount = 0;
+                    float stableCenterSumX = 0.0f;
+                    boolean centerLocked = false;
+                    float lockedCenterX = 0.50f;
+
                     FrameSample splitPoseSample = null;
 
                     if ("split".equals(shot.layout)) {
@@ -984,6 +993,12 @@ public class Pass2Optimizer {
 
                         if ("split".equals(shot.layout) &&
                                 sample != splitPoseSample) {
+                            sample.subjects =
+                                    new JSONArray(lastSubjects.toString());
+                            continue;
+                        }
+
+                        if (!"split".equals(shot.layout) && centerLocked) {
                             sample.subjects =
                                     new JSONArray(lastSubjects.toString());
                             continue;
@@ -1082,21 +1097,48 @@ public class Pass2Optimizer {
                                             subjectsToJson(detected);
                                     lastPoseMs = sample.timeMs;
 
-                                    if (detected.size() > 0) {
-                                        SubjectDetector.Subject currentTarget =
-                                                detected.get(0);
+                                    SubjectDetector.Subject currentTarget =
+                                            detected.get(0);
 
-                                        interval =
-                                                adaptiveInterval(
-                                                        interval,
-                                                        previousTarget,
-                                                        previousTargetMs,
-                                                        currentTarget,
-                                                        sample.timeMs);
+                                    if (currentTarget.x >= CENTER_MIN_X &&
+                                            currentTarget.x <= CENTER_MAX_X) {
+                                        stableCenterCount++;
+                                        stableCenterSumX += currentTarget.x;
 
+                                        if (stableCenterCount >= 2) {
+                                            lockedCenterX =
+                                                    stableCenterSumX /
+                                                    stableCenterCount;
+                                            centerLocked = true;
+
+                                            currentTarget.x = lockedCenterX;
+                                            lastSubjects =
+                                                    subjectsToJson(detected);
+
+                                            Log.i(
+                                                    TAG,
+                                                    "POSE_CENTER_LOCK shot=" +
+                                                    shot.shotId +
+                                                    " x=" +
+                                                    lockedCenterX);
+                                        }
+                                    } else {
+                                        stableCenterCount = 0;
+                                        stableCenterSumX = 0.0f;
+                                    }
+
+                                    if (!centerLocked) {
+                                        // Calibration mode:
+                                        // evaluate Pose on every Pass1 sample.
+                                        interval = 0L;
                                         previousTarget = currentTarget;
                                         previousTargetMs = sample.timeMs;
                                     }
+                                } else {
+                                    // A failed Pose detection breaks
+                                    // consecutive-center calibration.
+                                    stableCenterCount = 0;
+                                    stableCenterSumX = 0.0f;
                                 }
                             }
 
