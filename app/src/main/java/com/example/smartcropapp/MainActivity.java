@@ -325,7 +325,7 @@ public class MainActivity extends AppCompatActivity {
         values.put(MediaStore.Video.Media.DISPLAY_NAME, sourceFile.getName());
         values.put(MediaStore.Video.Media.MIME_TYPE, "video/mp4");
         values.put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/IkhlasApp");
-        values.put(MediaStore.MediaColumns.IS_PENDING, 1);
+        values.put(MediaStore.Video.Media.IS_PENDING, 1);
 
         Uri uri = getContentResolver().insert(
                 MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values);
@@ -340,7 +340,7 @@ public class MainActivity extends AppCompatActivity {
                 while ((count = in.read(buffer)) != -1) out.write(buffer, 0, count);
             }
             ContentValues ready = new ContentValues();
-            ready.put(MediaStore.MediaColumns.IS_PENDING, 0);
+            ready.put(MediaStore.Video.Media.IS_PENDING, 0);
             getContentResolver().update(uri, ready, null, null);
         } catch (Exception e) {
             getContentResolver().delete(uri, null, null);
