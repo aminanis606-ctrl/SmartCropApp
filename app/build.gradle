@@ -12,7 +12,7 @@ android {
 
     defaultConfig {
         applicationId "com.example.smartcropapp"
-        minSdk 29
+        minSdk 24
         targetSdk 34
         versionCode 1
         versionName "1.0"
@@ -27,8 +27,8 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
         debug {
-            minifyEnabled false
-            shrinkResources false
+            minifyEnabled true
+            shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }

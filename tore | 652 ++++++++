@@ -1,0 +1,3244 @@
+[33mcommit 28593656c1b8645ea9b16480bdc22b7cc50f0495[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m
+Author:     aminanis606-ctrl <aminanis606@users.noreply.github.com>
+AuthorDate: Sat Aug 29 08:27:05 2026 +0700
+Commit:     aminanis606-ctrl <aminanis606@users.noreply.github.com>
+CommitDate: Sat Aug 29 08:27:05 2026 +0700
+
+    experiment: restore lightweight subject position baseline
+
+[1mdiff --git a/app/src/main/assets/face_landmarker.task b/app/src/main/assets/face_landmarker.task[m
+[1mdeleted file mode 100644[m
+[1mindex c50c845..0000000[m
+Binary files a/app/src/main/assets/face_landmarker.task and /dev/null differ
+[1mdiff --git a/app/src/main/java/com/example/smartcropapp/MainActivity.java b/app/src/main/java/com/example/smartcropapp/MainActivity.java[m
+[1mindex f3d3f2e..01b28db 100644[m
+[1m--- a/app/src/main/java/com/example/smartcropapp/MainActivity.java[m
+[1m+++ b/app/src/main/java/com/example/smartcropapp/MainActivity.java[m
+[36m@@ -78,47 +78,477 @@[m [mpublic class MainActivity extends AppCompatActivity {[m
+     }[m
+ [m
+     @Override[m
+[31m-    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {[m
+[31m-        super.onActivityResult(requestCode, resultCode, data);[m
+[31m-        if (requestCode == PICK_VIDEO_REQUEST && resultCode == RESULT_OK && data != null) {[m
+[31m-            Uri videoUri = data.getData();[m
+[31m-            if (videoUri != null) {[m
+[31m-                tvStatus.setText("Menjalankan Pipeline End-to-End...");[m
+[31m-                [m
+[31m-                File analysisFile = new File(getFilesDir(), "analysis.json");[m
+[31m-                File trajectoryFile = new File(getFilesDir(), "trajectory.json");[m
+[31m-                File outputVideoFile = new File(getFilesDir(), "output_final.mp4");[m
+[32m+[m[32m    protected void onActivityResult([m
+[32m+[m[32m            int requestCode,[m
+[32m+[m[32m            int resultCode,[m
+[32m+[m[32m            @Nullable Intent data) {[m
+[32m+[m
+[32m+[m[32m        super.onActivityResult([m
+[32m+[m[32m                requestCode,[m
+[32m+[m[32m                resultCode,[m
+[32m+[m[32m                data);[m
+[32m+[m
+[32m+[m[32m        if (requestCode != PICK_VIDEO_REQUEST ||[m
+[32m+[m[32m                resultCode != RESULT_OK ||[m
+[32m+[m[32m                data == null) {[m
+[32m+[m[32m            return;[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m        Uri videoUri =[m
+[32m+[m[32m                data.getData();[m
+[32m+[m
+[32m+[m[32m        if (videoUri == null) {[m
+[32m+[m[32m            return;[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m        tvStatus.setText([m
+[32m+[m[32m                "PASS 1: Mendeteksi shot...");[m
+[32m+[m
+[32m+[m[32m        File analysisFile =[m
+[32m+[m[32m                new File([m
+[32m+[m[32m                        getFilesDir(),[m
+[32m+[m[32m                        "analysis.json");[m
+[32m+[m
+[32m+[m[32m        File trajectoryFile =[m
+[32m+[m[32m                new File([m
+[32m+[m[32m                        getFilesDir(),[m
+[32m+[m[32m                        "trajectory.json");[m
+[32m+[m
+[32m+[m[32m        File outputVideoFile =[m
+[32m+[m[32m                new File([m
+[32m+[m[32m                        getFilesDir(),[m
+[32m+[m[32m                        "output_final.mp4");[m
+[32m+[m
+[32m+[m[32m        new Thread(() -> {[m
+[32m+[m
+[32m+[m[32m            try {[m
+[32m+[m
+[32m+[m[32m                /*[m
+[32m+[m[32m                 * PASS 1[m
+[32m+[m[32m                 *[m
+[32m+[m[32m                 * Hanya mencari batas shot.[m
+[32m+[m[32m                 * Layout otomatis sudah dimatikan.[m
+[32m+[m[32m                 */[m
+[32m+[m[32m                Pass1Extractor.extract([m
+[32m+[m[32m                        getApplicationContext(),[m
+[32m+[m[32m                        videoUri,[m
+[32m+[m[32m                        analysisFile);[m
+[32m+[m
+[32m+[m[32m                runOnUiThread(() ->[m
+[32m+[m[32m                        showManualLayoutEditor([m
+[32m+[m[32m                                analysisFile,[m
+[32m+[m[32m                                trajectoryFile,[m
+[32m+[m[32m                                outputVideoFile,[m
+[32m+[m[32m                                videoUri));[m
+[32m+[m
+[32m+[m[32m            } catch (Exception e) {[m
+[32m+[m
+[32m+[m[32m                Log.e([m
+[32m+[m[32m                        TAG,[m
+[32m+[m[32m                        "PASS 1 Gagal",[m
+[32m+[m[32m                        e);[m
+[32m+[m
+[32m+[m[32m                String trace =[m
+[32m+[m[32m                        Log.getStackTraceString(e);[m
+[32m+[m
+[32m+[m[32m                if (trace.length() > 500) {[m
+[32m+[m[32m                    trace =[m
+[32m+[m[32m                            trace.substring(0, 500)[m
+[32m+[m[32m                                    + "...";[m
+[32m+[m[32m                }[m
+[32m+[m
+[32m+[m[32m                String finalTrace = trace;[m
+[32m+[m
+[32m+[m[32m                runOnUiThread(() ->[m
+[32m+[m[32m                        tvStatus.setText([m
+[32m+[m[32m                                "GAGAL PASS 1:\n"[m
+[32m+[m[32m                                        + finalTrace));[m
+[32m+[m[32m            }[m
+[32m+[m
+[32m+[m[32m        }).start();[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m
+[32m+[m[32m    /*[m
+[32m+[m[32m     * ============================================================[m
+[32m+[m[32m     * MANUAL SHOT LAYOUT EDITOR[m
+[32m+[m[32m     * ============================================================[m
+[32m+[m[32m     *[m
+[32m+[m[32m     * Semua shot dimulai sebagai SINGLE.[m
+[32m+[m[32m     *[m
+[32m+[m[32m     * User dapat memilih SPLIT secara manual[m
+[32m+[m[32m     * hanya pada shot yang benar-benar membutuhkan split.[m
+[32m+[m[32m     *[m
+[32m+[m[32m     * Setelah TERAPKAN:[m
+[32m+[m[32m     *[m
+[32m+[m[32m     * analysis.json[m
+[32m+[m[32m     *      ↓[m
+[32m+[m[32m     * Pass2Optimizer[m
+[32m+[m[32m     *      ↓[m
+[32m+[m[32m     * trajectory.json[m
+[32m+[m[32m     *      ↓[m
+[32m+[m[32m     * Pass3Renderer[m
+[32m+[m[32m     */[m
+[32m+[m[32m    private void showManualLayoutEditor([m
+[32m+[m[32m            File analysisFile,[m
+[32m+[m[32m            File trajectoryFile,[m
+[32m+[m[32m            File outputVideoFile,[m
+[32m+[m[32m            Uri videoUri) {[m
+[32m+[m
+[32m+[m[32m        try {[m
+[32m+[m
+[32m+[m[32m            String json =[m
+[32m+[m[32m                    new String([m
+[32m+[m[32m                            java.nio.file.Files.readAllBytes([m
+[32m+[m[32m                                    analysisFile.toPath()),[m
+[32m+[m[32m                            java.nio.charset.StandardCharsets.UTF_8);[m
+[32m+[m
+[32m+[m[32m            org.json.JSONObject root =[m
+[32m+[m[32m                    new org.json.JSONObject(json);[m
+[32m+[m
+[32m+[m[32m            org.json.JSONArray shots =[m
+[32m+[m[32m                    root.optJSONArray("shots");[m
+[32m+[m
+[32m+[m[32m            if (shots == null ||[m
+[32m+[m[32m                    shots.length() == 0) {[m
+[32m+[m
+[32m+[m[32m                tvStatus.setText([m
+[32m+[m[32m                        "GAGAL: tidak ada shot.");[m
+[32m+[m
+[32m+[m[32m                return;[m
+[32m+[m[32m            }[m
+[32m+[m
+[32m+[m[32m            android.widget.LinearLayout container =[m
+[32m+[m[32m                    new android.widget.LinearLayout([m
+[32m+[m[32m                            this);[m
+[32m+[m
+[32m+[m[32m            container.setOrientation([m
+[32m+[m[32m                    android.widget.LinearLayout.VERTICAL);[m
+[32m+[m
+[32m+[m[32m            int pad =[m
+[32m+[m[32m                    (int) ([m
+[32m+[m[32m                            16 *[m
+[32m+[m[32m                            getResources()[m
+[32m+[m[32m                                    .getDisplayMetrics()[m
+[32m+[m[32m                                    .density);[m
+[32m+[m
+[32m+[m[32m            container.setPadding([m
+[32m+[m[32m                    pad,[m
+[32m+[m[32m                    pad,[m
+[32m+[m[32m                    pad,[m
+[32m+[m[32m                    pad);[m
+[32m+[m
+[32m+[m[32m            android.widget.TextView info =[m
+[32m+[m[32m                    new android.widget.TextView([m
+[32m+[m[32m                            this);[m
+[32m+[m
+[32m+[m[32m            info.setText([m
+[32m+[m[32m                    "Pilih layout setiap shot.\n\n"[m
+[32m+[m[32m                            + "SINGLE = satu pembicara / close-up\n"[m
+[32m+[m[32m                            + "SPLIT = dua pembicara kiri + kanan\n\n"[m
+[32m+[m[32m                            + "Default semua shot: SINGLE");[m
+[32m+[m
+[32m+[m[32m            info.setTextSize(16);[m
+[32m+[m
+[32m+[m[32m            info.setPadding([m
+[32m+[m[32m                    0,[m
+[32m+[m[32m                    0,[m
+[32m+[m[32m                    0,[m
+[32m+[m[32m                    pad);[m
+[32m+[m
+[32m+[m[32m            container.addView(info);[m
+[32m+[m
+[32m+[m[32m            java.util.ArrayList<[m
+[32m+[m[32m                    android.widget.RadioGroup> groups =[m
+[32m+[m[32m                    new java.util.ArrayList<>();[m
+[32m+[m
+[32m+[m[32m            for (int i = 0;[m
+[32m+[m[32m                 i < shots.length();[m
+[32m+[m[32m                 i++) {[m
+[32m+[m
+[32m+[m[32m                org.json.JSONObject shot =[m
+[32m+[m[32m                        shots.optJSONObject(i);[m
+[32m+[m
+[32m+[m[32m                if (shot == null) {[m
+[32m+[m[32m                    continue;[m
+[32m+[m[32m                }[m
+[32m+[m
+[32m+[m[32m                int shotId =[m
+[32m+[m[32m                        shot.optInt([m
+[32m+[m[32m                                "shotId",[m
+[32m+[m[32m                                i);[m
+[32m+[m
+[32m+[m[32m                long startMs =[m
+[32m+[m[32m                        shot.optLong([m
+[32m+[m[32m                                "startMs",[m
+[32m+[m[32m                                0);[m
+[32m+[m
+[32m+[m[32m                android.widget.TextView label =[m
+[32m+[m[32m                        new android.widget.TextView([m
+[32m+[m[32m                                this);[m
+[32m+[m
+[32m+[m[32m                label.setText([m
+[32m+[m[32m                        "SHOT "[m
+[32m+[m[32m                                + shotId[m
+[32m+[m[32m                                + "   "[m
+[32m+[m[32m                                + String.format([m
+[32m+[m[32m                                        java.util.Locale.US,[m
+[32m+[m[32m                                        "%.2f s",[m
+[32m+[m[32m                                        startMs / 1000.0));[m
+[32m+[m
+[32m+[m[32m                label.setTextSize(18);[m
+[32m+[m
+[32m+[m[32m                label.setPadding([m
+[32m+[m[32m                        0,[m
+[32m+[m[32m                        pad / 2,[m
+[32m+[m[32m                        0,[m
+[32m+[m[32m                        0);[m
+[32m+[m
+[32m+[m[32m                container.addView(label);[m
+[32m+[m
+[32m+[m[32m                android.widget.RadioGroup group =[m
+[32m+[m[32m                        new android.widget.RadioGroup([m
+[32m+[m[32m                                this);[m
+[32m+[m
+[32m+[m[32m                group.setOrientation([m
+[32m+[m[32m                        android.widget.RadioGroup.HORIZONTAL);[m
+[32m+[m
+[32m+[m[32m                android.widget.RadioButton single =[m
+[32m+[m[32m                        new android.widget.RadioButton([m
+[32m+[m[32m                                this);[m
+[32m+[m
+[32m+[m[32m                single.setText("SINGLE");[m
+[32m+[m[32m                single.setTextSize(16);[m
+[32m+[m
+[32m+[m[32m                single.setId([m
+[32m+[m[32m                        android.view.View.generateViewId());[m
+[32m+[m
+[32m+[m[32m                android.widget.RadioButton split =[m
+[32m+[m[32m                        new android.widget.RadioButton([m
+[32m+[m[32m                                this);[m
+[32m+[m
+[32m+[m[32m                split.setText("SPLIT");[m
+[32m+[m[32m                split.setTextSize(16);[m
+[32m+[m
+[32m+[m[32m                split.setId([m
+[32m+[m[32m                        android.view.View.generateViewId());[m
+[32m+[m
+[32m+[m[32m                group.addView(single);[m
+[32m+[m[32m                group.addView(split);[m
+[32m+[m
+[32m+[m[32m                /*[m
+[32m+[m[32m                 * HARD SAFE DEFAULT.[m
+[32m+[m[32m                 *[m
+[32m+[m[32m                 * Jangan mewarisi layout lama.[m
+[32m+[m[32m                 */[m
+[32m+[m[32m                single.setChecked(true);[m
+[32m+[m
+[32m+[m[32m                container.addView(group);[m
+[32m+[m
+[32m+[m[32m                groups.add(group);[m
+[32m+[m[32m            }[m
+[32m+[m
+[32m+[m[32m            android.widget.ScrollView scroll =[m
+[32m+[m[32m                    new android.widget.ScrollView([m
+[32m+[m[32m                            this);[m
+[32m+[m
+[32m+[m[32m            scroll.addView(container);[m
+[32m+[m
+[32m+[m[32m            android.widget.Button apply =[m
+[32m+[m[32m                    new android.widget.Button([m
+[32m+[m[32m                            this);[m
+[32m+[m
+[32m+[m[32m            apply.setText([m
+[32m+[m[32m                    "TERAPKAN & RENDER");[m
+[32m+[m
+[32m+[m[32m            container.addView([m
+[32m+[m[32m                    apply);[m
+[32m+[m
+[32m+[m[32m            android.app.AlertDialog dialog =[m
+[32m+[m[32m                    new android.app.AlertDialog.Builder([m
+[32m+[m[32m                            this)[m
+[32m+[m[32m                            .setTitle([m
+[32m+[m[32m                                    "Manual Layout Shot")[m
+[32m+[m[32m                            .setView(scroll)[m
+[32m+[m[32m                            .setCancelable(false)[m
+[32m+[m[32m                            .create();[m
+[32m+[m
+[32m+[m[32m            apply.setOnClickListener(v -> {[m
+[32m+[m
+[32m+[m[32m                /*[m
+[32m+[m[32m                 * Simpan pilihan user.[m
+[32m+[m[32m                 */[m
+[32m+[m[32m                for (int i = 0;[m
+[32m+[m[32m                     i < shots.length() &&[m
+[32m+[m[32m                     i < groups.size();[m
+[32m+[m[32m                     i++) {[m
+[32m+[m
+[32m+[m[32m                    try {[m
+[32m+[m
+[32m+[m[32m                        org.json.JSONObject shot =[m
+[32m+[m[32m                                shots.getJSONObject(i);[m
+[32m+[m
+[32m+[m[32m                        android.widget.RadioGroup group =[m
+[32m+[m[32m                                groups.get(i);[m
+[32m+[m
+[32m+[m[32m                        int checkedId =[m
+[32m+[m[32m                                group.getCheckedRadioButtonId();[m
+[32m+[m
+[32m+[m[32m                        android.widget.RadioButton selected =[m
+[32m+[m[32m                                group.findViewById([m
+[32m+[m[32m                                        checkedId);[m
+[32m+[m
+[32m+[m[32m                        String layout =[m
+[32m+[m[32m                                "single";[m
+[32m+[m
+[32m+[m[32m                        if (selected != null &&[m
+[32m+[m[32m                                "SPLIT".equalsIgnoreCase([m
+[32m+[m[32m                                        selected.getText()[m
+[32m+[m[32m                                                .toString())) {[m
+[32m+[m
+[32m+[m[32m                            layout = "split";[m
+[32m+[m[32m                        }[m
+[32m+[m
+[32m+[m[32m                        shot.put([m
+[32m+[m[32m                                "layout",[m
+[32m+[m[32m                                layout);[m
+[32m+[m
+[32m+[m[32m                    } catch (Exception e) {[m
+[32m+[m
+[32m+[m[32m                        Log.e([m
+[32m+[m[32m                                TAG,[m
+[32m+[m[32m                                "Gagal menyimpan layout shot "[m
+[32m+[m[32m                                        + i,[m
+[32m+[m[32m                                e);[m
+[32m+[m[32m                    }[m
+[32m+[m[32m                }[m
+[32m+[m
+[32m+[m[32m                dialog.dismiss();[m
+ [m
+                 new Thread(() -> {[m
+[32m+[m
+                     try {[m
+[31m-                        Pass1Extractor.extract(getApplicationContext(), videoUri, analysisFile);[m
+[31m-                        Pass2Optimizer.optimize(analysisFile, trajectoryFile);[m
+[31m-                        exportDiagnostics(analysisFile, trajectoryFile);[m
+[31m-                        Pass3Renderer.render(getApplicationContext(), videoUri, trajectoryFile, outputVideoFile);[m
+[31m-[m
+[31m-                        String exportError = exportToGallery(outputVideoFile, analysisFile);[m
+[31m-                        long finalSize = outputVideoFile.exists() ? outputVideoFile.length() : 0;[m
+[31m-                        [m
+[32m+[m
+[32m+[m[32m                        /*[m
+[32m+[m[32m                         * Tulis analysis.json yang sudah[m
+[32m+[m[32m                         * berisi pilihan manual.[m
+[32m+[m[32m                         */[m
+[32m+[m[32m                        java.nio.file.Files.write([m
+[32m+[m[32m                                analysisFile.toPath(),[m
+[32m+[m[32m                                root.toString()[m
+[32m+[m[32m                                        .getBytes([m
+[32m+[m[32m                                                java.nio.charset.StandardCharsets.UTF_8));[m
+[32m+[m
+[32m+[m[32m                        runOnUiThread(() ->[m
+[32m+[m[32m                                tvStatus.setText([m
+[32m+[m[32m                                        "PASS 2: Optimasi..."));[m
+[32m+[m
+[32m+[m[32m                        Pass2Optimizer.optimize([m
+[32m+[m[32m                                analysisFile,[m
+[32m+[m[32m                                trajectoryFile);[m
+[32m+[m
+[32m+[m[32m                        exportDiagnostics([m
+[32m+[m[32m                                analysisFile,[m
+[32m+[m[32m                                trajectoryFile);[m
+[32m+[m
+[32m+[m[32m                        runOnUiThread(() ->[m
+[32m+[m[32m                                tvStatus.setText([m
+[32m+[m[32m                                        "PASS 3: Rendering..."));[m
+[32m+[m
+[32m+[m[32m                        Pass3Renderer.render([m
+[32m+[m[32m                                getApplicationContext(),[m
+[32m+[m[32m                                videoUri,[m
+[32m+[m[32m                                trajectoryFile,[m
+[32m+[m[32m                                outputVideoFile);[m
+[32m+[m
+[32m+[m[32m                        String exportError =[m
+[32m+[m[32m                                exportToGallery([m
+[32m+[m[32m                                        outputVideoFile,[m
+[32m+[m[32m                                        analysisFile);[m
+[32m+[m
+[32m+[m[32m                        long finalSize =[m
+[32m+[m[32m                                outputVideoFile.exists()[m
+[32m+[m[32m                                        ? outputVideoFile.length()[m
+[32m+[m[32m                                        : 0;[m
+[32m+[m
+                         runOnUiThread(() -> {[m
+[31m-                            String msg = (exportError == null)[m
+[31m-                                    ? "RENDER + EXPORT SUKSES!\nCek folder Movies/SmartReframe\n"[m
+[31m-                                    : "Render OK, GAGAL export:\n" + (exportError.length() > 400 ? exportError.substring(0, 400) + "..." : exportError) + "\n";[m
+[31m-                            tvStatus.setText(msg + "Ukuran: " + finalSize + " bytes");[m
+[32m+[m
+[32m+[m[32m                            String msg;[m
+[32m+[m
+[32m+[m[32m                            if (exportError == null) {[m
+[32m+[m
+[32m+[m[32m                                msg =[m
+[32m+[m[32m                                        "RENDER + EXPORT SUKSES!\n"[m
+[32m+[m[32m                                                + "Cek folder Movies/SmartReframe\n";[m
+[32m+[m
+[32m+[m[32m                            } else {[m
+[32m+[m
+[32m+[m[32m                                String error =[m
+[32m+[m[32m                                        exportError.length() > 400[m
+[32m+[m[32m                                                ? exportError.substring([m
+[32m+[m[32m                                                        0,[m
+[32m+[m[32m                                                        400)[m
+[32m+[m[32m                                                        + "..."[m
+[32m+[m[32m                                                : exportError;[m
+[32m+[m
+[32m+[m[32m                                msg =[m
+[32m+[m[32m                                        "Render OK, GAGAL export:\n"[m
+[32m+[m[32m                                                + error[m
+[32m+[m[32m                                                + "\n";[m
+[32m+[m[32m                            }[m
+[32m+[m
+[32m+[m[32m                            tvStatus.setText([m
+[32m+[m[32m                                    msg[m
+[32m+[m[32m                                            + "Ukuran: "[m
+[32m+[m[32m                                            + finalSize[m
+[32m+[m[32m                                            + " bytes");[m
+                         });[m
+[32m+[m
+                     } catch (Exception e) {[m
+[31m-                        Log.e(TAG, "Pipeline Gagal", e);[m
+[31m-                        String fullTrace = Log.getStackTraceString(e);[m
+[31m-                        if (fullTrace.length() > 400) {[m
+[31m-                            fullTrace = fullTrace.substring(0, 400) + "...";[m
+[32m+[m
+[32m+[m[32m                        Log.e([m
+[32m+[m[32m                                TAG,[m
+[32m+[m[32m                                "Manual pipeline gagal",[m
+[32m+[m[32m                                e);[m
+[32m+[m
+[32m+[m[32m                        String trace =[m
+[32m+[m[32m                                Log.getStackTraceString(e);[m
+[32m+[m
+[32m+[m[32m                        if (trace.length() > 500) {[m
+[32m+[m[32m                            trace =[m
+[32m+[m[32m                                    trace.substring([m
+[32m+[m[32m                                            0,[m
+[32m+[m[32m                                            500)[m
+[32m+[m[32m                                            + "...";[m
+                         }[m
+[31m-                        String finalTrace = fullTrace;[m
+[31m-                        runOnUiThread(() -> tvStatus.setText("GAGAL:\n" + finalTrace));[m
+[32m+[m
+[32m+[m[32m                        String finalTrace = trace;[m
+[32m+[m
+[32m+[m[32m                        runOnUiThread(() ->[m
+[32m+[m[32m                                tvStatus.setText([m
+[32m+[m[32m                                        "GAGAL:\n"[m
+[32m+[m[32m                                                + finalTrace));[m
+                     }[m
+[32m+[m
+                 }).start();[m
+[31m-            }[m
+[32m+[m[32m            });[m
+[32m+[m
+[32m+[m[32m            dialog.show();[m
+[32m+[m
+[32m+[m[32m        } catch (Exception e) {[m
+[32m+[m
+[32m+[m[32m            Log.e([m
+[32m+[m[32m                    TAG,[m
+[32m+[m[32m                    "Manual Layout Editor gagal",[m
+[32m+[m[32m                    e);[m
+[32m+[m
+[32m+[m[32m            tvStatus.setText([m
+[32m+[m[32m                    "GAGAL membuka editor:\n"[m
+[32m+[m[32m                            + e.getMessage());[m
+         }[m
+     }[m
+ [m
+[32m+[m
+     private String exportToGallery(File sourceFile, File analysisFile) {[m
+         try {[m
+             String layoutLabel = "SINGLE";[m
+[1mdiff --git a/app/src/main/java/com/example/smartcropapp/MainActivity.java.bak_before_manual_ui b/app/src/main/java/com/example/smartcropapp/MainActivity.java.bak_before_manual_ui[m
+[1mnew file mode 100644[m
+[1mindex 0000000..f3d3f2e[m
+[1m--- /dev/null[m
+[1m+++ b/app/src/main/java/com/example/smartcropapp/MainActivity.java.bak_before_manual_ui[m
+[36m@@ -0,0 +1,281 @@[m
+[32m+[m[32mpackage com.example.smartcropapp;[m
+[32m+[m
+[32m+[m[32mimport android.Manifest;[m
+[32m+[m[32mimport android.content.ContentValues;[m
+[32m+[m[32mimport android.content.Intent;[m
+[32m+[m[32mimport android.content.pm.PackageManager;[m
+[32m+[m[32mimport android.net.Uri;[m
+[32m+[m[32mimport android.os.Build;[m
+[32m+[m[32mimport android.os.Bundle;[m
+[32m+[m[32mimport android.os.Environment;[m
+[32m+[m[32mimport android.provider.MediaStore;[m
+[32m+[m[32mimport android.util.Log;[m
+[32m+[m[32mimport android.widget.Button;[m
+[32m+[m[32mimport android.widget.TextView;[m
+[32m+[m[32mimport androidx.annotation.NonNull;[m
+[32m+[m[32mimport androidx.annotation.Nullable;[m
+[32m+[m[32mimport androidx.appcompat.app.AppCompatActivity;[m
+[32m+[m[32mimport androidx.core.app.ActivityCompat;[m
+[32m+[m[32mimport androidx.core.content.ContextCompat;[m
+[32m+[m[32mimport com.example.smartcropapp.core.Pass1Extractor;[m
+[32m+[m[32mimport com.example.smartcropapp.core.Pass2Optimizer;[m
+[32m+[m[32mimport com.example.smartcropapp.core.Pass3Renderer;[m
+[32m+[m[32mimport java.io.File;[m
+[32m+[m[32mimport java.io.FileOutputStream;[m
+[32m+[m[32mimport java.io.FileInputStream;[m
+[32m+[m[32mimport java.io.OutputStream;[m
+[32m+[m
+[32m+[m[32mpublic class MainActivity extends AppCompatActivity {[m
+[32m+[m[32m    private static final String TAG = "MainActivity";[m
+[32m+[m[32m    private static final int PICK_VIDEO_REQUEST = 101;[m
+[32m+[m[32m    private static final int PERMISSION_REQUEST_CODE = 202;[m
+[32m+[m[32m    private TextView tvStatus;[m
+[32m+[m
+[32m+[m[32m    @Override[m
+[32m+[m[32m    protected void onCreate(Bundle savedInstanceState) {[m
+[32m+[m[32m        super.onCreate(savedInstanceState);[m
+[32m+[m[32m        setContentView(R.layout.activity_main);[m
+[32m+[m
+[32m+[m[32m        Button btnSelectVideo = findViewById(R.id.btnSelectVideo);[m
+[32m+[m[32m        tvStatus = findViewById(R.id.tvStatus);[m
+[32m+[m
+[32m+[m[32m        btnSelectVideo.setOnClickListener(v -> checkPermissionAndPick());[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    private String getRequiredPermission() {[m
+[32m+[m[32m        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {[m
+[32m+[m[32m            return Manifest.permission.READ_MEDIA_VIDEO;[m
+[32m+[m[32m        } else {[m
+[32m+[m[32m            return Manifest.permission.READ_EXTERNAL_STORAGE;[m
+[32m+[m[32m        }[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    private void checkPermissionAndPick() {[m
+[32m+[m[32m        String permission = getRequiredPermission();[m
+[32m+[m[32m        if (ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED) {[m
+[32m+[m[32m            openVideoPicker();[m
+[32m+[m[32m        } else {[m
+[32m+[m[32m            ActivityCompat.requestPermissions(this, new String[]{permission}, PERMISSION_REQUEST_CODE);[m
+[32m+[m[32m        }[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    @Override[m
+[32m+[m[32m    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {[m
+[32m+[m[32m        super.onRequestPermissionsResult(requestCode, permissions, grantResults);[m
+[32m+[m[32m        if (requestCode == PERMISSION_REQUEST_CODE) {[m
+[32m+[m[32m            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {[m
+[32m+[m[32m                openVideoPicker();[m
+[32m+[m[32m            } else {[m
+[32m+[m[32m                tvStatus.setText("Izin akses video ditolak.");[m
+[32m+[m[32m            }[m
+[32m+[m[32m        }[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    private void openVideoPicker() {[m
+[32m+[m[32m        Intent intent = new Intent(Intent.ACTION_PICK);[m
+[32m+[m[32m        intent.setType("video/*");[m
+[32m+[m[32m        startActivityForResult(Intent.createChooser(intent, "Pilih Video"), PICK_VIDEO_REQUEST);[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    @Override[m
+[32m+[m[32m    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {[m
+[32m+[m[32m        super.onActivityResult(requestCode, resultCode, data);[m
+[32m+[m[32m        if (requestCode == PICK_VIDEO_REQUEST && resultCode == RESULT_OK && data != null) {[m
+[32m+[m[32m            Uri videoUri = data.getData();[m
+[32m+[m[32m            if (videoUri != null) {[m
+[32m+[m[32m                tvStatus.setText("Menjalankan Pipeline End-to-End...");[m
+[32m+[m[41m                [m
+[32m+[m[32m                File analysisFile = new File(getFilesDir(), "analysis.json");[m
+[32m+[m[32m                File trajectoryFile = new File(getFilesDir(), "trajectory.json");[m
+[32m+[m[32m                File outputVideoFile = new File(getFilesDir(), "output_final.mp4");[m
+[32m+[m
+[32m+[m[32m                new Thread(() -> {[m
+[32m+[m[32m                    try {[m
+[32m+[m[32m                        Pass1Extractor.extract(getApplicationContext(), videoUri, analysisFile);[m
+[32m+[m[32m                        Pass2Optimizer.optimize(analysisFile, trajectoryFile);[m
+[32m+[m[32m                        exportDiagnostics(analysisFile, trajectoryFile);[m
+[32m+[m[32m                        Pass3Renderer.render(getApplicationContext(), videoUri, trajectoryFile, outputVideoFile);[m
+[32m+[m
+[32m+[m[32m                        String exportError = exportToGallery(outputVideoFile, analysisFile);[m
+[32m+[m[32m                        long finalSize = outputVideoFile.exists() ? outputVideoFile.length() : 0;[m
+[32m+[m[41m                        [m
+[32m+[m[32m                        runOnUiThread(() -> {[m
+[32m+[m[32m                            String msg = (exportError == null)[m
+[32m+[m[32m                                    ? "RENDER + EXPORT SUKSES!\nCek folder Movies/SmartReframe\n"[m
+[32m+[m[32m                                    : "Render OK, GAGAL export:\n" + (exportError.length() > 400 ? exportError.substring(0, 400) + "..." : exportError) + "\n";[m
+[32m+[m[32m                            tvStatus.setText(msg + "Ukuran: " + finalSize + " bytes");[m
+[32m+[m[32m                        });[m
+[32m+[m[32m                    } catch (Exception e) {[m
+[32m+[m[32m                        Log.e(TAG, "Pipeline Gagal", e);[m
+[32m+[m[32m                        String fullTrace = Log.getStackTraceString(e);[m
+[32m+[m[32m                        if (fullTrace.length() > 400) {[m
+[32m+[m[32m                            fullTrace = fullTrace.substring(0, 400) + "...";[m
+[32m+[m[32m                        }[m
+[32m+[m[32m                        String finalTrace = fullTrace;[m
+[32m+[m[32m                        runOnUiThread(() -> tvStatus.setText("GAGAL:\n" + finalTrace));[m
+[32m+[m[32m                    }[m
+[32m+[m[32m                }).start();[m
+[32m+[m[32m            }[m
+[32m+[m[32m        }[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    private String exportToGallery(File sourceFile, File analysisFile) {[m
+[32m+[m[32m        try {[m
+[32m+[m[32m            String layoutLabel = "SINGLE";[m
+[32m+[m[32m            int shotCount = 0;[m
+[32m+[m[32m            int splitCount = 0;[m
+[32m+[m[32m            int singleCount = 0;[m
+[32m+[m
+[32m+[m[32m            try {[m
+[32m+[m[32m                String json = new String([m
+[32m+[m[32m                        java.nio.file.Files.readAllBytes(analysisFile.toPath()),[m
+[32m+[m[32m                        java.nio.charset.StandardCharsets.UTF_8);[m
+[32m+[m
+[32m+[m[32m                org.json.JSONObject root =[m
+[32m+[m[32m                        new org.json.JSONObject(json);[m
+[32m+[m
+[32m+[m[32m                org.json.JSONArray shots =[m
+[32m+[m[32m                        root.optJSONArray("shots");[m
+[32m+[m
+[32m+[m[32m                if (shots != null) {[m
+[32m+[m[32m                    shotCount = shots.length();[m
+[32m+[m
+[32m+[m[32m                    for (int i = 0; i < shots.length(); i++) {[m
+[32m+[m[32m                        org.json.JSONObject shot = shots.optJSONObject(i);[m
+[32m+[m
+[32m+[m[32m                        if (shot == null) continue;[m
+[32m+[m
+[32m+[m[32m                        String layout =[m
+[32m+[m[32m                                shot.optString("layout", "single");[m
+[32m+[m
+[32m+[m[32m                        if ("split".equalsIgnoreCase(layout)) {[m
+[32m+[m[32m                            splitCount++;[m
+[32m+[m[32m                        } else {[m
+[32m+[m[32m                            singleCount++;[m
+[32m+[m[32m                        }[m
+[32m+[m[32m                    }[m
+[32m+[m[32m                }[m
+[32m+[m
+[32m+[m[32m                if (splitCount > 0) {[m
+[32m+[m[32m                    layoutLabel =[m
+[32m+[m[32m                            "SHOTS" + shotCount +[m
+[32m+[m[32m                            "_SPLIT" + splitCount +[m
+[32m+[m[32m                            "_SINGLE" + singleCount;[m
+[32m+[m[32m                } else {[m
+[32m+[m[32m                    layoutLabel =[m
+[32m+[m[32m                            "SHOTS" + shotCount +[m
+[32m+[m[32m                            "_SINGLE" + singleCount;[m
+[32m+[m[32m                }[m
+[32m+[m
+[32m+[m[32m            } catch (Exception diagnosticError) {[m
+[32m+[m[32m                Log.w([m
+[32m+[m[32m                        TAG,[m
+[32m+[m[32m                        "Gagal membaca shot diagnostic",[m
+[32m+[m[32m                        diagnosticError);[m
+[32m+[m[32m            }[m
+[32m+[m
+[32m+[m[32m            ContentValues values = new ContentValues();[m
+[32m+[m[32m            values.put(MediaStore.Video.Media.DISPLAY_NAME, layoutLabel + "_" + System.currentTimeMillis() + ".mp4");[m
+[32m+[m[32m            values.put(MediaStore.Video.Media.MIME_TYPE, "video/mp4");[m
+[32m+[m[32m            // Diubah ke DIRECTORY_MOVIES karena Android melarang DIRECTORY_DOWNLOADS untuk Video.Media[m
+[32m+[m[32m            values.put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/SmartReframe");[m
+[32m+[m
+[32m+[m[32m            Uri collection = MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY);[m
+[32m+[m[32m            Uri itemUri = MainActivity.this.getContentResolver().insert(collection, values);[m
+[32m+[m[32m            if (itemUri == null) return "insert() mengembalikan null";[m
+[32m+[m
+[32m+[m[32m            try (OutputStream out = MainActivity.this.getContentResolver().openOutputStream(itemUri);[m
+[32m+[m[32m                 FileInputStream in = new FileInputStream(sourceFile)) {[m
+[32m+[m[32m                if (out == null) return "openOutputStream() null untuk uri: " + itemUri;[m
+[32m+[m[32m                byte[] buffer = new byte[8192];[m
+[32m+[m[32m                int read;[m
+[32m+[m[32m                while ((read = in.read(buffer)) != -1) {[m
+[32m+[m[32m                    out.write(buffer, 0, read);[m
+[32m+[m[32m                }[m
+[32m+[m[32m                out.flush();[m
+[32m+[m[32m            }[m
+[32m+[m[32m            return null; // Sukses tanpa error[m
+[32m+[m[32m        } catch (Exception e) {[m
+[32m+[m[32m            Log.e(TAG, "Gagal ekspor ke MediaStore", e);[m
+[32m+[m[32m            return Log.getStackTraceString(e);[m
+[32m+[m[32m        }[m
+[32m+[m[32m    }[m
+[32m+[m[32m    private void exportDiagnostics(File analysisFile, File trajectoryFile) {[m
+[32m+[m[32m        try {[m
+[32m+[m[32m            exportJsonToMediaStore(analysisFile, "analysis.json");[m
+[32m+[m[32m            exportJsonToMediaStore(trajectoryFile, "trajectory.json");[m
+[32m+[m
+[32m+[m[32m            Log.i(TAG, "DIAGNOSTIC EXPORTED TO Movies/SmartReframe");[m
+[32m+[m
+[32m+[m[32m        } catch (Exception e) {[m
+[32m+[m[32m            Log.e(TAG, "DIAGNOSTIC EXPORT FAILED", e);[m
+[32m+[m[32m        }[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    private void exportJsonToMediaStore(File sourceFile, String displayName)[m
+[32m+[m[32m            throws Exception {[m
+[32m+[m
+[32m+[m[32m        android.content.ContentValues values =[m
+[32m+[m[32m                new android.content.ContentValues();[m
+[32m+[m
+[32m+[m[32m        values.put([m
+[32m+[m[32m                android.provider.MediaStore.Files.FileColumns.DISPLAY_NAME,[m
+[32m+[m[32m                displayName);[m
+[32m+[m
+[32m+[m[32m        values.put([m
+[32m+[m[32m                android.provider.MediaStore.Files.FileColumns.MIME_TYPE,[m
+[32m+[m[32m                "application/json");[m
+[32m+[m
+[32m+[m[32m        if (android.os.Build.VERSION.SDK_INT >= 29) {[m
+[32m+[m[32m            values.put([m
+[32m+[m[32m                    android.provider.MediaStore.Files.FileColumns.RELATIVE_PATH,[m
+[32m+[m[32m                    android.os.Environment.DIRECTORY_MOVIES[m
+[32m+[m[32m                            + "/SmartReframe");[m
+[32m+[m[32m            values.put([m
+[32m+[m[32m                    android.provider.MediaStore.Files.FileColumns.IS_PENDING,[m
+[32m+[m[32m                    1);[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m        android.net.Uri uri =[m
+[32m+[m[32m                getContentResolver().insert([m
+[32m+[m[32m                        android.provider.MediaStore.Files.getContentUri("external"),[m
+[32m+[m[32m                        values);[m
+[32m+[m
+[32m+[m[32m        if (uri == null) {[m
+[32m+[m[32m            throw new Exception("MediaStore gagal membuat file: " + displayName);[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m        try ([m
+[32m+[m[32m                java.io.InputStream in =[m
+[32m+[m[32m                        new java.io.FileInputStream(sourceFile);[m
+[32m+[m[32m                java.io.OutputStream out =[m
+[32m+[m[32m                        getContentResolver().openOutputStream(uri)[m
+[32m+[m[32m        ) {[m
+[32m+[m[32m            if (out == null) {[m
+[32m+[m[32m                throw new Exception("OutputStream null: " + displayName);[m
+[32m+[m[32m            }[m
+[32m+[m
+[32m+[m[32m            byte[] buffer = new byte[8192];[m
+[32m+[m[32m            int len;[m
+[32m+[m
+[32m+[m[32m            while ((len = in.read(buffer)) != -1) {[m
+[32m+[m[32m                out.write(buffer, 0, len);[m
+[32m+[m[32m            }[m
+[32m+[m
+[32m+[m[32m            out.flush();[m
+[32m+[m
+[32m+[m[32m        } finally {[m
+[32m+[m[32m            if (android.os.Build.VERSION.SDK_INT >= 29) {[m
+[32m+[m[32m                android.content.ContentValues done =[m
+[32m+[m[32m                        new android.content.ContentValues();[m
+[32m+[m
+[32m+[m[32m                done.put([m
+[32m+[m[32m                        android.provider.MediaStore.Files.FileColumns.IS_PENDING,[m
+[32m+[m[32m                        0);[m
+[32m+[m
+[32m+[m[32m                getContentResolver().update(uri, done, null, null);[m
+[32m+[m[32m            }[m
+[32m+[m[32m        }[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m}[m
+[1mdiff --git a/app/src/main/java/com/example/smartcropapp/MainActivity.java.bak_manual_ui b/app/src/main/java/com/example/smartcropapp/MainActivity.java.bak_manual_ui[m
+[1mnew file mode 100644[m
+[1mindex 0000000..f3d3f2e[m
+[1m--- /dev/null[m
+[1m+++ b/app/src/main/java/com/example/smartcropapp/MainActivity.java.bak_manual_ui[m
+[36m@@ -0,0 +1,281 @@[m
+[32m+[m[32mpackage com.example.smartcropapp;[m
+[32m+[m
+[32m+[m[32mimport android.Manifest;[m
+[32m+[m[32mimport android.content.ContentValues;[m
+[32m+[m[32mimport android.content.Intent;[m
+[32m+[m[32mimport android.content.pm.PackageManager;[m
+[32m+[m[32mimport android.net.Uri;[m
+[32m+[m[32mimport android.os.Build;[m
+[32m+[m[32mimport android.os.Bundle;[m
+[32m+[m[32mimport android.os.Environment;[m
+[32m+[m[32mimport android.provider.MediaStore;[m
+[32m+[m[32mimport android.util.Log;[m
+[32m+[m[32mimport android.widget.Button;[m
+[32m+[m[32mimport android.widget.TextView;[m
+[32m+[m[32mimport androidx.annotation.NonNull;[m
+[32m+[m[32mimport androidx.annotation.Nullable;[m
+[32m+[m[32mimport androidx.appcompat.app.AppCompatActivity;[m
+[32m+[m[32mimport androidx.core.app.ActivityCompat;[m
+[32m+[m[32mimport androidx.core.content.ContextCompat;[m
+[32m+[m[32mimport com.example.smartcropapp.core.Pass1Extractor;[m
+[32m+[m[32mimport com.example.smartcropapp.core.Pass2Optimizer;[m
+[32m+[m[32mimport com.example.smartcropapp.core.Pass3Renderer;[m
+[32m+[m[32mimport java.io.File;[m
+[32m+[m[32mimport java.io.FileOutputStream;[m
+[32m+[m[32mimport java.io.FileInputStream;[m
+[32m+[m[32mimport java.io.OutputStream;[m
+[32m+[m
+[32m+[m[32mpublic class MainActivity extends AppCompatActivity {[m
+[32m+[m[32m    private static final String TAG = "MainActivity";[m
+[32m+[m[32m    private static final int PICK_VIDEO_REQUEST = 101;[m
+[32m+[m[32m    private static final int PERMISSION_REQUEST_CODE = 202;[m
+[32m+[m[32m    private TextView tvStatus;[m
+[32m+[m
+[32m+[m[32m    @Override[m
+[32m+[m[32m    protected void onCreate(Bundle savedInstanceState) {[m
+[32m+[m[32m        super.onCreate(savedInstanceState);[m
+[32m+[m[32m        setContentView(R.layout.activity_main);[m
+[32m+[m
+[32m+[m[32m        Button btnSelectVideo = findViewById(R.id.btnSelectVideo);[m
+[32m+[m[32m        tvStatus = findViewById(R.id.tvStatus);[m
+[32m+[m
+[32m+[m[32m        btnSelectVideo.setOnClickListener(v -> checkPermissionAndPick());[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    private String getRequiredPermission() {[m
+[32m+[m[32m        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {[m
+[32m+[m[32m            return Manifest.permission.READ_MEDIA_VIDEO;[m
+[32m+[m[32m        } else {[m
+[32m+[m[32m            return Manifest.permission.READ_EXTERNAL_STORAGE;[m
+[32m+[m[32m        }[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    private void checkPermissionAndPick() {[m
+[32m+[m[32m        String permission = getRequiredPermission();[m
+[32m+[m[32m        if (ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED) {[m
+[32m+[m[32m            openVideoPicker();[m
+[32m+[m[32m        } else {[m
+[32m+[m[32m            ActivityCompat.requestPermissions(this, new String[]{permission}, PERMISSION_REQUEST_CODE);[m
+[32m+[m[32m        }[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    @Override[m
+[32m+[m[32m    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {[m
+[32m+[m[32m        super.onRequestPermissionsResult(requestCode, permissions, grantResults);[m
+[32m+[m[32m        if (requestCode == PERMISSION_REQUEST_CODE) {[m
+[32m+[m[32m            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {[m
+[32m+[m[32m                openVideoPicker();[m
+[32m+[m[32m            } else {[m
+[32m+[m[32m                tvStatus.setText("Izin akses video ditolak.");[m
+[32m+[m[32m            }[m
+[32m+[m[32m        }[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    private void openVideoPicker() {[m
+[32m+[m[32m        Intent intent = new Intent(Intent.ACTION_PICK);[m
+[32m+[m[32m        intent.setType("video/*");[m
+[32m+[m[32m        startActivityForResult(Intent.createChooser(intent, "Pilih Video"), PICK_VIDEO_REQUEST);[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    @Override[m
+[32m+[m[32m    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {[m
+[32m+[m[32m        super.onActivityResult(requestCode, resultCode, data);[m
+[32m+[m[32m        if (requestCode == PICK_VIDEO_REQUEST && resultCode == RESULT_OK && data != null) {[m
+[32m+[m[32m            Uri videoUri = data.getData();[m
+[32m+[m[32m            if (videoUri != null) {[m
+[32m+[m[32m                tvStatus.setText("Menjalankan Pipeline End-to-End...");[m
+[32m+[m[41m                [m
+[32m+[m[32m                File analysisFile = new File(getFilesDir(), "analysis.json");[m
+[32m+[m[32m                File trajectoryFile = new File(getFilesDir(), "trajectory.json");[m
+[32m+[m[32m                File outputVideoFile = new File(getFilesDir(), "output_final.mp4");[m
+[32m+[m
+[32m+[m[32m                new Thread(() -> {[m
+[32m+[m[32m                    try {[m
+[32m+[m[32m                        Pass1Extractor.extract(getApplicationContext(), videoUri, analysisFile);[m
+[32m+[m[32m                        Pass2Optimizer.optimize(analysisFile, trajectoryFile);[m
+[32m+[m[32m                        exportDiagnostics(analysisFile, trajectoryFile);[m
+[32m+[m[32m                        Pass3Renderer.render(getApplicationContext(), videoUri, trajectoryFile, outputVideoFile);[m
+[32m+[m
+[32m+[m[32m                        String exportError = exportToGallery(outputVideoFile, analysisFile);[m
+[32m+[m[32m                        long finalSize = outputVideoFile.exists() ? outputVideoFile.length() : 0;[m
+[32m+[m[41m                        [m
+[32m+[m[32m                        runOnUiThread(() -> {[m
+[32m+[m[32m                            String msg = (exportError == null)[m
+[32m+[m[32m                                    ? "RENDER + EXPORT SUKSES!\nCek folder Movies/SmartReframe\n"[m
+[32m+[m[32m                                    : "Render OK, GAGAL export:\n" + (exportError.length() > 400 ? exportError.substring(0, 400) + "..." : exportError) + "\n";[m
+[32m+[m[32m                            tvStatus.setText(msg + "Ukuran: " + finalSize + " bytes");[m
+[32m+[m[32m                        });[m
+[32m+[m[32m                    } catch (Exception e) {[m
+[32m+[m[32m                        Log.e(TAG, "Pipeline Gagal", e);[m
+[32m+[m[32m                        String fullTrace = Log.getStackTraceString(e);[m
+[32m+[m[32m                        if (fullTrace.length() > 400) {[m
+[32m+[m[32m                            fullTrace = fullTrace.substring(0, 400) + "...";[m
+[32m+[m[32m                        }[m
+[32m+[m[32m                        String finalTrace = fullTrace;[m
+[32m+[m[32m                        runOnUiThread(() -> tvStatus.setText("GAGAL:\n" + finalTrace));[m
+[32m+[m[32m                    }[m
+[32m+[m[32m                }).start();[m
+[32m+[m[32m            }[m
+[32m+[m[32m        }[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    private String exportToGallery(File sourceFile, File analysisFile) {[m
+[32m+[m[32m        try {[m
+[32m+[m[32m            String layoutLabel = "SINGLE";[m
+[32m+[m[32m            int shotCount = 0;[m
+[32m+[m[32m            int splitCount = 0;[m
+[32m+[m[32m            int singleCount = 0;[m
+[32m+[m
+[32m+[m[32m            try {[m
+[32m+[m[32m                String json = new String([m
+[32m+[m[32m                        java.nio.file.Files.readAllBytes(analysisFile.toPath()),[m
+[32m+[m[32m                        java.nio.charset.StandardCharsets.UTF_8);[m
+[32m+[m
+[32m+[m[32m                org.json.JSONObject root =[m
+[32m+[m[32m                        new org.json.JSONObject(json);[m
+[32m+[m
+[32m+[m[32m                org.json.JSONArray shots =[m
+[32m+[m[32m                        root.optJSONArray("shots");[m
+[32m+[m
+[32m+[m[32m                if (shots != null) {[m
+[32m+[m[32m                    shotCount = shots.length();[m
+[32m+[m
+[32m+[m[32m                    for (int i = 0; i < shots.length(); i++) {[m
+[32m+[m[32m                        org.json.JSONObject shot = shots.optJSONObject(i);[m
+[32m+[m
+[32m+[m[32m                        if (shot == null) continue;[m
+[32m+[m
+[32m+[m[32m                        String layout =[m
+[32m+[m[32m                                shot.optString("layout", "single");[m
+[32m+[m
+[32m+[m[32m                        if ("split".equalsIgnoreCase(layout)) {[m
+[32m+[m[32m                            splitCount++;[m
+[32m+[m[32m                        } else {[m
+[32m+[m[32m                            singleCount++;[m
+[32m+[m[32m                        }[m
+[32m+[m[32m                    }[m
+[32m+[m[32m                }[m
+[32m+[m
+[32m+[m[32m                if (splitCount > 0) {[m
+[32m+[m[32m                    layoutLabel =[m
+[32m+[m[32m                            "SHOTS" + shotCount +[m
+[32m+[m[32m                            "_SPLIT" + splitCount +[m
+[32m+[m[32m                            "_SINGLE" + singleCount;[m
+[32m+[m[32m                } else {[m
+[32m+[m[32m                    layoutLabel =[m
+[32m+[m[32m                            "SHOTS" + shotCount +[m
+[32m+[m[32m                            "_SINGLE" + singleCount;[m
+[32m+[m[32m                }[m
+[32m+[m
+[32m+[m[32m            } catch (Exception diagnosticError) {[m
+[32m+[m[32m                Log.w([m
+[32m+[m[32m                        TAG,[m
+[32m+[m[32m                        "Gagal membaca shot diagnostic",[m
+[32m+[m[32m                        diagnosticError);[m
+[32m+[m[32m            }[m
+[32m+[m
+[32m+[m[32m            ContentValues values = new ContentValues();[m
+[32m+[m[32m            values.put(MediaStore.Video.Media.DISPLAY_NAME, layoutLabel + "_" + System.currentTimeMillis() + ".mp4");[m
+[32m+[m[32m            values.put(MediaStore.Video.Media.MIME_TYPE, "video/mp4");[m
+[32m+[m[32m            // Diubah ke DIRECTORY_MOVIES karena Android melarang DIRECTORY_DOWNLOADS untuk Video.Media[m
+[32m+[m[32m            values.put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/SmartReframe");[m
+[32m+[m
+[32m+[m[32m            Uri collection = MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY);[m
+[32m+[m[32m            Uri itemUri = MainActivity.this.getContentResolver().insert(collection, values);[m
+[32m+[m[32m            if (itemUri == null) return "insert() mengembalikan null";[m
+[32m+[m
+[32m+[m[32m            try (OutputStream out = MainActivity.this.getContentResolver().openOutputStream(itemUri);[m
+[32m+[m[32m                 FileInputStream in = new FileInputStream(sourceFile)) {[m
+[32m+[m[32m                if (out == null) return "openOutputStream() null untuk uri: " + itemUri;[m
+[32m+[m[32m                byte[] buffer = new byte[8192];[m
+[32m+[m[32m                int read;[m
+[32m+[m[32m                while ((read = in.read(buffer)) != -1) {[m
+[32m+[m[32m                    out.write(buffer, 0, read);[m
+[32m+[m[32m                }[m
+[32m+[m[32m                out.flush();[m
+[32m+[m[32m            }[m
+[32m+[m[32m            return null; // Sukses tanpa error[m
+[32m+[m[32m        } catch (Exception e) {[m
+[32m+[m[32m            Log.e(TAG, "Gagal ekspor ke MediaStore", e);[m
+[32m+[m[32m            return Log.getStackTraceString(e);[m
+[32m+[m[32m        }[m
+[32m+[m[32m    }[m
+[32m+[m[32m    private void exportDiagnostics(File analysisFile, File trajectoryFile) {[m
+[32m+[m[32m        try {[m
+[32m+[m[32m            exportJsonToMediaStore(analysisFile, "analysis.json");[m
+[32m+[m[32m            exportJsonToMediaStore(trajectoryFile, "trajectory.json");[m
+[32m+[m
+[32m+[m[32m            Log.i(TAG, "DIAGNOSTIC EXPORTED TO Movies/SmartReframe");[m
+[32m+[m
+[32m+[m[32m        } catch (Exception e) {[m
+[32m+[m[32m            Log.e(TAG, "DIAGNOSTIC EXPORT FAILED", e);[m
+[32m+[m[32m        }[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    private void exportJsonToMediaStore(File sourceFile, String displayName)[m
+[32m+[m[32m            throws Exception {[m
+[32m+[m
+[32m+[m[32m        android.content.ContentValues values =[m
+[32m+[m[32m                new android.content.ContentValues();[m
+[32m+[m
+[32m+[m[32m        values.put([m
+[32m+[m[32m                android.provider.MediaStore.Files.FileColumns.DISPLAY_NAME,[m
+[32m+[m[32m                displayName);[m
+[32m+[m
+[32m+[m[32m        values.put([m
+[32m+[m[32m                android.provider.MediaStore.Files.FileColumns.MIME_TYPE,[m
+[32m+[m[32m                "application/json");[m
+[32m+[m
+[32m+[m[32m        if (android.os.Build.VERSION.SDK_INT >= 29) {[m
+[32m+[m[32m            values.put([m
+[32m+[m[32m                    android.provider.MediaStore.Files.FileColumns.RELATIVE_PATH,[m
+[32m+[m[32m                    android.os.Environment.DIRECTORY_MOVIES[m
+[32m+[m[32m                            + "/SmartReframe");[m
+[32m+[m[32m            values.put([m
+[32m+[m[32m                    android.provider.MediaStore.Files.FileColumns.IS_PENDING,[m
+[32m+[m[32m                    1);[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m        android.net.Uri uri =[m
+[32m+[m[32m                getContentResolver().insert([m
+[32m+[m[32m                        android.provider.MediaStore.Files.getContentUri("external"),[m
+[32m+[m[32m                        values);[m
+[32m+[m
+[32m+[m[32m        if (uri == null) {[m
+[32m+[m[32m            throw new Exception("MediaStore gagal membuat file: " + displayName);[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m        try ([m
+[32m+[m[32m                java.io.InputStream in =[m
+[32m+[m[32m                        new java.io.FileInputStream(sourceFile);[m
+[32m+[m[32m                java.io.OutputStream out =[m
+[32m+[m[32m                        getContentResolver().openOutputStream(uri)[m
+[32m+[m[32m        ) {[m
+[32m+[m[32m            if (out == null) {[m
+[32m+[m[32m                throw new Exception("OutputStream null: " + displayName);[m
+[32m+[m[32m            }[m
+[32m+[m
+[32m+[m[32m            byte[] buffer = new byte[8192];[m
+[32m+[m[32m            int len;[m
+[32m+[m
+[32m+[m[32m            while ((len = in.read(buffer)) != -1) {[m
+[32m+[m[32m                out.write(buffer, 0, len);[m
+[32m+[m[32m            }[m
+[32m+[m
+[32m+[m[32m            out.flush();[m
+[32m+[m
+[32m+[m[32m        } finally {[m
+[32m+[m[32m            if (android.os.Build.VERSION.SDK_INT >= 29) {[m
+[32m+[m[32m                android.content.ContentValues done =[m
+[32m+[m[32m                        new android.content.ContentValues();[m
+[32m+[m
+[32m+[m[32m                done.put([m
+[32m+[m[32m                        android.provider.MediaStore.Files.FileColumns.IS_PENDING,[m
+[32m+[m[32m                        0);[m
+[32m+[m
+[32m+[m[32m                getContentResolver().update(uri, done, null, null);[m
+[32m+[m[32m            }[m
+[32m+[m[32m        }[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m}[m
+[1mdiff --git a/app/src/main/java/com/example/smartcropapp/core/Pass1Extractor.java b/app/src/main/java/com/example/smartcropapp/core/Pass1Extractor.java[m
+[1mindex 102dd9a..c1b242e 100644[m
+[1m--- a/app/src/main/java/com/example/smartcropapp/core/Pass1Extractor.java[m
+[1m+++ b/app/src/main/java/com/example/smartcropapp/core/Pass1Extractor.java[m
+[36m@@ -30,8 +30,8 @@[m [mpublic class Pass1Extractor {[m
+     private static final float WINDOW_END = 0.80f;[m
+ [m
+     private static final float SPLIT_THRESHOLD = 0.58f;[m
+[31m-    private static final float MIN_SIDE_ACTIVITY = 0.012f;[m
+[31m-    private static final float MAX_CENTER_DOMINANCE = 1.20f;[m
+[32m+[m[32m    private static final float MIN_SIDE_ACTIVITY = 0.03f;[m
+[32m+[m[32m    private static final float MAX_CENTER_DOMINANCE = 0.85f;[m
+     private static final float MIN_BALANCE = 0.30f;[m
+     private static final float MIN_STABILITY = 0.30f;[m
+ [m
+[36m@@ -631,308 +631,22 @@[m [mpublic class Pass1Extractor {[m
+     private static String classifyLayout([m
+             ShotBuffer shot) {[m
+ [m
+[31m-        int n =[m
+[31m-                shot.frames.size();[m
+[31m-[m
+[31m-        if (n < 2) {[m
+[31m-            Log.i([m
+[31m-                    TAG,[m
+[31m-                    "Shot terlalu pendek -> SINGLE");[m
+[31m-[m
+[31m-            return "single";[m
+[31m-        }[m
+[31m-[m
+[31m-        int start =[m
+[31m-                Math.max([m
+[31m-                        0,[m
+[31m-                        (int) (n * WINDOW_START));[m
+[31m-[m
+[31m-        int end =[m
+[31m-                Math.min([m
+[31m-                        n,[m
+[31m-                        Math.max([m
+[31m-                                start + 1,[m
+[31m-                                (int) (n * WINDOW_END)));[m
+[31m-[m
+[31m-        List<FrameFeature> window =[m
+[31m-                shot.frames.subList([m
+[31m-                        start,[m
+[31m-                        end);[m
+[31m-[m
+         /*[m
+[31m-         * 12 kolom dibagi menjadi:[m
+[31m-         *[m
+[31m-         * LEFT   = 0..3[m
+[31m-         * CENTER = 4..7[m
+[31m-         * RIGHT  = 8..11[m
+[32m+[m[32m         * AUTO SPLIT CLASSIFIER DISABLED.[m
+          *[m
+[31m-         * Kita sengaja memakai area tengah[m
+[31m-         * yang cukup lebar agar tidak tertipu[m
+[31m-         * oleh satu-dua piksel/objek.[m
+[31m-         */[m
+[31m-[m
+[31m-        float left =[m
+[31m-                spatialContrast([m
+[31m-                        window,[m
+[31m-                        0,[m
+[31m-                        4);[m
+[31m-[m
+[31m-        float center =[m
+[31m-                spatialContrast([m
+[31m-                        window,[m
+[31m-                        4,[m
+[31m-                        8);[m
+[31m-[m
+[31m-        float right =[m
+[31m-                spatialContrast([m
+[31m-                        window,[m
+[31m-                        8,[m
+[31m-                        12);[m
+[31m-[m
+[31m-        float leftBright =[m
+[31m-                averageRegion([m
+[31m-                        window,[m
+[31m-                        false,[m
+[31m-                        0,[m
+[31m-                        4);[m
+[31m-[m
+[31m-        float centerBright =[m
+[31m-                averageRegion([m
+[31m-                        window,[m
+[31m-                        false,[m
+[31m-                        4,[m
+[31m-                        8);[m
+[31m-[m
+[31m-        float rightBright =[m
+[31m-                averageRegion([m
+[31m-                        window,[m
+[31m-                        false,[m
+[31m-                        8,[m
+[31m-                        12);[m
+[31m-[m
+[31m-        float leftStable =[m
+[31m-                temporalConsistency([m
+[31m-                        window,[m
+[31m-                        0,[m
+[31m-                        4);[m
+[31m-[m
+[31m-        float rightStable =[m
+[31m-                temporalConsistency([m
+[31m-                        window,[m
+[31m-                        8,[m
+[31m-                        12);[m
+[31m-[m
+[31m-        float sideScore =[m
+[31m-                (left + right) * 0.5f;[m
+[31m-[m
+[31m-        /*[m
+[31m-         * IMPORTANT:[m
+[31m-         *[m
+[31m-         * Jangan menganggap background terang =[m
+[31m-         * subjek.[m
+[31m-         *[m
+[31m-         * Kita lebih tertarik pada PERBEDAAN[m
+[31m-         * struktur antar wilayah.[m
+[31m-         */[m
+[31m-[m
+[31m-        float centerRatio =[m
+[31m-                center /[m
+[31m-                Math.max([m
+[31m-                        0.0001f,[m
+[31m-                        sideScore);[m
+[31m-[m
+[31m-        boolean sidesActive =[m
+[31m-                left >= MIN_SIDE_ACTIVITY &&[m
+[31m-                right >= MIN_SIDE_ACTIVITY;[m
+[31m-[m
+[31m-        boolean centerNotDominant =[m
+[31m-                centerRatio <=[m
+[31m-                MAX_CENTER_DOMINANCE;[m
+[31m-[m
+[31m-        float balance =[m
+[31m-                1f -[m
+[31m-                Math.min([m
+[31m-                        1f,[m
+[31m-                        Math.abs(left - right) /[m
+[31m-                        Math.max([m
+[31m-                                0.0001f,[m
+[31m-                                left + right));[m
+[31m-[m
+[31m-        float stability =[m
+[31m-                (leftStable +[m
+[31m-                 rightStable) * 0.5f;[m
+[31m-[m
+[31m-        /*[m
+[31m-         * Relative contrast.[m
+[31m-         *[m
+[31m-         * Ini membuat detector tidak terlalu[m
+[31m-         * bergantung pada warna/background global.[m
+[31m-         */[m
+[31m-[m
+[31m-        float leftVsCenter =[m
+[31m-                left /[m
+[31m-                Math.max([m
+[31m-                        0.0001f,[m
+[31m-                        center);[m
+[31m-[m
+[31m-        float rightVsCenter =[m
+[31m-                right /[m
+[31m-                Math.max([m
+[31m-                        0.0001f,[m
+[31m-                        center);[m
+[31m-[m
+[31m-        float separation =[m
+[31m-                Math.min([m
+[31m-                        2f,[m
+[31m-                        (leftVsCenter +[m
+[31m-                         rightVsCenter) * 0.5f);[m
+[31m-[m
+[31m-        float splitScore =[m
+[31m-                sideScore * 2.0f[m
+[31m-                + balance * 0.30f[m
+[31m-                + stability * 0.35f[m
+[31m-                + separation * 0.15f[m
+[31m-                - Math.max([m
+[31m-                        0f,[m
+[31m-                        centerRatio - 1f)[m
+[31m-                  * 0.60f;[m
+[31m-[m
+[31m-        Log.i([m
+[31m-                TAG,[m
+[31m-                "Shot adaptive:" +[m
+[31m-                " sideScore=" + sideScore +[m
+[31m-                " centerRatio=" + centerRatio +[m
+[31m-                " separation=" + separation +[m
+[31m-                " sidesActive=" + sidesActive +[m
+[31m-                " centerOK=" + centerNotDominant);[m
+[31m-[m
+[31m-        boolean leftStrong =[m
+[31m-                left >= MIN_SIDE_ACTIVITY;[m
+[31m-[m
+[31m-        boolean rightStrong =[m
+[31m-                right >= MIN_SIDE_ACTIVITY;[m
+[31m-[m
+[31m-        boolean balancedEnough =[m
+[31m-                balance >= MIN_BALANCE;[m
+[31m-[m
+[31m-        boolean stableEnough =[m
+[31m-                stability >= MIN_STABILITY;[m
+[31m-[m
+[31m-        Log.i([m
+[31m-                TAG,[m
+[31m-                "SHOT_DIAGNOSTIC " +[m
+[31m-                "start=" + shot.startMs +[m
+[31m-                " L=" + left +[m
+[31m-                " C=" + center +[m
+[31m-                " R=" + right +[m
+[31m-                " Lstrong=" + leftStrong +[m
+[31m-                " Rstrong=" + rightStrong +[m
+[31m-                " balance=" + balance +[m
+[31m-                " stable=" + stability +[m
+[31m-                " centerRatio=" + centerRatio +[m
+[31m-                " separation=" + separation +[m
+[31m-                " score=" + splitScore);[m
+[31m-[m
+[31m-        /*[m
+[31m-         * Background Guard:[m
+[32m+[m[32m         * Shot detection tetap aktif.[m
+[32m+[m[32m         * Layout akan ditentukan manual per-shot.[m
+          *[m
+[31m-         * Background yang seragam biasanya mempunyai[m
+[31m-         * texture rendah dan relatif stabil.[m
+[31m-         *[m
+[31m-         * Jika kiri + kanan sama-sama tidak aktif,[m
+[31m-         * jangan pernah memaksakan SPLIT.[m
+[31m-         */[m
+[31m-[m
+[31m-        if (!leftStrong || !rightStrong) {[m
+[31m-[m
+[31m-            Log.i([m
+[31m-                    TAG,[m
+[31m-                    "SPLIT_REJECT: side activity terlalu rendah");[m
+[31m-[m
+[31m-            return "single";[m
+[31m-        }[m
+[31m-[m
+[31m-        if (!balancedEnough) {[m
+[31m-[m
+[31m-            Log.i([m
+[31m-                    TAG,[m
+[31m-                    "SPLIT_REJECT: kiri/kanan terlalu tidak seimbang");[m
+[31m-[m
+[31m-            return "single";[m
+[31m-        }[m
+[31m-[m
+[31m-        if (!stableEnough) {[m
+[31m-[m
+[31m-            Log.i([m
+[31m-                    TAG,[m
+[31m-                    "SPLIT_REJECT: side activity tidak stabil");[m
+[31m-[m
+[31m-            return "single";[m
+[31m-        }[m
+[31m-[m
+[31m-        /*[m
+[31m-         * BILATERAL SPLIT OVERRIDE[m
+[31m-         *[m
+[31m-         * Jika kedua sisi sama-sama aktif, cukup seimbang,[m
+[31m-         * stabil, dan secara relatif jauh lebih bertekstur[m
+[31m-         * daripada center, jangan biarkan center membatalkan[m
+[31m-         * deteksi dua-orang.[m
+[31m-         *[m
+[31m-         * Ini penting untuk wide shot:[m
+[31m-         *[m
+[31m-         *      PERSON        EMPTY        PERSON[m
+[31m-         *        L             C             R[m
+[31m-         *[m
+[31m-         * Center kosong bukan alasan untuk memilih center.[m
+[31m-         */[m
+[31m-[m
+[31m-        boolean bilateralEvidence =[m
+[31m-                leftStrong &&[m
+[31m-                rightStrong &&[m
+[31m-                balance >= 0.30f &&[m
+[31m-                stableEnough &&[m
+[31m-                separation >= 1.15f;[m
+[31m-[m
+[31m-        if (bilateralEvidence) {[m
+[31m-[m
+[31m-            Log.i([m
+[31m-                    TAG,[m
+[31m-                    "BILATERAL_OVERRIDE => SPLIT" +[m
+[31m-                    " separation=" + separation +[m
+[31m-                    " balance=" + balance +[m
+[31m-                    " stability=" + stability);[m
+[31m-[m
+[31m-            return "split";[m
+[31m-        }[m
+[31m-[m
+[31m-        if (!centerNotDominant) {[m
+[31m-[m
+[31m-            Log.i([m
+[31m-                    TAG,[m
+[31m-                    "SPLIT_REJECT: center terlalu dominan");[m
+[31m-[m
+[31m-            return "single";[m
+[31m-        }[m
+[31m-[m
+[31m-        if (splitScore < SPLIT_THRESHOLD) {[m
+[31m-[m
+[31m-            Log.i([m
+[31m-                    TAG,[m
+[31m-                    "SPLIT_REJECT: score di bawah threshold");[m
+[31m-[m
+[31m-            return "single";[m
+[31m-        }[m
+[31m-[m
+[31m-        /*[m
+[31m-         * Threshold sementara.[m
+[31m-         * Belum final — bagian 03 akan membuat[m
+[31m-         * scoring lebih adaptif terhadap shot.[m
+[32m+[m[32m         * Jangan gunakan brightness/texture untuk[m
+[32m+[m[32m         * menentukan SPLIT karena dapat menghasilkan[m
+[32m+[m[32m         * false-positive pada close-up, pakaian gelap,[m
+[32m+[m[32m         * bayangan, dan background.[m
+          */[m
+ [m
+         Log.i([m
+                 TAG,[m
+[31m-                "LAYOUT => SPLIT");[m
+[32m+[m[32m                "Shot layout -> UNCLASSIFIED");[m
+ [m
+[31m-        return "split";[m
+[32m+[m[32m        return "unclassified";[m
+     }[m
+ }[m
+[1mdiff --git a/app/src/main/java/com/example/smartcropapp/core/Pass1Extractor.java.bak_before_subject_restore b/app/src/main/java/com/example/smartcropapp/core/Pass1Extractor.java.bak_before_subject_restore[m
+[1mnew file mode 100644[m
+[1mindex 0000000..c1b242e[m
+[1m--- /dev/null[m
+[1m+++ b/app/src/main/java/com/example/smartcropapp/core/Pass1Extractor.java.bak_before_subject_restore[m
+[36m@@ -0,0 +1,652 @@[m
+[32m+[m[32mpackage com.example.smartcropapp.core;[m
+[32m+[m
+[32m+[m[32mimport android.content.Context;[m
+[32m+[m[32mimport android.graphics.Bitmap;[m
+[32m+[m[32mimport android.media.MediaMetadataRetriever;[m
+[32m+[m[32mimport android.net.Uri;[m
+[32m+[m[32mimport android.util.Log;[m
+[32m+[m
+[32m+[m[32mimport org.json.JSONArray;[m
+[32m+[m[32mimport org.json.JSONObject;[m
+[32m+[m
+[32m+[m[32mimport java.io.File;[m
+[32m+[m[32mimport java.io.FileOutputStream;[m
+[32m+[m[32mimport java.util.ArrayList;[m
+[32m+[m[32mimport java.util.List;[m
+[32m+[m
+[32m+[m[32mpublic class Pass1Extractor {[m
+[32m+[m
+[32m+[m[32m    private static final String TAG = "Pass1Extractor";[m
+[32m+[m
+[32m+[m[32m    private static final long INTERVAL_US = 500_000L;[m
+[32m+[m
+[32m+[m[32m    private static final int GRID_X = 12;[m
+[32m+[m[32m    private static final int GRID_Y = 8;[m
+[32m+[m[32m    private static final int PIXEL_STEP = 4;[m
+[32m+[m
+[32m+[m[32m    private static final float CUT_THRESHOLD = 0.12f;[m
+[32m+[m
+[32m+[m[32m    private static final float WINDOW_START = 0.20f;[m
+[32m+[m[32m    private static final float WINDOW_END = 0.80f;[m
+[32m+[m
+[32m+[m[32m    private static final float SPLIT_THRESHOLD = 0.58f;[m
+[32m+[m[32m    private static final float MIN_SIDE_ACTIVITY = 0.03f;[m
+[32m+[m[32m    private static final float MAX_CENTER_DOMINANCE = 0.85f;[m
+[32m+[m[32m    private static final float MIN_BALANCE = 0.30f;[m
+[32m+[m[32m    private static final float MIN_STABILITY = 0.30f;[m
+[32m+[m
+[32m+[m[32m    private static class FrameFeature {[m
+[32m+[m[32m        long timeMs;[m
+[32m+[m[32m        float[] brightness;[m
+[32m+[m[32m        float[] texture;[m
+[32m+[m
+[32m+[m[32m        FrameFeature(long timeMs, float[] brightness, float[] texture) {[m
+[32m+[m[32m            this.timeMs = timeMs;[m
+[32m+[m[32m            this.brightness = brightness;[m
+[32m+[m[32m            this.texture = texture;[m
+[32m+[m[32m        }[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    private static class ShotBuffer {[m
+[32m+[m[32m        long startMs;[m
+[32m+[m[32m        List<FrameFeature> frames = new ArrayList<>();[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    public static File extract([m
+[32m+[m[32m            Context context,[m
+[32m+[m[32m            Uri sourceVideoUri,[m
+[32m+[m[32m            File outputFile) {[m
+[32m+[m
+[32m+[m[32m        MediaMetadataRetriever retriever =[m
+[32m+[m[32m                new MediaMetadataRetriever();[m
+[32m+[m
+[32m+[m[32m        try {[m
+[32m+[m[32m            Log.i(TAG,[m
+[32m+[m[32m                    "PASS1 START: shot boundary + spatial layout analysis");[m
+[32m+[m
+[32m+[m[32m            retriever.setDataSource([m
+[32m+[m[32m                    context,[m
+[32m+[m[32m                    sourceVideoUri);[m
+[32m+[m
+[32m+[m[32m            long durationMs = 0;[m
+[32m+[m
+[32m+[m[32m            String duration =[m
+[32m+[m[32m                    retriever.extractMetadata([m
+[32m+[m[32m                            MediaMetadataRetriever.METADATA_KEY_DURATION);[m
+[32m+[m
+[32m+[m[32m            if (duration != null) {[m
+[32m+[m[32m                durationMs = Long.parseLong(duration);[m
+[32m+[m[32m            }[m
+[32m+[m
+[32m+[m[32m            if (durationMs <= 0) {[m
+[32m+[m[32m                durationMs = 10_000;[m
+[32m+[m[32m            }[m
+[32m+[m
+[32m+[m[32m            long durationUs =[m
+[32m+[m[32m                    durationMs * 1000L;[m
+[32m+[m
+[32m+[m[32m            JSONArray shots =[m
+[32m+[m[32m                    new JSONArray();[m
+[32m+[m
+[32m+[m[32m            ShotBuffer current =[m
+[32m+[m[32m                    new ShotBuffer();[m
+[32m+[m
+[32m+[m[32m            current.startMs = 0;[m
+[32m+[m
+[32m+[m[32m            float[] previousBrightness = null;[m
+[32m+[m
+[32m+[m[32m            int shotId = 0;[m
+[32m+[m
+[32m+[m[32m            for (long timeUs = 0;[m
+[32m+[m[32m                 timeUs <= durationUs;[m
+[32m+[m[32m                 timeUs += INTERVAL_US) {[m
+[32m+[m
+[32m+[m[32m                Bitmap bitmap =[m
+[32m+[m[32m                        retriever.getFrameAtTime([m
+[32m+[m[32m                                timeUs,[m
+[32m+[m[32m                                MediaMetadataRetriever[m
+[32m+[m[32m                                        .OPTION_CLOSEST);[m
+[32m+[m
+[32m+[m[32m                if (bitmap == null) {[m
+[32m+[m[32m                    continue;[m
+[32m+[m[32m                }[m
+[32m+[m
+[32m+[m[32m                FrameFeature feature =[m
+[32m+[m[32m                        analyzeFrame([m
+[32m+[m[32m                                bitmap,[m
+[32m+[m[32m                                timeUs / 1000L);[m
+[32m+[m
+[32m+[m[32m                if (previousBrightness != null) {[m
+[32m+[m
+[32m+[m[32m                    float diff =[m
+[32m+[m[32m                            histogramDiff([m
+[32m+[m[32m                                    previousBrightness,[m
+[32m+[m[32m                                    feature.brightness);[m
+[32m+[m
+[32m+[m[32m                    if (diff > CUT_THRESHOLD) {[m
+[32m+[m
+[32m+[m[32m                        if (!current.frames.isEmpty()) {[m
+[32m+[m
+[32m+[m[32m                            shots.put([m
+[32m+[m[32m                                    buildShot([m
+[32m+[m[32m                                            shotId,[m
+[32m+[m[32m                                            current));[m
+[32m+[m
+[32m+[m[32m                            shotId++;[m
+[32m+[m[32m                        }[m
+[32m+[m
+[32m+[m[32m                        current =[m
+[32m+[m[32m                                new ShotBuffer();[m
+[32m+[m
+[32m+[m[32m                        current.startMs =[m
+[32m+[m[32m                                feature.timeMs;[m
+[32m+[m
+[32m+[m[32m                        Log.i([m
+[32m+[m[32m                                TAG,[m
+[32m+[m[32m                                "CUT t=" +[m
+[32m+[m[32m                                feature.timeMs +[m
+[32m+[m[32m                                " diff=" +[m
+[32m+[m[32m                                diff);[m
+[32m+[m[32m                    }[m
+[32m+[m[32m                }[m
+[32m+[m
+[32m+[m[32m                current.frames.add(feature);[m
+[32m+[m
+[32m+[m[32m                previousBrightness =[m
+[32m+[m[32m                        feature.brightness;[m
+[32m+[m
+[32m+[m[32m                bitmap.recycle();[m
+[32m+[m[32m            }[m
+[32m+[m
+[32m+[m[32m            if (!current.frames.isEmpty()) {[m
+[32m+[m
+[32m+[m[32m                shots.put([m
+[32m+[m[32m                        buildShot([m
+[32m+[m[32m                                shotId,[m
+[32m+[m[32m                                current));[m
+[32m+[m[32m            }[m
+[32m+[m
+[32m+[m[32m            JSONObject root =[m
+[32m+[m[32m                    new JSONObject();[m
+[32m+[m
+[32m+[m[32m            root.put([m
+[32m+[m[32m                    "version",[m
+[32m+[m[32m                    2);[m
+[32m+[m
+[32m+[m[32m            root.put([m
+[32m+[m[32m                    "shots",[m
+[32m+[m[32m                    shots);[m
+[32m+[m
+[32m+[m[32m            try (FileOutputStream fos =[m
+[32m+[m[32m                         new FileOutputStream(outputFile)) {[m
+[32m+[m
+[32m+[m[32m                fos.write([m
+[32m+[m[32m                        root.toString()[m
+[32m+[m[32m                                .getBytes("UTF-8"));[m
+[32m+[m[32m            }[m
+[32m+[m
+[32m+[m[32m            Log.i([m
+[32m+[m[32m                    TAG,[m
+[32m+[m[32m                    "PASS1 DONE shots=" +[m
+[32m+[m[32m                    shots.length());[m
+[32m+[m
+[32m+[m[32m            return outputFile;[m
+[32m+[m
+[32m+[m[32m        } catch (Exception e) {[m
+[32m+[m
+[32m+[m[32m            Log.e([m
+[32m+[m[32m                    TAG,[m
+[32m+[m[32m                    "PASS1 FAILED",[m
+[32m+[m[32m                    e);[m
+[32m+[m
+[32m+[m[32m            throw new RuntimeException([m
+[32m+[m[32m                    "Pass 1 gagal: " +[m
+[32m+[m[32m                    e.getMessage(),[m
+[32m+[m[32m                    e);[m
+[32m+[m
+[32m+[m[32m        } finally {[m
+[32m+[m
+[32m+[m[32m            try {[m
+[32m+[m[32m                retriever.release();[m
+[32m+[m[32m            } catch (Exception ignored) {[m
+[32m+[m[32m            }[m
+[32m+[m[32m        }[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    private static FrameFeature analyzeFrame([m
+[32m+[m[32m            Bitmap bitmap,[m
+[32m+[m[32m            long timeMs) {[m
+[32m+[m
+[32m+[m[32m        float[] brightness =[m
+[32m+[m[32m                new float[[m
+[32m+[m[32m                        GRID_X * GRID_Y];[m
+[32m+[m
+[32m+[m[32m        float[] texture =[m
+[32m+[m[32m                new float[[m
+[32m+[m[32m                        GRID_X * GRID_Y];[m
+[32m+[m
+[32m+[m[32m        int width =[m
+[32m+[m[32m                bitmap.getWidth();[m
+[32m+[m
+[32m+[m[32m        int height =[m
+[32m+[m[32m                bitmap.getHeight();[m
+[32m+[m
+[32m+[m[32m        int cellW =[m
+[32m+[m[32m                Math.max([m
+[32m+[m[32m                        1,[m
+[32m+[m[32m                        width / GRID_X);[m
+[32m+[m
+[32m+[m[32m        int cellH =[m
+[32m+[m[32m                Math.max([m
+[32m+[m[32m                        1,[m
+[32m+[m[32m                        height / GRID_Y);[m
+[32m+[m
+[32m+[m[32m        for (int gy = 0;[m
+[32m+[m[32m             gy < GRID_Y;[m
+[32m+[m[32m             gy++) {[m
+[32m+[m
+[32m+[m[32m            for (int gx = 0;[m
+[32m+[m[32m                 gx < GRID_X;[m
+[32m+[m[32m                 gx++) {[m
+[32m+[m
+[32m+[m[32m                int startX =[m
+[32m+[m[32m                        gx * cellW;[m
+[32m+[m
+[32m+[m[32m                int startY =[m
+[32m+[m[32m                        gy * cellH;[m
+[32m+[m
+[32m+[m[32m                int endX =[m
+[32m+[m[32m                        Math.min([m
+[32m+[m[32m                                width,[m
+[32m+[m[32m                                startX + cellW);[m
+[32m+[m
+[32m+[m[32m                int endY =[m
+[32m+[m[32m                        Math.min([m
+[32m+[m[32m                                height,[m
+[32m+[m[32m                                startY + cellH);[m
+[32m+[m
+[32m+[m[32m                float sum = 0f;[m
+[32m+[m[32m                float textureSum = 0f;[m
+[32m+[m
+[32m+[m[32m                int count = 0;[m
+[32m+[m
+[32m+[m[32m                for (int y = startY;[m
+[32m+[m[32m                     y < endY;[m
+[32m+[m[32m                     y += PIXEL_STEP) {[m
+[32m+[m
+[32m+[m[32m                    for (int x = startX;[m
+[32m+[m[32m                         x < endX;[m
+[32m+[m[32m                         x += PIXEL_STEP) {[m
+[32m+[m
+[32m+[m[32m                        int pixel =[m
+[32m+[m[32m                                bitmap.getPixel([m
+[32m+[m[32m                                        x,[m
+[32m+[m[32m                                        y);[m
+[32m+[m
+[32m+[m[32m                        int r =[m
+[32m+[m[32m                                (pixel >> 16) & 0xff;[m
+[32m+[m
+[32m+[m[32m                        int g =[m
+[32m+[m[32m                                (pixel >> 8) & 0xff;[m
+[32m+[m
+[32m+[m[32m                        int b =[m
+[32m+[m[32m                                pixel & 0xff;[m
+[32m+[m
+[32m+[m[32m                        float gray =[m
+[32m+[m[32m                                (r + g + b)[m
+[32m+[m[32m                                / 765f;[m
+[32m+[m
+[32m+[m[32m                        sum += gray;[m
+[32m+[m
+[32m+[m[32m                        if (x + PIXEL_STEP < endX) {[m
+[32m+[m
+[32m+[m[32m                            int p2 =[m
+[32m+[m[32m                                    bitmap.getPixel([m
+[32m+[m[32m                                            x + PIXEL_STEP,[m
+[32m+[m[32m                                            y);[m
+[32m+[m
+[32m+[m[32m                            int r2 =[m
+[32m+[m[32m                                    (p2 >> 16) & 0xff;[m
+[32m+[m
+[32m+[m[32m                            int g2 =[m
+[32m+[m[32m                                    (p2 >> 8) & 0xff;[m
+[32m+[m
+[32m+[m[32m                            int b2 =[m
+[32m+[m[32m                                    p2 & 0xff;[m
+[32m+[m
+[32m+[m[32m                            float gray2 =[m
+[32m+[m[32m                                    (r2 + g2 + b2)[m
+[32m+[m[32m                                    / 765f;[m
+[32m+[m
+[32m+[m[32m                            textureSum +=[m
+[32m+[m[32m                                    Math.abs([m
+[32m+[m[32m                                            gray -[m
+[32m+[m[32m                                            gray2);[m
+[32m+[m[32m                        }[m
+[32m+[m
+[32m+[m[32m                        count++;[m
+[32m+[m[32m                    }[m
+[32m+[m[32m                }[m
+[32m+[m
+[32m+[m[32m                int index =[m
+[32m+[m[32m                        gy * GRID_X + gx;[m
+[32m+[m
+[32m+[m[32m                brightness[index] =[m
+[32m+[m[32m                        count == 0[m
+[32m+[m[32m                                ? 0f[m
+[32m+[m[32m                                : sum / count;[m
+[32m+[m
+[32m+[m[32m                texture[index] =[m
+[32m+[m[32m                        count == 0[m
+[32m+[m[32m                                ? 0f[m
+[32m+[m[32m                                : textureSum / count;[m
+[32m+[m[32m            }[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m        return new FrameFeature([m
+[32m+[m[32m                timeMs,[m
+[32m+[m[32m                brightness,[m
+[32m+[m[32m                texture);[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    private static float histogramDiff([m
+[32m+[m[32m            float[] a,[m
+[32m+[m[32m            float[] b) {[m
+[32m+[m
+[32m+[m[32m        float sum = 0f;[m
+[32m+[m
+[32m+[m[32m        int n =[m
+[32m+[m[32m                Math.min([m
+[32m+[m[32m                        a.length,[m
+[32m+[m[32m                        b.length);[m
+[32m+[m
+[32m+[m[32m        for (int i = 0;[m
+[32m+[m[32m             i < n;[m
+[32m+[m[32m             i++) {[m
+[32m+[m
+[32m+[m[32m            sum +=[m
+[32m+[m[32m                    Math.abs([m
+[32m+[m[32m                            a[i] - b[i]);[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m        return[m
+[32m+[m[32m                n == 0[m
+[32m+[m[32m                        ? 0f[m
+[32m+[m[32m                        : sum / n;[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    private static JSONObject buildShot([m
+[32m+[m[32m            int shotId,[m
+[32m+[m[32m            ShotBuffer shot)[m
+[32m+[m[32m            throws Exception {[m
+[32m+[m
+[32m+[m[32m        JSONObject result =[m
+[32m+[m[32m                new JSONObject();[m
+[32m+[m
+[32m+[m[32m        result.put([m
+[32m+[m[32m                "shotId",[m
+[32m+[m[32m                shotId);[m
+[32m+[m
+[32m+[m[32m        result.put([m
+[32m+[m[32m                "startMs",[m
+[32m+[m[32m                shot.startMs);[m
+[32m+[m
+[32m+[m[32m        result.put([m
+[32m+[m[32m                "layout",[m
+[32m+[m[32m                classifyLayout(shot));[m
+[32m+[m
+[32m+[m[32m        JSONArray samples =[m
+[32m+[m[32m                new JSONArray();[m
+[32m+[m
+[32m+[m[32m        for (FrameFeature frame :[m
+[32m+[m[32m                shot.frames) {[m
+[32m+[m
+[32m+[m[32m            JSONObject sample =[m
+[32m+[m[32m                    new JSONObject();[m
+[32m+[m
+[32m+[m[32m            sample.put([m
+[32m+[m[32m                    "t",[m
+[32m+[m[32m                    frame.timeMs);[m
+[32m+[m
+[32m+[m[32m            JSONArray brightness =[m
+[32m+[m[32m                    new JSONArray();[m
+[32m+[m
+[32m+[m[32m            for (float v :[m
+[32m+[m[32m                    frame.brightness) {[m
+[32m+[m
+[32m+[m[32m                brightness.put([m
+[32m+[m[32m                        (double) v);[m
+[32m+[m[32m            }[m
+[32m+[m
+[32m+[m[32m            JSONArray texture =[m
+[32m+[m[32m                    new JSONArray();[m
+[32m+[m
+[32m+[m[32m            for (float v :[m
+[32m+[m[32m                    frame.texture) {[m
+[32m+[m
+[32m+[m[32m                texture.put([m
+[32m+[m[32m                        (double) v);[m
+[32m+[m[32m            }[m
+[32m+[m
+[32m+[m[32m            sample.put([m
+[32m+[m[32m                    "brightness",[m
+[32m+[m[32m                    brightness);[m
+[32m+[m
+[32m+[m[32m            sample.put([m
+[32m+[m[32m                    "texture",[m
+[32m+[m[32m                    texture);[m
+[32m+[m
+[32m+[m[32m            samples.put([m
+[32m+[m[32m                    sample);[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m        result.put([m
+[32m+[m[32m                "samples",[m
+[32m+[m[32m                samples);[m
+[32m+[m
+[32m+[m[32m        return result;[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    private static float averageRegion([m
+[32m+[m[32m            List<FrameFeature> frames,[m
+[32m+[m[32m            boolean useTexture,[m
+[32m+[m[32m            int startX,[m
+[32m+[m[32m            int endX) {[m
+[32m+[m
+[32m+[m[32m        if (frames.isEmpty()) return 0f;[m
+[32m+[m
+[32m+[m[32m        double total = 0.0;[m
+[32m+[m[32m        int count = 0;[m
+[32m+[m
+[32m+[m[32m        for (FrameFeature frame : frames) {[m
+[32m+[m
+[32m+[m[32m            float[] data =[m
+[32m+[m[32m                    useTexture[m
+[32m+[m[32m                            ? frame.texture[m
+[32m+[m[32m                            : frame.brightness;[m
+[32m+[m
+[32m+[m[32m            for (int y = 0;[m
+[32m+[m[32m                 y < GRID_Y;[m
+[32m+[m[32m                 y++) {[m
+[32m+[m
+[32m+[m[32m                for (int x = startX;[m
+[32m+[m[32m                     x < endX;[m
+[32m+[m[32m                     x++) {[m
+[32m+[m
+[32m+[m[32m                    total +=[m
+[32m+[m[32m                            data[y * GRID_X + x];[m
+[32m+[m
+[32m+[m[32m                    count++;[m
+[32m+[m[32m                }[m
+[32m+[m[32m            }[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m        return count == 0[m
+[32m+[m[32m                ? 0f[m
+[32m+[m[32m                : (float) (total / count);[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    private static float spatialContrast([m
+[32m+[m[32m            List<FrameFeature> frames,[m
+[32m+[m[32m            int startX,[m
+[32m+[m[32m            int endX) {[m
+[32m+[m
+[32m+[m[32m        if (frames.isEmpty()) return 0f;[m
+[32m+[m
+[32m+[m[32m        double total = 0.0;[m
+[32m+[m[32m        int count = 0;[m
+[32m+[m
+[32m+[m[32m        for (FrameFeature frame : frames) {[m
+[32m+[m
+[32m+[m[32m            float[] texture =[m
+[32m+[m[32m                    frame.texture;[m
+[32m+[m
+[32m+[m[32m            float[] brightness =[m
+[32m+[m[32m                    frame.brightness;[m
+[32m+[m
+[32m+[m[32m            float tex = 0f;[m
+[32m+[m[32m            float bright = 0f;[m
+[32m+[m[32m            int cells = 0;[m
+[32m+[m
+[32m+[m[32m            for (int y = 1;[m
+[32m+[m[32m                 y < GRID_Y - 1;[m
+[32m+[m[32m                 y++) {[m
+[32m+[m
+[32m+[m[32m                for (int x = startX;[m
+[32m+[m[32m                     x < endX;[m
+[32m+[m[32m                     x++) {[m
+[32m+[m
+[32m+[m[32m                    int index =[m
+[32m+[m[32m                            y * GRID_X + x;[m
+[32m+[m
+[32m+[m[32m                    tex += texture[index];[m
+[32m+[m[32m                    bright += brightness[index];[m
+[32m+[m[32m                    cells++;[m
+[32m+[m[32m                }[m
+[32m+[m[32m            }[m
+[32m+[m
+[32m+[m[32m            if (cells > 0) {[m
+[32m+[m
+[32m+[m[32m                float localTexture =[m
+[32m+[m[32m                        tex / cells;[m
+[32m+[m
+[32m+[m[32m                float localBrightness =[m
+[32m+[m[32m                        bright / cells;[m
+[32m+[m
+[32m+[m[32m                /*[m
+[32m+[m[32m                 * Texture diberi bobot lebih besar.[m
+[32m+[m[32m                 * Brightness hanya menjadi sinyal[m
+[32m+[m[32m                 * pendukung, bukan penentu tunggal.[m
+[32m+[m[32m                 */[m
+[32m+[m[32m                float score =[m
+[32m+[m[32m                        localTexture * 0.75f +[m
+[32m+[m[32m                        localBrightness * 0.25f;[m
+[32m+[m
+[32m+[m[32m                total += score;[m
+[32m+[m[32m                count++;[m
+[32m+[m[32m            }[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m        return count == 0[m
+[32m+[m[32m                ? 0f[m
+[32m+[m[32m                : (float) (total / count);[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    private static float temporalConsistency([m
+[32m+[m[32m            List<FrameFeature> frames,[m
+[32m+[m[32m            int startX,[m
+[32m+[m[32m            int endX) {[m
+[32m+[m
+[32m+[m[32m        if (frames.size() < 2) return 0f;[m
+[32m+[m
+[32m+[m[32m        float previous = 0f;[m
+[32m+[m[32m        boolean first = true;[m
+[32m+[m
+[32m+[m[32m        double stability = 0.0;[m
+[32m+[m[32m        int count = 0;[m
+[32m+[m
+[32m+[m[32m        for (FrameFeature frame : frames) {[m
+[32m+[m
+[32m+[m[32m            float current =[m
+[32m+[m[32m                    averageFrameRegion([m
+[32m+[m[32m                            frame,[m
+[32m+[m[32m                            startX,[m
+[32m+[m[32m                            endX);[m
+[32m+[m
+[32m+[m[32m            if (!first) {[m
+[32m+[m
+[32m+[m[32m                float diff =[m
+[32m+[m[32m                        Math.abs([m
+[32m+[m[32m                                current -[m
+[32m+[m[32m                                previous);[m
+[32m+[m
+[32m+[m[32m                float stable =[m
+[32m+[m[32m                        1f -[m
+[32m+[m[32m                        Math.min([m
+[32m+[m[32m                                1f,[m
+[32m+[m[32m                                diff * 5f);[m
+[32m+[m
+[32m+[m[32m                stability += stable;[m
+[32m+[m[32m                count++;[m
+[32m+[m[32m            }[m
+[32m+[m
+[32m+[m[32m            previous = current;[m
+[32m+[m[32m            first = false;[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m        return count == 0[m
+[32m+[m[32m                ? 0f[m
+[32m+[m[32m                : (float) (stability / count);[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    private static float averageFrameRegion([m
+[32m+[m[32m            FrameFeature frame,[m
+[32m+[m[32m            int startX,[m
+[32m+[m[32m            int endX) {[m
+[32m+[m
+[32m+[m[32m        float total = 0f;[m
+[32m+[m[32m        int count = 0;[m
+[32m+[m
+[32m+[m[32m        for (int y = 1;[m
+[32m+[m[32m             y < GRID_Y - 1;[m
+[32m+[m[32m             y++) {[m
+[32m+[m
+[32m+[m[32m            for (int x = startX;[m
+[32m+[m[32m                 x < endX;[m
+[32m+[m[32m                 x++) {[m
+[32m+[m
+[32m+[m[32m                total +=[m
+[32m+[m[32m                        frame.texture[[m
+[32m+[m[32m                                y * GRID_X + x];[m
+[32m+[m
+[32m+[m[32m                count++;[m
+[32m+[m[32m            }[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m        return count == 0[m
+[32m+[m[32m                ? 0f[m
+[32m+[m[32m                : total / count;[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    private static String classifyLayout([m
+[32m+[m[32m            ShotBuffer shot) {[m
+[32m+[m
+[32m+[m[32m        /*[m
+[32m+[m[32m         * AUTO SPLIT CLASSIFIER DISABLED.[m
+[32m+[m[32m         *[m
+[32m+[m[32m         * Shot detection tetap aktif.[m
+[32m+[m[32m         * Layout akan ditentukan manual per-shot.[m
+[32m+[m[32m         *[m
+[32m+[m[32m         * Jangan gunakan brightness/texture untuk[m
+[32m+[m[32m         * menentukan SPLIT karena dapat menghasilkan[m
+[32m+[m[32m         * false-positive pada close-up, pakaian gelap,[m
+[32m+[m[32m         * bayangan, dan background.[m
+[32m+[m[32m         */[m
+[32m+[m
+[32m+[m[32m        Log.i([m
+[32m+[m[32m                TAG,[m
+[32m+[m[32m                "Shot layout -> UNCLASSIFIED");[m
+[32m+[m
+[32m+[m[32m        return "unclassified";[m
+[32m+[m[32m    }[m
+[32m+[m[32m}[m
+[1mdiff --git a/app/src/main/java/com/example/smartcropapp/core/Pass1Extractor.java.bak_manual_layout b/app/src/main/java/com/example/smartcropapp/core/Pass1Extractor.java.bak_manual_layout[m
+[1mnew file mode 100644[m
+[1mindex 0000000..370c2e3[m
+[1m--- /dev/null[m
+[1m+++ b/app/src/main/java/com/example/smartcropapp/core/Pass1Extractor.java.bak_manual_layout[m
+[36m@@ -0,0 +1,938 @@[m
+[32m+[m[32mpackage com.example.smartcropapp.core;[m
+[32m+[m
+[32m+[m[32mimport android.content.Context;[m
+[32m+[m[32mimport android.graphics.Bitmap;[m
+[32m+[m[32mimport android.media.MediaMetadataRetriever;[m
+[32m+[m[32mimport android.net.Uri;[m
+[32m+[m[32mimport android.util.Log;[m
+[32m+[m
+[32m+[m[32mimport org.json.JSONArray;[m
+[32m+[m[32mimport org.json.JSONObject;[m
+[32m+[m
+[32m+[m[32mimport java.io.File;[m
+[32m+[m[32mimport java.io.FileOutputStream;[m
+[32m+[m[32mimport java.util.ArrayList;[m
+[32m+[m[32mimport java.util.List;[m
+[32m+[m
+[32m+[m[32mpublic class Pass1Extractor {[m
+[32m+[m
+[32m+[m[32m    private static final String TAG = "Pass1Extractor";[m
+[32m+[m
+[32m+[m[32m    private static final long INTERVAL_US = 500_000L;[m
+[32m+[m
+[32m+[m[32m    private static final int GRID_X = 12;[m
+[32m+[m[32m    private static final int GRID_Y = 8;[m
+[32m+[m[32m    private static final int PIXEL_STEP = 4;[m
+[32m+[m
+[32m+[m[32m    private static final float CUT_THRESHOLD = 0.12f;[m
+[32m+[m
+[32m+[m[32m    private static final float WINDOW_START = 0.20f;[m
+[32m+[m[32m    private static final float WINDOW_END = 0.80f;[m
+[32m+[m
+[32m+[m[32m    private static final float SPLIT_THRESHOLD = 0.58f;[m
+[32m+[m[32m    private static final float MIN_SIDE_ACTIVITY = 0.03f;[m
+[32m+[m[32m    private static final float MAX_CENTER_DOMINANCE = 0.85f;[m
+[32m+[m[32m    private static final float MIN_BALANCE = 0.30f;[m
+[32m+[m[32m    private static final float MIN_STABILITY = 0.30f;[m
+[32m+[m
+[32m+[m[32m    private static class FrameFeature {[m
+[32m+[m[32m        long timeMs;[m
+[32m+[m[32m        float[] brightness;[m
+[32m+[m[32m        float[] texture;[m
+[32m+[m
+[32m+[m[32m        FrameFeature(long timeMs, float[] brightness, float[] texture) {[m
+[32m+[m[32m            this.timeMs = timeMs;[m
+[32m+[m[32m            this.brightness = brightness;[m
+[32m+[m[32m            this.texture = texture;[m
+[32m+[m[32m        }[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    private static class ShotBuffer {[m
+[32m+[m[32m        long startMs;[m
+[32m+[m[32m        List<FrameFeature> frames = new ArrayList<>();[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    public static File extract([m
+[32m+[m[32m            Context context,[m
+[32m+[m[32m            Uri sourceVideoUri,[m
+[32m+[m[32m            File outputFile) {[m
+[32m+[m
+[32m+[m[32m        MediaMetadataRetriever retriever =[m
+[32m+[m[32m                new MediaMetadataRetriever();[m
+[32m+[m
+[32m+[m[32m        try {[m
+[32m+[m[32m            Log.i(TAG,[m
+[32m+[m[32m                    "PASS1 START: shot boundary + spatial layout analysis");[m
+[32m+[m
+[32m+[m[32m            retriever.setDataSource([m
+[32m+[m[32m                    context,[m
+[32m+[m[32m                    sourceVideoUri);[m
+[32m+[m
+[32m+[m[32m            long durationMs = 0;[m
+[32m+[m
+[32m+[m[32m            String duration =[m
+[32m+[m[32m                    retriever.extractMetadata([m
+[32m+[m[32m                            MediaMetadataRetriever.METADATA_KEY_DURATION);[m
+[32m+[m
+[32m+[m[32m            if (duration != null) {[m
+[32m+[m[32m                durationMs = Long.parseLong(duration);[m
+[32m+[m[32m            }[m
+[32m+[m
+[32m+[m[32m            if (durationMs <= 0) {[m
+[32m+[m[32m                durationMs = 10_000;[m
+[32m+[m[32m            }[m
+[32m+[m
+[32m+[m[32m            long durationUs =[m
+[32m+[m[32m                    durationMs * 1000L;[m
+[32m+[m
+[32m+[m[32m            JSONArray shots =[m
+[32m+[m[32m                    new JSONArray();[m
+[32m+[m
+[32m+[m[32m            ShotBuffer current =[m
+[32m+[m[32m                    new ShotBuffer();[m
+[32m+[m
+[32m+[m[32m            current.startMs = 0;[m
+[32m+[m
+[32m+[m[32m            float[] previousBrightness = null;[m
+[32m+[m
+[32m+[m[32m            int shotId = 0;[m
+[32m+[m
+[32m+[m[32m            for (long timeUs = 0;[m
+[32m+[m[32m                 timeUs <= durationUs;[m
+[32m+[m[32m                 timeUs += INTERVAL_US) {[m
+[32m+[m
+[32m+[m[32m                Bitmap bitmap =[m
+[32m+[m[32m                        retriever.getFrameAtTime([m
+[32m+[m[32m                                timeUs,[m
+[32m+[m[32m                                MediaMetadataRetriever[m
+[32m+[m[32m                                        .OPTION_CLOSEST);[m
+[32m+[m
+[32m+[m[32m                if (bitmap == null) {[m
+[32m+[m[32m                    continue;[m
+[32m+[m[32m                }[m
+[32m+[m
+[32m+[m[32m                FrameFeature feature =[m
+[32m+[m[32m                        analyzeFrame([m
+[32m+[m[32m                                bitmap,[m
+[32m+[m[32m                                timeUs / 1000L);[m
+[32m+[m
+[32m+[m[32m                if (previousBrightness != null) {[m
+[32m+[m
+[32m+[m[32m                    float diff =[m
+[32m+[m[32m                            histogramDiff([m
+[32m+[m[32m                                    previousBrightness,[m
+[32m+[m[32m                                    feature.brightness);[m
+[32m+[m
+[32m+[m[32m                    if (diff > CUT_THRESHOLD) {[m
+[32m+[m
+[32m+[m[32m                        if (!current.frames.isEmpty()) {[m
+[32m+[m
+[32m+[m[32m                            shots.put([m
+[32m+[m[32m                                    buildShot([m
+[32m+[m[32m                                            shotId,[m
+[32m+[m[32m                                            current));[m
+[32m+[m
+[32m+[m[32m                            shotId++;[m
+[32m+[m[32m                        }[m
+[32m+[m
+[32m+[m[32m                        current =[m
+[32m+[m[32m                                new ShotBuffer();[m
+[32m+[m
+[32m+[m[32m                        current.startMs =[m
+[32m+[m[32m                                feature.timeMs;[m
+[32m+[m
+[32m+[m[32m                        Log.i([m
+[32m+[m[32m                                TAG,[m
+[32m+[m[32m                                "CUT t=" +[m
+[32m+[m[32m                                feature.timeMs +[m
+[32m+[m[32m                                " diff=" +[m
+[32m+[m[32m                                diff);[m
+[32m+[m[32m                    }[m
+[32m+[m[32m                }[m
+[32m+[m
+[32m+[m[32m                current.frames.add(feature);[m
+[32m+[m
+[32m+[m[32m                previousBrightness =[m
+[32m+[m[32m                        feature.brightness;[m
+[32m+[m
+[32m+[m[32m                bitmap.recycle();[m
+[32m+[m[32m            }[m
+[32m+[m
+[32m+[m[32m            if (!current.frames.isEmpty()) {[m
+[32m+[m
+[32m+[m[32m                shots.put([m
+[32m+[m[32m                        buildShot([m
+[32m+[m[32m                                shotId,[m
+[32m+[m[32m                                current));[m
+[32m+[m[32m            }[m
+[32m+[m
+[32m+[m[32m            JSONObject root =[m
+[32m+[m[32m                    new JSONObject();[m
+[32m+[m
+[32m+[m[32m            root.put([m
+[32m+[m[32m                    "version",[m
+[32m+[m[32m                    2);[m
+[32m+[m
+[32m+[m[32m            root.put([m
+[32m+[m[32m                    "shots",[m
+[32m+[m[32m                    shots);[m
+[32m+[m
+[32m+[m[32m            try (FileOutputStream fos =[m
+[32m+[m[32m                         new FileOutputStream(outputFile)) {[m
+[32m+[m
+[32m+[m[32m                fos.write([m
+[32m+[m[32m                        root.toString()[m
+[32m+[m[32m                                .getBytes("UTF-8"));[m
+[32m+[m[32m            }[m
+[32m+[m
+[32m+[m[32m            Log.i([m
+[32m+[m[32m                    TAG,[m
+[32m+[m[32m                    "PASS1 DONE shots=" +[m
+[32m+[m[32m                    shots.length());[m
+[32m+[m
+[32m+[m[32m            return outputFile;[m
+[32m+[m
+[32m+[m[32m        } catch (Exception e) {[m
+[32m+[m
+[32m+[m[32m            Log.e([m
+[32m+[m[32m                    TAG,[m
+[32m+[m[32m                    "PASS1 FAILED",[m
+[32m+[m[32m                    e);[m
+[32m+[m
+[32m+[m[32m            throw new RuntimeException([m
+[32m+[m[32m                    "Pass 1 gagal: " +[m
+[32m+[m[32m                    e.getMessage(),[m
+[32m+[m[32m                    e);[m
+[32m+[m
+[32m+[m[32m        } finally {[m
+[32m+[m
+[32m+[m[32m            try {[m
+[32m+[m[32m                retriever.release();[m
+[32m+[m[32m            } catch (Exception ignored) {[m
+[32m+[m[32m            }[m
+[32m+[m[32m        }[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    private static FrameFeature analyzeFrame([m
+[32m+[m[32m            Bitmap bitmap,[m
+[32m+[m[32m            long timeMs) {[m
+[32m+[m
+[32m+[m[32m        float[] brightness =[m
+[32m+[m[32m                new float[[m
+[32m+[m[32m                        GRID_X * GRID_Y];[m
+[32m+[m
+[32m+[m[32m        float[] texture =[m
+[32m+[m[32m                new float[[m
+[32m+[m[32m                        GRID_X * GRID_Y];[m
+[32m+[m
+[32m+[m[32m        int width =[m
+[32m+[m[32m                bitmap.getWidth();[m
+[32m+[m
+[32m+[m[32m        int height =[m
+[32m+[m[32m                bitmap.getHeight();[m
+[32m+[m
+[32m+[m[32m        int cellW =[m
+[32m+[m[32m                Math.max([m
+[32m+[m[32m                        1,[m
+[32m+[m[32m                        width / GRID_X);[m
+[32m+[m
+[32m+[m[32m        int cellH =[m
+[32m+[m[32m                Math.max([m
+[32m+[m[32m                        1,[m
+[32m+[m[32m                        height / GRID_Y);[m
+[32m+[m
+[32m+[m[32m        for (int gy = 0;[m
+[32m+[m[32m             gy < GRID_Y;[m
+[32m+[m[32m             gy++) {[m
+[32m+[m
+[32m+[m[32m            for (int gx = 0;[m
+[32m+[m[32m                 gx < GRID_X;[m
+[32m+[m[32m                 gx++) {[m
+[32m+[m
+[32m+[m[32m                int startX =[m
+[32m+[m[32m                        gx * cellW;[m
+[32m+[m
+[32m+[m[32m                int startY =[m
+[32m+[m[32m                        gy * cellH;[m
+[32m+[m
+[32m+[m[32m                int endX =[m
+[32m+[m[32m                        Math.min([m
+[32m+[m[32m                                width,[m
+[32m+[m[32m                                startX + cellW);[m
+[32m+[m
+[32m+[m[32m                int endY =[m
+[32m+[m[32m                        Math.min([m
+[32m+[m[32m                                height,[m
+[32m+[m[32m                                startY + cellH);[m
+[32m+[m
+[32m+[m[32m                float sum = 0f;[m
+[32m+[m[32m                float textureSum = 0f;[m
+[32m+[m
+[32m+[m[32m                int count = 0;[m
+[32m+[m
+[32m+[m[32m                for (int y = startY;[m
+[32m+[m[32m                     y < endY;[m
+[32m+[m[32m                     y += PIXEL_STEP) {[m
+[32m+[m
+[32m+[m[32m                    for (int x = startX;[m
+[32m+[m[32m                         x < endX;[m
+[32m+[m[32m                         x += PIXEL_STEP) {[m
+[32m+[m
+[32m+[m[32m                        int pixel =[m
+[32m+[m[32m                                bitmap.getPixel([m
+[32m+[m[32m                                        x,[m
+[32m+[m[32m                                        y);[m
+[32m+[m
+[32m+[m[32m                        int r =[m
+[32m+[m[32m                                (pixel >> 16) & 0xff;[m
+[32m+[m
+[32m+[m[32m                        int g =[m
+[32m+[m[32m                                (pixel >> 8) & 0xff;[m
+[32m+[m
+[32m+[m[32m                        int b =[m
+[32m+[m[32m                                pixel & 0xff;[m
+[32m+[m
+[32m+[m[32m                        float gray =[m
+[32m+[m[32m                                (r + g + b)[m
+[32m+[m[32m                                / 765f;[m
+[32m+[m
+[32m+[m[32m                        sum += gray;[m
+[32m+[m
+[32m+[m[32m                        if (x + PIXEL_STEP < endX) {[m
+[32m+[m
+[32m+[m[32m                            int p2 =[m
+[32m+[m[32m                                    bitmap.getPixel([m
+[32m+[m[32m                                            x + PIXEL_STEP,[m
+[32m+[m[32m                                            y);[m
+[32m+[m
+[32m+[m[32m                            int r2 =[m
+[32m+[m[32m                                    (p2 >> 16) & 0xff;[m
+[32m+[m
+[32m+[m[32m                            int g2 =[m
+[32m+[m[32m                                    (p2 >> 8) & 0xff;[m
+[32m+[m
+[32m+[m[32m                            int b2 =[m
+[32m+[m[32m                                    p2 & 0xff;[m
+[32m+[m
+[32m+[m[32m                            float gray2 =[m
+[32m+[m[32m                                    (r2 + g2 + b2)[m
+[32m+[m[32m                                    / 765f;[m
+[32m+[m
+[32m+[m[32m                            textureSum +=[m
+[32m+[m[32m                                    Math.abs([m
+[32m+[m[32m                                            gray -[m
+[32m+[m[32m                                            gray2);[m
+[32m+[m[32m                        }[m
+[32m+[m
+[32m+[m[32m                        count++;[m
+[32m+[m[32m                    }[m
+[32m+[m[32m                }[m
+[32m+[m
+[32m+[m[32m                int index =[m
+[32m+[m[32m                        gy * GRID_X + gx;[m
+[32m+[m
+[32m+[m[32m                brightness[index] =[m
+[32m+[m[32m                        count == 0[m
+[32m+[m[32m                                ? 0f[m
+[32m+[m[32m                                : sum / count;[m
+[32m+[m
+[32m+[m[32m                texture[index] =[m
+[32m+[m[32m                        count == 0[m
+[32m+[m[32m                                ? 0f[m
+[32m+[m[32m                                : textureSum / count;[m
+[32m+[m[32m            }[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m        return new FrameFeature([m
+[32m+[m[32m                timeMs,[m
+[32m+[m[32m                brightness,[m
+[32m+[m[32m                texture);[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    private static float histogramDiff([m
+[32m+[m[32m            float[] a,[m
+[32m+[m[32m            float[] b) {[m
+[32m+[m
+[32m+[m[32m        float sum = 0f;[m
+[32m+[m
+[32m+[m[32m        int n =[m
+[32m+[m[32m                Math.min([m
+[32m+[m[32m                        a.length,[m
+[32m+[m[32m                        b.length);[m
+[32m+[m
+[32m+[m[32m        for (int i = 0;[m
+[32m+[m[32m             i < n;[m
+[32m+[m[32m             i++) {[m
+[32m+[m
+[32m+[m[32m            sum +=[m
+[32m+[m[32m                    Math.abs([m
+[32m+[m[32m                            a[i] - b[i]);[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m        return[m
+[32m+[m[32m                n == 0[m
+[32m+[m[32m                        ? 0f[m
+[32m+[m[32m                        : sum / n;[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    private static JSONObject buildShot([m
+[32m+[m[32m            int shotId,[m
+[32m+[m[32m            ShotBuffer shot)[m
+[32m+[m[32m            throws Exception {[m
+[32m+[m
+[32m+[m[32m        JSONObject result =[m
+[32m+[m[32m                new JSONObject();[m
+[32m+[m
+[32m+[m[32m        result.put([m
+[32m+[m[32m                "shotId",[m
+[32m+[m[32m                shotId);[m
+[32m+[m
+[32m+[m[32m        result.put([m
+[32m+[m[32m                "startMs",[m
+[32m+[m[32m                shot.startMs);[m
+[32m+[m
+[32m+[m[32m        result.put([m
+[32m+[m[32m                "layout",[m
+[32m+[m[32m                classifyLayout(shot));[m
+[32m+[m
+[32m+[m[32m        JSONArray samples =[m
+[32m+[m[32m                new JSONArray();[m
+[32m+[m
+[32m+[m[32m        for (FrameFeature frame :[m
+[32m+[m[32m                shot.frames) {[m
+[32m+[m
+[32m+[m[32m            JSONObject sample =[m
+[32m+[m[32m                    new JSONObject();[m
+[32m+[m
+[32m+[m[32m            sample.put([m
+[32m+[m[32m                    "t",[m
+[32m+[m[32m                    frame.timeMs);[m
+[32m+[m
+[32m+[m[32m            JSONArray brightness =[m
+[32m+[m[32m                    new JSONArray();[m
+[32m+[m
+[32m+[m[32m            for (float v :[m
+[32m+[m[32m                    frame.brightness) {[m
+[32m+[m
+[32m+[m[32m                brightness.put([m
+[32m+[m[32m                        (double) v);[m
+[32m+[m[32m            }[m
+[32m+[m
+[32m+[m[32m            JSONArray texture =[m
+[32m+[m[32m                    new JSONArray();[m
+[32m+[m
+[32m+[m[32m            for (float v :[m
+[32m+[m[32m                    frame.texture) {[m
+[32m+[m
+[32m+[m[32m                texture.put([m
+[32m+[m[32m                        (double) v);[m
+[32m+[m[32m            }[m
+[32m+[m
+[32m+[m[32m            sample.put([m
+[32m+[m[32m                    "brightness",[m
+[32m+[m[32m                    brightness);[m
+[32m+[m
+[32m+[m[32m            sample.put([m
+[32m+[m[32m                    "texture",[m
+[32m+[m[32m                    texture);[m
+[32m+[m
+[32m+[m[32m            samples.put([m
+[32m+[m[32m                    sample);[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m        result.put([m
+[32m+[m[32m                "samples",[m
+[32m+[m[32m                samples);[m
+[32m+[m
+[32m+[m[32m        return result;[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    private static float averageRegion([m
+[32m+[m[32m            List<FrameFeature> frames,[m
+[32m+[m[32m            boolean useTexture,[m
+[32m+[m[32m            int startX,[m
+[32m+[m[32m            int endX) {[m
+[32m+[m
+[32m+[m[32m        if (frames.isEmpty()) return 0f;[m
+[32m+[m
+[32m+[m[32m        double total = 0.0;[m
+[32m+[m[32m        int count = 0;[m
+[32m+[m
+[32m+[m[32m        for (FrameFeature frame : frames) {[m
+[32m+[m
+[32m+[m[32m            float[] data =[m
+[32m+[m[32m                    useTexture[m
+[32m+[m[32m                            ? frame.texture[m
+[32m+[m[32m                            : frame.brightness;[m
+[32m+[m
+[32m+[m[32m            for (int y = 0;[m
+[32m+[m[32m                 y < GRID_Y;[m
+[32m+[m[32m                 y++) {[m
+[32m+[m
+[32m+[m[32m                for (int x = startX;[m
+[32m+[m[32m                     x < endX;[m
+[32m+[m[32m                     x++) {[m
+[32m+[m
+[32m+[m[32m                    total +=[m
+[32m+[m[32m                            data[y * GRID_X + x];[m
+[32m+[m
+[32m+[m[32m                    count++;[m
+[32m+[m[32m                }[m
+[32m+[m[32m            }[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m        return count == 0[m
+[32m+[m[32m                ? 0f[m
+[32m+[m[32m                : (float) (total / count);[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    private static float spatialContrast([m
+[32m+[m[32m            List<FrameFeature> frames,[m
+[32m+[m[32m            int startX,[m
+[32m+[m[32m            int endX) {[m
+[32m+[m
+[32m+[m[32m        if (frames.isEmpty()) return 0f;[m
+[32m+[m
+[32m+[m[32m        double total = 0.0;[m
+[32m+[m[32m        int count = 0;[m
+[32m+[m
+[32m+[m[32m        for (FrameFeature frame : frames) {[m
+[32m+[m
+[32m+[m[32m            float[] texture =[m
+[32m+[m[32m                    frame.texture;[m
+[32m+[m
+[32m+[m[32m            float[] brightness =[m
+[32m+[m[32m                    frame.brightness;[m
+[32m+[m
+[32m+[m[32m            float tex = 0f;[m
+[32m+[m[32m            float bright = 0f;[m
+[32m+[m[32m            int cells = 0;[m
+[32m+[m
+[32m+[m[32m            for (int y = 1;[m
+[32m+[m[32m                 y < GRID_Y - 1;[m
+[32m+[m[32m                 y++) {[m
+[32m+[m
+[32m+[m[32m                for (int x = startX;[m
+[32m+[m[32m                     x < endX;[m
+[32m+[m[32m                     x++) {[m
+[32m+[m
+[32m+[m[32m                    int index =[m
+[32m+[m[32m                            y * GRID_X + x;[m
+[32m+[m
+[32m+[m[32m                    tex += texture[index];[m
+[32m+[m[32m                    bright += brightness[index];[m
+[32m+[m[32m                    cells++;[m
+[32m+[m[32m                }[m
+[32m+[m[32m            }[m
+[32m+[m
+[32m+[m[32m            if (cells > 0) {[m
+[32m+[m
+[32m+[m[32m                float localTexture =[m
+[32m+[m[32m                        tex / cells;[m
+[32m+[m
+[32m+[m[32m                float localBrightness =[m
+[32m+[m[32m                        bright / cells;[m
+[32m+[m
+[32m+[m[32m                /*[m
+[32m+[m[32m                 * Texture diberi bobot lebih besar.[m
+[32m+[m[32m                 * Brightness hanya menjadi sinyal[m
+[32m+[m[32m                 * pendukung, bukan penentu tunggal.[m
+[32m+[m[32m                 */[m
+[32m+[m[32m                float score =[m
+[32m+[m[32m                        localTexture * 0.75f +[m
+[32m+[m[32m                        localBrightness * 0.25f;[m
+[32m+[m
+[32m+[m[32m                total += score;[m
+[32m+[m[32m                count++;[m
+[32m+[m[32m            }[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m        return count == 0[m
+[32m+[m[32m                ? 0f[m
+[32m+[m[32m                : (float) (total / count);[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    private static float temporalConsistency([m
+[32m+[m[32m            List<FrameFeature> frames,[m
+[32m+[m[32m            int startX,[m
+[32m+[m[32m            int endX) {[m
+[32m+[m
+[32m+[m[32m        if (frames.size() < 2) return 0f;[m
+[32m+[m
+[32m+[m[32m        float previous = 0f;[m
+[32m+[m[32m        boolean first = true;[m
+[32m+[m
+[32m+[m[32m        double stability = 0.0;[m
+[32m+[m[32m        int count = 0;[m
+[32m+[m
+[32m+[m[32m        for (FrameFeature frame : frames) {[m
+[32m+[m
+[32m+[m[32m            float current =[m
+[32m+[m[32m                    averageFrameRegion([m
+[32m+[m[32m                            frame,[m
+[32m+[m[32m                            startX,[m
+[32m+[m[32m                            endX);[m
+[32m+[m
+[32m+[m[32m            if (!first) {[m
+[32m+[m
+[32m+[m[32m                float diff =[m
+[32m+[m[32m                        Math.abs([m
+[32m+[m[32m                                current -[m
+[32m+[m[32m                                previous);[m
+[32m+[m
+[32m+[m[32m                float stable =[m
+[32m+[m[32m                        1f -[m
+[32m+[m[32m                        Math.min([m
+[32m+[m[32m                                1f,[m
+[32m+[m[32m                                diff * 5f);[m
+[32m+[m
+[32m+[m[32m                stability += stable;[m
+[32m+[m[32m                count++;[m
+[32m+[m[32m            }[m
+[32m+[m
+[32m+[m[32m            previous = current;[m
+[32m+[m[32m            first = false;[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m        return count == 0[m
+[32m+[m[32m                ? 0f[m
+[32m+[m[32m                : (float) (stability / count);[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    private static float averageFrameRegion([m
+[32m+[m[32m            FrameFeature frame,[m
+[32m+[m[32m            int startX,[m
+[32m+[m[32m            int endX) {[m
+[32m+[m
+[32m+[m[32m        float total = 0f;[m
+[32m+[m[32m        int count = 0;[m
+[32m+[m
+[32m+[m[32m        for (int y = 1;[m
+[32m+[m[32m             y < GRID_Y - 1;[m
+[32m+[m[32m             y++) {[m
+[32m+[m
+[32m+[m[32m            for (int x = startX;[m
+[32m+[m[32m                 x < endX;[m
+[32m+[m[32m                 x++) {[m
+[32m+[m
+[32m+[m[32m                total +=[m
+[32m+[m[32m                        frame.texture[[m
+[32m+[m[32m                                y * GRID_X + x];[m
+[32m+[m
+[32m+[m[32m                count++;[m
+[32m+[m[32m            }[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m        return count == 0[m
+[32m+[m[32m                ? 0f[m
+[32m+[m[32m                : total / count;[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    private static String classifyLayout([m
+[32m+[m[32m            ShotBuffer shot) {[m
+[32m+[m
+[32m+[m[32m        int n =[m
+[32m+[m[32m                shot.frames.size();[m
+[32m+[m
+[32m+[m[32m        if (n < 2) {[m
+[32m+[m[32m            Log.i([m
+[32m+[m[32m                    TAG,[m
+[32m+[m[32m                    "Shot terlalu pendek -> SINGLE");[m
+[32m+[m
+[32m+[m[32m            return "single";[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m        int start =[m
+[32m+[m[32m                Math.max([m
+[32m+[m[32m                        0,[m
+[32m+[m[32m                        (int) (n * WINDOW_START));[m
+[32m+[m
+[32m+[m[32m        int end =[m
+[32m+[m[32m                Math.min([m
+[32m+[m[32m                        n,[m
+[32m+[m[32m                        Math.max([m
+[32m+[m[32m                                start + 1,[m
+[32m+[m[32m                                (int) (n * WINDOW_END)));[m
+[32m+[m
+[32m+[m[32m        List<FrameFeature> window =[m
+[32m+[m[32m                shot.frames.subList([m
+[32m+[m[32m                        start,[m
+[32m+[m[32m                        end);[m
+[32m+[m
+[32m+[m[32m        /*[m
+[32m+[m[32m         * 12 kolom dibagi menjadi:[m
+[32m+[m[32m         *[m
+[32m+[m[32m         * LEFT   = 0..3[m
+[32m+[m[32m         * CENTER = 4..7[m
+[32m+[m[32m         * RIGHT  = 8..11[m
+[32m+[m[32m         *[m
+[32m+[m[32m         * Kita sengaja memakai area tengah[m
+[32m+[m[32m         * yang cukup lebar agar tidak tertipu[m
+[32m+[m[32m         * oleh satu-dua piksel/objek.[m
+[32m+[m[32m         */[m
+[32m+[m
+[32m+[m[32m        float left =[m
+[32m+[m[32m                spatialContrast([m
+[32m+[m[32m                        window,[m
+[32m+[m[32m                        0,[m
+[32m+[m[32m                        4);[m
+[32m+[m
+[32m+[m[32m        float center =[m
+[32m+[m[32m                spatialContrast([m
+[32m+[m[32m                        window,[m
+[32m+[m[32m                        4,[m
+[32m+[m[32m                        8);[m
+[32m+[m
+[32m+[m[32m        float right =[m
+[32m+[m[32m                spatialContrast([m
+[32m+[m[32m                        window,[m
+[32m+[m[32m                        8,[m
+[32m+[m[32m                        12);[m
+[32m+[m
+[32m+[m[32m        float leftBright =[m
+[32m+[m[32m                averageRegion([m
+[32m+[m[32m                        window,[m
+[32m+[m[32m                        false,[m
+[32m+[m[32m                        0,[m
+[32m+[m[32m                        4);[m
+[32m+[m
+[32m+[m[32m        float centerBright =[m
+[32m+[m[32m                averageRegion([m
+[32m+[m[32m                        window,[m
+[32m+[m[32m                        false,[m
+[32m+[m[32m                        4,[m
+[32m+[m[32m                        8);[m
+[32m+[m
+[32m+[m[32m        float rightBright =[m
+[32m+[m[32m                averageRegion([m
+[32m+[m[32m                        window,[m
+[32m+[m[32m                        false,[m
+[32m+[m[32m                        8,[m
+[32m+[m[32m                        12);[m
+[32m+[m
+[32m+[m[32m        float leftStable =[m
+[32m+[m[32m                temporalConsistency([m
+[32m+[m[32m                        window,[m
+[32m+[m[32m                        0,[m
+[32m+[m[32m                        4);[m
+[32m+[m
+[32m+[m[32m        float rightStable =[m
+[32m+[m[32m                temporalConsistency([m
+[32m+[m[32m                        window,[m
+[32m+[m[32m                        8,[m
+[32m+[m[32m                        12);[m
+[32m+[m
+[32m+[m[32m        float sideScore =[m
+[32m+[m[32m                (left + right) * 0.5f;[m
+[32m+[m
+[32m+[m[32m        /*[m
+[32m+[m[32m         * IMPORTANT:[m
+[32m+[m[32m         *[m
+[32m+[m[32m         * Jangan menganggap background terang =[m
+[32m+[m[32m         * subjek.[m
+[32m+[m[32m         *[m
+[32m+[m[32m         * Kita lebih tertarik pada PERBEDAAN[m
+[32m+[m[32m         * struktur antar wilayah.[m
+[32m+[m[32m         */[m
+[32m+[m
+[32m+[m[32m        float centerRatio =[m
+[32m+[m[32m                center /[m
+[32m+[m[32m                Math.max([m
+[32m+[m[32m                        0.0001f,[m
+[32m+[m[32m                        sideScore);[m
+[32m+[m
+[32m+[m[32m        boolean sidesActive =[m
+[32m+[m[32m                left >= MIN_SIDE_ACTIVITY &&[m
+[32m+[m[32m                right >= MIN_SIDE_ACTIVITY;[m
+[32m+[m
+[32m+[m[32m        boolean centerNotDominant =[m
+[32m+[m[32m                centerRatio <=[m
+[32m+[m[32m                MAX_CENTER_DOMINANCE;[m
+[32m+[m
+[32m+[m[32m        float balance =[m
+[32m+[m[32m                1f -[m
+[32m+[m[32m                Math.min([m
+[32m+[m[32m                        1f,[m
+[32m+[m[32m                        Math.abs(left - right) /[m
+[32m+[m[32m                        Math.max([m
+[32m+[m[32m                                0.0001f,[m
+[32m+[m[32m                                left + right));[m
+[32m+[m
+[32m+[m[32m        float stability =[m
+[32m+[m[32m                (leftStable +[m
+[32m+[m[32m                 rightStable) * 0.5f;[m
+[32m+[m
+[32m+[m[32m        /*[m
+[32m+[m[32m         * Relative contrast.[m
+[32m+[m[32m         *[m
+[32m+[m[32m         * Ini membuat detector tidak terlalu[m
+[32m+[m[32m         * bergantung pada warna/background global.[m
+[32m+[m[32m         */[m
+[32m+[m
+[32m+[m[32m        float leftVsCenter =[m
+[32m+[m[32m                left /[m
+[32m+[m[32m                Math.max([m
+[32m+[m[32m                        0.0001f,[m
+[32m+[m[32m                        center);[m
+[32m+[m
+[32m+[m[32m        float rightVsCenter =[m
+[32m+[m[32m                right /[m
+[32m+[m[32m                Math.max([m
+[32m+[m[32m                        0.0001f,[m
+[32m+[m[32m                        center);[m
+[32m+[m
+[32m+[m[32m        float separation =[m
+[32m+[m[32m                Math.min([m
+[32m+[m[32m                        2f,[m
+[32m+[m[32m                        (leftVsCenter +[m
+[32m+[m[32m                         rightVsCenter) * 0.5f);[m
+[32m+[m
+[32m+[m[32m        float splitScore =[m
+[32m+[m[32m                sideScore * 2.0f[m
+[32m+[m[32m                + balance * 0.30f[m
+[32m+[m[32m                + stability * 0.35f[m
+[32m+[m[32m                + separation * 0.15f[m
+[32m+[m[32m                - Math.max([m
+[32m+[m[32m                        0f,[m
+[32m+[m[32m                        centerRatio - 1f)[m
+[32m+[m[32m                  * 0.60f;[m
+[32m+[m
+[32m+[m[32m        Log.i([m
+[32m+[m[32m                TAG,[m
+[32m+[m[32m                "Shot adaptive:" +[m
+[32m+[m[32m                " sideScore=" + sideScore +[m
+[32m+[m[32m                " centerRatio=" + centerRatio +[m
+[32m+[m[32m                " separation=" + separation +[m
+[32m+[m[32m                " sidesActive=" + sidesActive +[m
+[32m+[m[32m                " centerOK=" + centerNotDominant);[m
+[32m+[m
+[32m+[m[32m        boolean leftStrong =[m
+[32m+[m[32m                left >= MIN_SIDE_ACTIVITY;[m
+[32m+[m
+[32m+[m[32m        boolean rightStrong =[m
+[32m+[m[32m                right >= MIN_SIDE_ACTIVITY;[m
+[32m+[m
+[32m+[m[32m        boolean balancedEnough =[m
+[32m+[m[32m                balance >= MIN_BALANCE;[m
+[32m+[m
+[32m+[m[32m        boolean stableEnough =[m
+[32m+[m[32m                stability >= MIN_STABILITY;[m
+[32m+[m
+[32m+[m[32m        Log.i([m
+[32m+[m[32m                TAG,[m
+[32m+[m[32m                "SHOT_DIAGNOSTIC " +[m
+[32m+[m[32m                "start=" + shot.startMs +[m
+[32m+[m[32m                " L=" + left +[m
+[32m+[m[32m                " C=" + center +[m
+[32m+[m[32m                " R=" + right +[m
+[32m+[m[32m                " Lstrong=" + leftStrong +[m
+[32m+[m[32m                " Rstrong=" + rightStrong +[m
+[32m+[m[32m                " balance=" + balance +[m
+[32m+[m[32m                " stable=" + stability +[m
+[32m+[m[32m                " centerRatio=" + centerRatio +[m
+[32m+[m[32m                " separation=" + separation +[m
+[32m+[m[32m                " score=" + splitScore);[m
+[32m+[m
+[32m+[m[32m        /*[m
+[32m+[m[32m         * Background Guard:[m
+[32m+[m[32m         *[m
+[32m+[m[32m         * Background yang seragam biasanya mempunyai[m
+[32m+[m[32m         * texture rendah dan relatif stabil.[m
+[32m+[m[32m         *[m
+[32m+[m[32m         * Jika kiri + kanan sama-sama tidak aktif,[m
+[32m+[m[32m         * jangan pernah memaksakan SPLIT.[m
+[32m+[m[32m         */[m
+[32m+[m
+[32m+[m[32m        if (!leftStrong || !rightStrong) {[m
+[32m+[m
+[32m+[m[32m            Log.i([m
+[32m+[m[32m                    TAG,[m
+[32m+[m[32m                    "SPLIT_REJECT: side activity terlalu rendah");[m
+[32m+[m
+[32m+[m[32m            return "single";[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m        if (!balancedEnough) {[m
+[32m+[m
+[32m+[m[32m            Log.i([m
+[32m+[m[32m                    TAG,[m
+[32m+[m[32m                    "SPLIT_REJECT: kiri/kanan terlalu tidak seimbang");[m
+[32m+[m
+[32m+[m[32m            return "single";[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m        if (!stableEnough) {[m
+[32m+[m
+[32m+[m[32m            Log.i([m
+[32m+[m[32m                    TAG,[m
+[32m+[m[32m                    "SPLIT_REJECT: side activity tidak stabil");[m
+[32m+[m
+[32m+[m[32m            return "single";[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m        /*[m
+[32m+[m[32m         * BILATERAL SPLIT OVERRIDE[m
+[32m+[m[32m         *[m
+[32m+[m[32m         * Jika kedua sisi sama-sama aktif, cukup seimbang,[m
+[32m+[m[32m         * stabil, dan secara relatif jauh lebih bertekstur[m
+[32m+[m[32m         * daripada center, jangan biarkan center membatalkan[m
+[32m+[m[32m         * deteksi dua-orang.[m
+[32m+[m[32m         *[m
+[32m+[m[32m         * Ini penting untuk wide shot:[m
+[32m+[m[32m         *[m
+[32m+[m[32m         *      PERSON        EMPTY        PERSON[m
+[32m+[m[32m         *        L             C             R[m
+[32m+[m[32m         *[m
+[32m+[m[32m         * Center kosong bukan alasan untuk memilih center.[m
+[32m+[m[32m         */[m
+[32m+[m
+[32m+[m[32m        boolean bilateralEvidence =[m
+[32m+[m[32m                leftStrong &&[m
+[32m+[m[32m                rightStrong &&[m
+[32m+[m[32m                balance >= 0.30f &&[m
+[32m+[m[32m                stableEnough &&[m
+[32m+[m[32m                separation >= 1.15f;[m
+[32m+[m
+[32m+[m[32m        if (bilateralEvidence) {[m
+[32m+[m
+[32m+[m[32m            Log.i([m
+[32m+[m[32m                    TAG,[m
+[32m+[m[32m                    "BILATERAL_OVERRIDE => SPLIT" +[m
+[32m+[m[32m                    " separation=" + separation +[m
+[32m+[m[32m                    " balance=" + balance +[m
+[32m+[m[32m                    " stability=" + stability);[m
+[32m+[m
+[32m+[m[32m            return "split";[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m        if (!centerNotDominant) {[m
+[32m+[m
+[32m+[m[32m            Log.i([m
+[32m+[m[32m                    TAG,[m
+[32m+[m[32m                    "SPLIT_REJECT: center terlalu dominan");[m
+[32m+[m
+[32m+[m[32m            return "single";[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m        if (splitScore < SPLIT_THRESHOLD) {[m
+[32m+[m
+[32m+[m[32m            Log.i([m
+[32m+[m[32m                    TAG,[m
+[32m+[m[32m                    "SPLIT_REJECT: score di bawah threshold");[m
+[32m+[m
+[32m+[m[32m            return "single";[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m        /*[m
+[32m+[m[32m         * Threshold sementara.[m
+[32m+[m[32m         * Belum final — bagian 03 akan membuat[m
+[32m+[m[32m         * scoring lebih adaptif terhadap shot.[m
+[32m+[m[32m         */[m
+[32m+[m
+[32m+[m[32m        Log.i([m
+[32m+[m[32m                TAG,[m
+[32m+[m[32m                "LAYOUT => SPLIT");[m
+[32m+[m
+[32m+[m[32m        return "split";[m
+[32m+[m[32m    }[m
+[32m+[m[32m}[m
+[1mdiff --git a/app/src/main/java/com/example/smartcropapp/core/Pass2Optimizer.java b/app/src/main/java/com/example/smartcropapp/core/Pass2Optimizer.java[m
+[1mindex c17b1d9..2d64381 100644[m
+[1m--- a/app/src/main/java/com/example/smartcropapp/core/Pass2Optimizer.java[m
+[1m+++ b/app/src/main/java/com/example/smartcropapp/core/Pass2Optimizer.java[m
+[36m@@ -68,7 +68,21 @@[m [mpublic class Pass2Optimizer {[m
+             String layout =[m
+                     shot.optString([m
+                             "layout",[m
+[31m-                            "single");[m
+[32m+[m[32m                            "unclassified");[m
+[32m+[m
+[32m+[m[32m            /*[m
+[32m+[m[32m             * MANUAL LAYOUT MODE[m
+[32m+[m[32m             *[m
+[32m+[m[32m             * Pass 1 sekarang hanya menentukan shot boundary.[m
+[32m+[m[32m             * Layout SPLIT/SINGLE harus diberikan oleh UI/manual[m
+[32m+[m[32m             * sebelum Pass 2 dipakai untuk rendering.[m
+[32m+[m[32m             *[m
+[32m+[m[32m             * Jangan mengubah UNCLASSIFIED menjadi SINGLE di sini.[m
+[32m+[m[32m             */[m
+[32m+[m
+[32m+[m[32m            if ("".equals(layout.trim())) {[m
+[32m+[m[32m                layout = "unclassified";[m
+[32m+[m[32m            }[m
+ [m
+             int shotId =[m
+                     shot.optInt([m
+[36m@@ -190,6 +204,86 @@[m [mpublic class Pass2Optimizer {[m
+                 trajectoryFile.getAbsolutePath());[m
+     }[m
+ [m
+[32m+[m[32m    private static boolean hasStableTwoFaceEvidence([m
+[32m+[m[32m            JSONObject shot)[m
+[32m+[m[32m            throws Exception {[m
+[32m+[m
+[32m+[m[32m        JSONArray samples =[m
+[32m+[m[32m                shot.optJSONArray("samples");[m
+[32m+[m
+[32m+[m[32m        if (samples == null ||[m
+[32m+[m[32m                samples.length() == 0) {[m
+[32m+[m[32m            return false;[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m        int validSamples = 0;[m
+[32m+[m
+[32m+[m[32m        for (int i = 0;[m
+[32m+[m[32m             i < samples.length();[m
+[32m+[m[32m             i++) {[m
+[32m+[m
+[32m+[m[32m            JSONObject sample =[m
+[32m+[m[32m                    samples.getJSONObject(i);[m
+[32m+[m
+[32m+[m[32m            JSONArray faces =[m
+[32m+[m[32m                    sample.optJSONArray("faces");[m
+[32m+[m
+[32m+[m[32m            if (faces == null ||[m
+[32m+[m[32m                    faces.length() < 2) {[m
+[32m+[m[32m                continue;[m
+[32m+[m[32m            }[m
+[32m+[m
+[32m+[m[32m            float minX =[m
+[32m+[m[32m                    Float.MAX_VALUE;[m
+[32m+[m
+[32m+[m[32m            float maxX =[m
+[32m+[m[32m                    -Float.MAX_VALUE;[m
+[32m+[m
+[32m+[m[32m            for (int f = 0;[m
+[32m+[m[32m                 f < faces.length();[m
+[32m+[m[32m                 f++) {[m
+[32m+[m
+[32m+[m[32m                JSONObject face =[m
+[32m+[m[32m                        faces.getJSONObject(f);[m
+[32m+[m
+[32m+[m[32m                float x =[m
+[32m+[m[32m                        (float)[m
+[32m+[m[32m                        face.optDouble([m
+[32m+[m[32m                                "x",[m
+[32m+[m[32m                                0.5f);[m
+[32m+[m
+[32m+[m[32m                if (x < minX) {[m
+[32m+[m[32m                    minX = x;[m
+[32m+[m[32m                }[m
+[32m+[m
+[32m+[m[32m                if (x > maxX) {[m
+[32m+[m[32m                    maxX = x;[m
+[32m+[m[32m                }[m
+[32m+[m[32m            }[m
+[32m+[m
+[32m+[m[32m            /*[m
+[32m+[m[32m             * Dua wajah harus benar-benar terpisah.[m
+[32m+[m[32m             *[m
+[32m+[m[32m             * 0.25 = jarak horizontal minimum.[m
+[32m+[m[32m             * Close-up satu wajah dengan beberapa deteksi[m
+[32m+[m[32m             * berdekatan tidak lolos.[m
+[32m+[m[32m             */[m
+[32m+[m[32m            if (maxX - minX >= 0.25f) {[m
+[32m+[m[32m                validSamples++;[m
+[32m+[m[32m            }[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m        /*[m
+[32m+[m[32m         * Minimal 2 sample berbeda harus mendukung[m
+[32m+[m[32m         * keberadaan dua wajah.[m
+[32m+[m[32m         *[m
+[32m+[m[32m         * Karena Pass1 sampling sekitar 500 ms,[m
+[32m+[m[32m         * ini cukup kuat untuk menolak false-positive[m
+[32m+[m[32m         * satu frame.[m
+[32m+[m[32m         */[m
+[32m+[m[32m        return validSamples >= 2;[m
+[32m+[m[32m    }[m
+[32m+[m
+     private static float[] calibrateSplitShot([m
+             JSONObject shot)[m
+             throws Exception {[m
+[1mdiff --git a/gradlew.bat b/gradlew.bat[m
+[1mnew file mode 100644[m
+[1mindex 0000000..6689b85[m
+[1m--- /dev/null[m
+[1m+++ b/gradlew.bat[m
+[36m@@ -0,0 +1,92 @@[m
+[32m+[m[32m@rem[m[41m[m
+[32m+[m[32m@rem Copyright 2015 the original author or authors.[m[41m[m
+[32m+[m[32m@rem[m[41m[m
+[32m+[m[32m@rem Licensed under the Apache License, Version 2.0 (the "License");[m[41m[m
+[32m+[m[32m@rem you may not use this file except in compliance with the License.[m[41m[m
+[32m+[m[32m@rem You may obtain a copy of the License at[m[41m[m
+[32m+[m[32m@rem[m[41m[m
+[32m+[m[32m@rem      https://www.apache.org/licenses/LICENSE-2.0[m[41m[m
+[32m+[m[32m@rem[m[41m[m
+[32m+[m[32m@rem Unless required by applicable law or agreed to in writing, software[m[41m[m
+[32m+[m[32m@rem distributed under the License is distributed on an "AS IS" BASIS,[m[41m[m
+[32m+[m[32m@rem WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.[m[41m[m
+[32m+[m[32m@rem See the License for the specific language governing permissions and[m[41m[m
+[32m+[m[32m@rem limitations under the License.[m[41m[m
+[32m+[m[32m@rem[m[41m[m
+[32m+[m[41m[m
+[32m+[m[32m@if "%DEBUG%"=="" @echo off[m[41m[m
+[32m+[m[32m@rem ##########################################################################[m[41m[m
+[32m+[m[32m@rem[m[41m[m
+[32m+[m[32m@rem  Gradle startup script for Windows[m[41m[m
+[32m+[m[32m@rem[m[41m[m
+[32m+[m[32m@rem ##########################################################################[m[41m[m
+[32m+[m[41m[m
+[32m+[m[32m@rem Set local scope for the variables with windows NT shell[m[41m[m
+[32m+[m[32mif "%OS%"=="Windows_NT" setlocal[m[41m[m
+[32m+[m[41m[m
+[32m+[m[32mset DIRNAME=%~dp0[m[41m[m
+[32m+[m[32mif "%DIRNAME%"=="" set DIRNAME=.[m[41m[m
+[32m+[m[32m@rem This is normally unused[m[41m[m
+[32m+[m[32mset APP_BASE_NAME=%~n0[m[41m[m
+[32m+[m[32mset APP_HOME=%DIRNAME%[m[41m[m
+[32m+[m[41m[m
+[32m+[m[32m@rem Resolve any "." and ".." in APP_HOME to make it shorter.[m[41m[m
+[32m+[m[32mfor %%i in ("%APP_HOME%") do set APP_HOME=%%~fi[m[41m[m
+[32m+[m[41m[m
+[32m+[m[32m@rem Add default JVM options here. You can also use JAVA_OPTS and GRADLE_OPTS to pass JVM options to this script.[m[41m[m
+[32m+[m[32mset DEFAULT_JVM_OPTS="-Xmx64m" "-Xms64m"[m[41m[m
+[32m+[m[41m[m
+[32m+[m[32m@rem Find java.exe[m[41m[m
+[32m+[m[32mif defined JAVA_HOME goto findJavaFromJavaHome[m[41m[m
+[32m+[m[41m[m
+[32m+[m[32mset JAVA_EXE=java.exe[m[41m[m
+[32m+[m[32m%JAVA_EXE% -version >NUL 2>&1[m[41m[m
+[32m+[m[32mif %ERRORLEVEL% equ 0 goto execute[m[41m[m
+[32m+[m[41m[m
+[32m+[m[32mecho.[m[41m[m
+[32m+[m[32mecho ERROR: JAVA_HOME is not set and no 'java' command could be found in your PATH.[m[41m[m
+[32m+[m[32mecho.[m[41m[m
+[32m+[m[32mecho Please set the JAVA_HOME variable in your environment to match the[m[41m[m
+[32m+[m[32mecho location of your Java installation.[m[41m[m
+[32m+[m[41m[m
+[32m+[m[32mgoto fail[m[41m[m
+[32m+[m[41m[m
+[32m+[m[32m:findJavaFromJavaHome[m[41m[m
+[32m+[m[32mset JAVA_HOME=%JAVA_HOME:"=%[m[41m[m
+[32m+[m[32mset JAVA_EXE=%JAVA_HOME%/bin/java.exe[m[41m[m
+[32m+[m[41m[m
+[32m+[m[32mif exist "%JAVA_EXE%" goto execute[m[41m[m
+[32m+[m[41m[m
+[32m+[m[32mecho.[m[41m[m
+[32m+[m[32mecho ERROR: JAVA_HOME is set to an invalid directory: %JAVA_HOME%[m[41m[m
+[32m+[m[32mecho.[m[41m[m
+[32m+[m[32mecho Please set the JAVA_HOME variable in your environment to match the[m[41m[m
+[32m+[m[32mecho location of your Java installation.[m[41m[m
+[32m+[m[41m[m
+[32m+[m[32mgoto fail[m[41m[m
+[32m+[m[41m[m
+[32m+[m[32m:execute[m[41m[m
+[32m+[m[32m@rem Setup the command line[m[41m[m
+[32m+[m[41m[m
+[32m+[m[32mset CLASSPATH=%APP_HOME%\gradle\wrapper\gradle-wrapper.jar[m[41m[m
+[32m+[m[41m[m
+[32m+[m[41m[m
+[32m+[m[32m@rem Execute Gradle[m[41m[m
+[32m+[m[32m"%JAVA_EXE%" %DEFAULT_JVM_OPTS% %JAVA_OPTS% %GRADLE_OPTS% "-Dorg.gradle.appname=%APP_BASE_NAME%" -classpath "%CLASSPATH%" org.gradle.wrapper.GradleWrapperMain %*[m[41m[m
+[32m+[m[41m[m
+[32m+[m[32m:end[m[41m[m
+[32m+[m[32m@rem End local scope for the variables with windows NT shell[m[41m[m
+[32m+[m[32mif %ERRORLEVEL% equ 0 goto mainEnd[m[41m[m
+[32m+[m[41m[m
+[32m+[m[32m:fail[m[41m[m
+[32m+[m[32mrem Set variable GRADLE_EXIT_CONSOLE if you need the _script_ return code instead of[m[41m[m
+[32m+[m[32mrem the _cmd.exe /c_ return code![m[41m[m
+[32m+[m[32mset EXIT_CODE=%ERRORLEVEL%[m[41m[m
+[32m+[m[32mif %EXIT_CODE% equ 0 set EXIT_CODE=1[m[41m[m
+[32m+[m[32mif not ""=="%GRADLE_EXIT_CONSOLE%" exit %EXIT_CODE%[m[41m[m
+[32m+[m[32mexit /b %EXIT_CODE%[m[41m[m
+[32m+[m[41m[m
+[32m+[m[32m:mainEnd[m[41m[m
+[32m+[m[32mif "%OS%"=="Windows_NT" endlocal[m[41m[m
+[32m+[m[41m[m
+[32m+[m[32m:omega[m[41m[m
