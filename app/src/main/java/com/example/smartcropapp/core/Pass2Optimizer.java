@@ -32,20 +32,17 @@ public class Pass2Optimizer {
      * CONFIG dan DIAGNOSTIC SENGAJA DIPISAH.
      *
      * Config:
-     *   Downloads/IkhlasApp/config/manual_split.txt
+     *   Android app-specific Documents/IkhlasApp/config/manual_split.txt
      *
      * Diagnostic:
-     *   Downloads/SmartReframe/analysis_*.json
-     *   Downloads/SmartReframe/trajectory_*.json
+     *   app-specific diagnostics
+     *   app-specific diagnostics
      */
 
-    private static File getConfigFile() {
-        File downloads = Environment
-                .getExternalStoragePublicDirectory(
-                        Environment.DIRECTORY_DOWNLOADS);
-
+    private static File getConfigFile(Context context) {
+        File documents = context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS);
         return new File(
-                new File(new File(downloads, "IkhlasApp"), "config"),
+                new File(new File(documents, "IkhlasApp"), "config"),
                 "manual_split.txt");
     }
 
@@ -159,7 +156,7 @@ public class Pass2Optimizer {
          * Tidak pernah ditulis oleh Pass 2.
          */
         File configFile =
-                getConfigFile();
+                getConfigFile(context);
 
         Log.i(
                 TAG,
