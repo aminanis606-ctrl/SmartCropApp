@@ -976,6 +976,13 @@ public class Pass2Optimizer {
                     float lockedCenterX = 0.50f;
 
                     FrameSample splitPoseSample = null;
+                    final int SPLIT_Y_LOCK_OBSERVATIONS = 2;
+                    int stableTopYCount = 0;
+                    int stableBottomYCount = 0;
+                    float stableTopYSum = 0.0f;
+                    float stableBottomYSum = 0.0f;
+                    boolean topYLocked = false;
+                    boolean bottomYLocked = false;
 
                     if ("split".equals(shot.layout)) {
                         long splitPoseTargetMs = shot.startMs + 500L;
@@ -991,8 +998,15 @@ public class Pass2Optimizer {
 
                     for (FrameSample sample : shot.samples) {
 
-                        if ("split".equals(shot.layout) &&
-                                sample != splitPoseSample) {
+                        boolean splitShot = "split".equals(shot.layout);
+                        boolean splitXSample = splitShot &&
+                                sample == splitPoseSample;
+                        boolean splitYCalibrationNeeded = splitShot &&
+                                (!topYLocked || !bottomYLocked);
+
+                        if (splitShot &&
+                                !splitXSample &&
+                                !splitYCalibrationNeeded) {
                             sample.subjects =
                                     new JSONArray(lastSubjects.toString());
                             continue;
@@ -1004,7 +1018,8 @@ public class Pass2Optimizer {
                             continue;
                         }
 
-                        if (lastPoseMs != Long.MIN_VALUE &&
+                        if (!splitShot &&
+                                lastPoseMs != Long.MIN_VALUE &&
                                 sample.timeMs - lastPoseMs < interval) {
                             sample.subjects =
                                     new JSONArray(lastSubjects.toString());
@@ -1072,22 +1087,44 @@ public class Pass2Optimizer {
                                     }
                                 }
 
-                                if (bestLeft != null) {
+                                if (splitXSample && bestLeft != null) {
                                     shot.bottomX =
                                             clamp(bestLeft.x, 0.08f, 0.49f);
-                                    shot.bottomY =
+                                }
+
+                                if (splitXSample && bestRight != null) {
+                                    shot.topX =
+                                            clamp(bestRight.x, 0.51f, 0.92f);
+                                }
+
+                                if (!bottomYLocked && bestLeft != null) {
+                                    stableBottomYSum +=
                                             splitFramingY(
                                                     bestLeft,
                                                     leftDetection.headTopY);
+                                    stableBottomYCount++;
+
+                                    if (stableBottomYCount >=
+                                            SPLIT_Y_LOCK_OBSERVATIONS) {
+                                        shot.bottomY = stableBottomYSum /
+                                                stableBottomYCount;
+                                        bottomYLocked = true;
+                                    }
                                 }
 
-                                if (bestRight != null) {
-                                    shot.topX =
-                                            clamp(bestRight.x, 0.51f, 0.92f);
-                                    shot.topY =
+                                if (!topYLocked && bestRight != null) {
+                                    stableTopYSum +=
                                             splitFramingY(
                                                     bestRight,
                                                     rightDetection.headTopY);
+                                    stableTopYCount++;
+
+                                    if (stableTopYCount >=
+                                            SPLIT_Y_LOCK_OBSERVATIONS) {
+                                        shot.topY = stableTopYSum /
+                                                stableTopYCount;
+                                        topYLocked = true;
+                                    }
                                 }
 
                                 JSONArray merged =
