@@ -9,6 +9,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.media.MediaMetadataRetriever;
+import android.provider.Settings;
 import android.provider.OpenableColumns;
 import android.database.Cursor;
 import android.util.Log;
@@ -20,6 +21,8 @@ import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.PickVisualMediaRequest;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 
 import com.example.smartcropapp.core.Pass1Extractor;
 import com.example.smartcropapp.core.Pass2Optimizer;
@@ -34,7 +37,7 @@ import java.util.Locale;
 
 public class MainActivity extends AppCompatActivity {
     private static final String TAG = "IkhlasApp";
-
+    
     private TextView statusText;
     private Uri selectedVideoUri;
     private ActivityResultLauncher<PickVisualMediaRequest> pickMedia;
@@ -44,20 +47,26 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-
+        
         initializeStorageStructure();
         setupUI();
         setupMediaPicker();
+        checkPermissions();
     }
 
     private void setupUI() {
         statusText = findViewById(R.id.statusText);
         Button btnStart = findViewById(R.id.btnStart);
-
+        
         btnStart.setText("MULAI PROSES");
         btnStart.setOnClickListener(v -> {
             if (isProcessing) return;
-
+            
+            if (!checkStoragePermission()) {
+                requestStoragePermission();
+                return;
+            }
+            
             pickMedia.launch(new PickVisualMediaRequest.Builder()
                     .setMediaType(ActivityResultContracts.PickVisualMedia.VideoOnly.INSTANCE)
                     .build());
@@ -126,7 +135,8 @@ public class MainActivity extends AppCompatActivity {
                 // OUTPUT PLANNING
                 File outputDir =
                         new File(
-                                getExternalFilesDir(Environment.DIRECTORY_MOVIES),
+                                Environment.getExternalStoragePublicDirectory(
+                                        Environment.DIRECTORY_MOVIES),
                                 "IkhlasApp");
 
                 if (!outputDir.exists()) {
@@ -155,7 +165,7 @@ public class MainActivity extends AppCompatActivity {
 
                 runOnUiThread(() -> {
                     statusText.setText(
-                            "SELESAI! Video tersimpan di folder aplikasi Movies/IkhlasApp/");
+                            "SELESAI! Video tersimpan di Movies/IkhlasApp/");
 
                     Toast.makeText(
                             MainActivity.this,
@@ -320,10 +330,41 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private void checkPermissions() {
+        if (!checkStoragePermission()) {
+            requestStoragePermission();
+        } else {
+            statusText.setText("Siap. Klik MULAI PROSES.");
+        }
+    }
+
+    private boolean checkStoragePermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            return Environment.isExternalStorageManager();
+        } else {
+            return ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED;
+        }
+    }
+
+    private void requestStoragePermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            try {
+                Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
+                intent.setData(Uri.parse(String.format("package:%s", getPackageName())));
+                startActivity(intent);
+            } catch (Exception e) {
+                startActivity(new Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION));
+            }
+        } else {
+            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, 101);
+        }
+    }
+
     private void initializeStorageStructure() {
         try {
             File baseDir = new File(
-                    getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS),
+                    Environment.getExternalStoragePublicDirectory(
+                            Environment.DIRECTORY_DOWNLOADS),
                     "IkhlasApp");
 
             File configDir = new File(baseDir, "config");
