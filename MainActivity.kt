@@ -1,4 +1,4 @@
-package com.smartcrop.app
+package com.example.smartcropapp
 
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
