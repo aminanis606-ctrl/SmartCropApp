@@ -307,6 +307,18 @@ public class Pass1Extractor {
                     "PASS1 DONE shots=" +
                     shots.length());
 
+            try {
+                DiagnosticStore.writeText(
+                        context,
+                        "pass1_diagnostic.txt",
+                        "PASS1 DONE\\nshots=" + shots.length());
+            } catch (Exception diagnosticError) {
+                Log.w(
+                        TAG,
+                        "PASS1 diagnostic write failed",
+                        diagnosticError);
+            }
+
             return outputFile;
 
         } catch (Exception e) {
