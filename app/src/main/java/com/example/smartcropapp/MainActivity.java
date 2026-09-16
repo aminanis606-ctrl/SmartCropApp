@@ -1,15 +1,13 @@
 package com.example.smartcropapp;
 
-import android.Manifest;
-import android.content.Intent;
-import android.content.pm.PackageManager;
 import android.content.res.AssetManager;
 import android.net.Uri;
-import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.media.MediaMetadataRetriever;
 import android.provider.OpenableColumns;
+import android.content.ContentValues;
+import android.provider.MediaStore;
 import android.database.Cursor;
 import android.util.Log;
 import android.widget.Button;
@@ -153,9 +151,11 @@ public class MainActivity extends AppCompatActivity {
                         internalTrajectory,
                         outputVideo);
 
+                publishVideoToGallery(outputVideo);
+
                 runOnUiThread(() -> {
                     statusText.setText(
-                            "SELESAI! Video tersimpan di folder aplikasi Movies/IkhlasApp/");
+                            "SELESAI! Video tersimpan di Galeri, folder Movies/IkhlasApp/");
 
                     Toast.makeText(
                             MainActivity.this,
@@ -317,6 +317,34 @@ public class MainActivity extends AppCompatActivity {
             }
 
             return out.toString("UTF-8");
+        }
+    }
+
+    private void publishVideoToGallery(File sourceFile) throws Exception {
+        ContentValues values = new ContentValues();
+        values.put(MediaStore.Video.Media.DISPLAY_NAME, sourceFile.getName());
+        values.put(MediaStore.Video.Media.MIME_TYPE, "video/mp4");
+        values.put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/IkhlasApp");
+        values.put(MediaStore.Video.Media.IS_PENDING, 1);
+
+        Uri uri = getContentResolver().insert(
+                MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values);
+        if (uri == null) throw new IllegalStateException("Gagal membuat item video di galeri");
+
+        try {
+            try (InputStream in = new java.io.FileInputStream(sourceFile);
+                 OutputStream out = getContentResolver().openOutputStream(uri)) {
+                if (out == null) throw new IllegalStateException("Gagal membuka output galeri");
+                byte[] buffer = new byte[8192];
+                int count;
+                while ((count = in.read(buffer)) != -1) out.write(buffer, 0, count);
+            }
+            ContentValues ready = new ContentValues();
+            ready.put(MediaStore.Video.Media.IS_PENDING, 0);
+            getContentResolver().update(uri, ready, null, null);
+        } catch (Exception e) {
+            getContentResolver().delete(uri, null, null);
+            throw e;
         }
     }
 
