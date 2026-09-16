@@ -17,6 +17,16 @@ import java.util.concurrent.TimeUnit;
 
 public final class SubjectDetector {
 
+    static final class Detection {
+        final List<Subject> subjects;
+        final float headTopY;
+
+        Detection(List<Subject> subjects, float headTopY) {
+            this.subjects = subjects;
+            this.headTopY = headTopY;
+        }
+    }
+
     public static final class Subject {
         public final float x;
         public final float y;
@@ -54,10 +64,18 @@ public final class SubjectDetector {
     }
 
     public List<Subject> detect(Bitmap bitmap) {
+        return detectInternal(bitmap).subjects;
+    }
+
+    Detection detectWithHead(Bitmap bitmap) {
+        return detectInternal(bitmap);
+    }
+
+    private Detection detectInternal(Bitmap bitmap) {
         List<Subject> result = new ArrayList<>();
 
         if (bitmap == null) {
-            return result;
+            return new Detection(result, Float.NaN);
         }
 
         try {
@@ -93,7 +111,7 @@ public final class SubjectDetector {
                     torsoPoints);
 
             if (torsoPoints.isEmpty()) {
-                return result;
+                return new Detection(result, Float.NaN);
             }
 
             float minX = Float.MAX_VALUE;
@@ -125,6 +143,8 @@ public final class SubjectDetector {
             float width = (maxX - minX) / imageWidth;
             float height = (maxY - minY) / imageHeight;
 
+            float headTopY = findHeadTopY(pose, imageHeight);
+
             result.add(
                     new Subject(
                             clamp01(x),
@@ -134,11 +154,38 @@ public final class SubjectDetector {
                             width * height,
                             -1));
 
+            return new Detection(result, headTopY);
         } catch (Exception ignored) {
             // Detector failure must not break Pass1.
+            return new Detection(result, Float.NaN);
+        }
+    }
+
+    private static float findHeadTopY(Pose pose, float imageHeight) {
+        PointF nose = validLandmark(pose, PoseLandmark.NOSE);
+        if (nose != null) return clamp01(nose.y / imageHeight);
+
+        PointF leftEye = validLandmark(pose, PoseLandmark.LEFT_EYE);
+        PointF rightEye = validLandmark(pose, PoseLandmark.RIGHT_EYE);
+        if (leftEye != null && rightEye != null) {
+            return clamp01((leftEye.y + rightEye.y) * 0.5f / imageHeight);
         }
 
-        return result;
+        PointF leftEar = validLandmark(pose, PoseLandmark.LEFT_EAR);
+        PointF rightEar = validLandmark(pose, PoseLandmark.RIGHT_EAR);
+        if (leftEar != null && rightEar != null) {
+            return clamp01((leftEar.y + rightEar.y) * 0.5f / imageHeight);
+        }
+
+        return Float.NaN;
+    }
+
+    private static PointF validLandmark(Pose pose, int type) {
+        PoseLandmark landmark = pose.getPoseLandmark(type);
+        if (landmark == null || landmark.getInFrameLikelihood() < 0.30f) {
+            return null;
+        }
+        return landmark.getPosition();
     }
 
     private static void addLandmark(

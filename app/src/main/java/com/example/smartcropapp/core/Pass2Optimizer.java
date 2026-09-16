@@ -1025,20 +1025,24 @@ public class Pass2Optimizer {
                             if ("split".equals(shot.layout)) {
                                 splitPoseAttempted = true;
 
-                                List<SubjectDetector.Subject> left =
-                                        detectRoi(
+                                SubjectDetector.Detection leftDetection =
+                                        detectRoiWithHead(
                                                 leftDetector,
                                                 bitmap,
                                                 0,
                                                 bitmap.getWidth() / 2);
+                                List<SubjectDetector.Subject> left =
+                                        leftDetection.subjects;
 
-                                List<SubjectDetector.Subject> right =
-                                        detectRoi(
+                                SubjectDetector.Detection rightDetection =
+                                        detectRoiWithHead(
                                                 rightDetector,
                                                 bitmap,
                                                 bitmap.getWidth() / 2,
                                                 bitmap.getWidth()
                                                         - bitmap.getWidth() / 2);
+                                List<SubjectDetector.Subject> right =
+                                        rightDetection.subjects;
 
                                 SubjectDetector.Subject bestLeft = null;
                                 float bestLeftScore = -1.0f;
@@ -1072,14 +1076,18 @@ public class Pass2Optimizer {
                                     shot.bottomX =
                                             clamp(bestLeft.x, 0.08f, 0.49f);
                                     shot.bottomY =
-                                            clamp(bestLeft.y, 0.15f, 0.85f);
+                                            splitFramingY(
+                                                    bestLeft,
+                                                    leftDetection.headTopY);
                                 }
 
                                 if (bestRight != null) {
                                     shot.topX =
                                             clamp(bestRight.x, 0.51f, 0.92f);
                                     shot.topY =
-                                            clamp(bestRight.y, 0.15f, 0.85f);
+                                            splitFramingY(
+                                                    bestRight,
+                                                    rightDetection.headTopY);
                                 }
 
                                 JSONArray merged =
@@ -1343,7 +1351,7 @@ public class Pass2Optimizer {
                 Math.min(maxInterval, interval));
     }
 
-    private static List<SubjectDetector.Subject> detectRoi(
+    private static SubjectDetector.Detection detectRoiWithHead(
             SubjectDetector detector,
             Bitmap source,
             int left,
@@ -1355,10 +1363,11 @@ public class Pass2Optimizer {
         if (detector == null ||
                 source == null ||
                 width <= 0) {
-            return result;
+            return new SubjectDetector.Detection(result, Float.NaN);
         }
 
         Bitmap roi = null;
+        float headTopY = Float.NaN;
 
         try {
             roi = Bitmap.createBitmap(
@@ -1368,8 +1377,10 @@ public class Pass2Optimizer {
                     width,
                     source.getHeight());
 
-            List<SubjectDetector.Subject> local =
-                    detector.detect(roi);
+            SubjectDetector.Detection detection =
+                    detector.detectWithHead(roi);
+            headTopY = detection.headTopY;
+            List<SubjectDetector.Subject> local = detection.subjects;
 
             for (SubjectDetector.Subject subject : local) {
                 result.add(
@@ -1391,7 +1402,7 @@ public class Pass2Optimizer {
             }
         }
 
-        return result;
+        return new SubjectDetector.Detection(result, headTopY);
     }
 
     private static JSONArray mergeSubjects(
@@ -1514,6 +1525,28 @@ public class Pass2Optimizer {
         return result;
     }
 
+    private static float splitFramingY(
+            SubjectDetector.Subject subject,
+            float headTopY) {
+
+        if (subject == null ||
+                Float.isNaN(headTopY) ||
+                Float.isInfinite(headTopY)) {
+            return clamp(
+                    subject == null
+                            ? DEFAULT_Y
+                            : subject.y - subject.height * 0.35f,
+                    0.15f,
+                    0.85f);
+        }
+
+        // Keep a geometry-derived half-torso margin below the head landmark.
+        return clamp(
+                headTopY + subject.height * 0.5f,
+                0.15f,
+                0.85f);
+    }
+
     private static void writeSingleTrajectory(
             Shot shot,
             Point point) {
@@ -1581,36 +1614,15 @@ public class Pass2Optimizer {
                                     "x",
                                     DEFAULT_X);
 
-                            float y = (float) subject.optDouble(
-                                    "y",
-                                    DEFAULT_Y);
-
-                            float height = (float) subject.optDouble(
-                                    "height",
-                                    0.0f);
-
-                            /*
-                             * SubjectDetector memberi pusat torso.
-                             * Naikkan crop center berdasarkan tinggi
-                             * torso agar kepala mendapat headroom.
-                             */
-                            float framingY =
-                                    clamp(
-                                            y - height * 0.35f,
-                                            0.15f,
-                                            0.85f);
-
                             /*
                              * Split mapping:
-                             * right subject -> top panel
-                             * left subject  -> bottom panel
+                             * Keep X tracking unchanged. Y was finalized
+                             * once from the selected split Pose sample.
                              */
                             if (x >= 0.50f) {
                                 lastTopX = x;
-                                lastTopY = framingY;
                             } else {
                                 lastBottomX = x;
-                                lastBottomY = framingY;
                             }
                         }
                     }
