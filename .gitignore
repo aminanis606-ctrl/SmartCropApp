@@ -7,6 +7,15 @@ local.properties
 
 # Log/OS Files
 *.log
+# Runtime and diagnostic logs
+*.logcat
+*_log.txt
+log_*.txt
+app_log*.txt
+full_log.txt
+
+# Generated SmartReframe diagnostics
+/diagnostics/
 
 # Android Studio generated files and folders
 captures/
