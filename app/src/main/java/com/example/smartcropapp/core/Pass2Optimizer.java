@@ -976,11 +976,13 @@ public class Pass2Optimizer {
                     float lockedCenterX = 0.50f;
 
                     FrameSample splitPoseSample = null;
-                    final int SPLIT_Y_LOCK_OBSERVATIONS = 2;
-                    int stableTopYCount = 0;
-                    int stableBottomYCount = 0;
-                    float stableTopYSum = 0.0f;
-                    float stableBottomYSum = 0.0f;
+                    final long SPLIT_Y_CALIBRATION_START_MS = 250L;
+                    final long SPLIT_Y_CALIBRATION_END_MS = 750L;
+                    final float SPLIT_Y_STABILITY_TOLERANCE = 0.08f;
+
+                    List<Float> bottomYObservations = new ArrayList<>();
+                    List<Float> topYObservations = new ArrayList<>();
+
                     boolean topYLocked = false;
                     boolean bottomYLocked = false;
 
@@ -1002,7 +1004,10 @@ public class Pass2Optimizer {
                         boolean splitXSample = splitShot &&
                                 sample == splitPoseSample;
                         boolean splitYCalibrationNeeded = splitShot &&
-                                (!topYLocked || !bottomYLocked);
+                                (!topYLocked || !bottomYLocked) &&
+                                sample.timeMs <=
+                                        shot.startMs +
+                                        SPLIT_Y_CALIBRATION_END_MS;
 
                         if (splitShot &&
                                 !splitXSample &&
@@ -1097,34 +1102,34 @@ public class Pass2Optimizer {
                                             clamp(bestRight.x, 0.51f, 0.92f);
                                 }
 
-                                if (!bottomYLocked && bestLeft != null) {
-                                    stableBottomYSum +=
+                                if (!bottomYLocked &&
+                                        bestLeft != null &&
+                                        sample.timeMs >=
+                                                shot.startMs +
+                                                SPLIT_Y_CALIBRATION_START_MS &&
+                                        sample.timeMs <=
+                                                shot.startMs +
+                                                SPLIT_Y_CALIBRATION_END_MS) {
+
+                                    bottomYObservations.add(
                                             splitFramingY(
                                                     bestLeft,
-                                                    leftDetection.headTopY);
-                                    stableBottomYCount++;
-
-                                    if (stableBottomYCount >=
-                                            SPLIT_Y_LOCK_OBSERVATIONS) {
-                                        shot.bottomY = stableBottomYSum /
-                                                stableBottomYCount;
-                                        bottomYLocked = true;
-                                    }
+                                                    leftDetection.headTopY));
                                 }
 
-                                if (!topYLocked && bestRight != null) {
-                                    stableTopYSum +=
+                                if (!topYLocked &&
+                                        bestRight != null &&
+                                        sample.timeMs >=
+                                                shot.startMs +
+                                                SPLIT_Y_CALIBRATION_START_MS &&
+                                        sample.timeMs <=
+                                                shot.startMs +
+                                                SPLIT_Y_CALIBRATION_END_MS) {
+
+                                    topYObservations.add(
                                             splitFramingY(
                                                     bestRight,
-                                                    rightDetection.headTopY);
-                                    stableTopYCount++;
-
-                                    if (stableTopYCount >=
-                                            SPLIT_Y_LOCK_OBSERVATIONS) {
-                                        shot.topY = stableTopYSum /
-                                                stableTopYCount;
-                                        topYLocked = true;
-                                    }
+                                                    rightDetection.headTopY));
                                 }
 
                                 JSONArray merged =
@@ -1203,6 +1208,41 @@ public class Pass2Optimizer {
 
                         sample.subjects =
                                 new JSONArray(lastSubjects.toString());
+                    }
+
+                    if ("split".equals(shot.layout)) {
+                        Float lockedBottomY =
+                                stableSplitY(
+                                        bottomYObservations,
+                                        SPLIT_Y_STABILITY_TOLERANCE);
+
+                        Float lockedTopY =
+                                stableSplitY(
+                                        topYObservations,
+                                        SPLIT_Y_STABILITY_TOLERANCE);
+
+                        if (lockedBottomY != null) {
+                            shot.bottomY = lockedBottomY;
+                            bottomYLocked = true;
+                        }
+
+                        if (lockedTopY != null) {
+                            shot.topY = lockedTopY;
+                            topYLocked = true;
+                        }
+
+                        Log.i(
+                                TAG,
+                                "SPLIT_Y_CALIBRATION shot=" +
+                                shot.shotId +
+                                " bottomSamples=" +
+                                bottomYObservations.size() +
+                                " topSamples=" +
+                                topYObservations.size() +
+                                " bottomY=" +
+                                shot.bottomY +
+                                " topY=" +
+                                shot.topY);
                     }
 
                 } finally {
@@ -1560,6 +1600,51 @@ public class Pass2Optimizer {
         }
 
         return result;
+    }
+
+    private static Float stableSplitY(
+            List<Float> observations,
+            float tolerance) {
+
+        if (observations == null ||
+                observations.size() < 2) {
+            return null;
+        }
+
+        if (observations.size() == 2) {
+            float a = observations.get(0);
+            float b = observations.get(1);
+
+            if (Math.abs(a - b) <= tolerance) {
+                return (a + b) * 0.5f;
+            }
+
+            return null;
+        }
+
+        float bestA = 0f;
+        float bestB = 0f;
+        float bestDistance = Float.MAX_VALUE;
+
+        for (int i = 0; i < observations.size(); i++) {
+            for (int j = i + 1; j < observations.size(); j++) {
+                float a = observations.get(i);
+                float b = observations.get(j);
+                float distance = Math.abs(a - b);
+
+                if (distance < bestDistance) {
+                    bestDistance = distance;
+                    bestA = a;
+                    bestB = b;
+                }
+            }
+        }
+
+        if (bestDistance > tolerance) {
+            return null;
+        }
+
+        return (bestA + bestB) * 0.5f;
     }
 
     private static float splitFramingY(
