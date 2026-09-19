@@ -1347,19 +1347,89 @@ public class Pass2Optimizer {
                          *
                          * Tidak ada fake lock jika semua fase berbeda.
                          */
-                        Float lockedX =
-                                stableThreePhase(
-                                        singleEarlyXObservations,
-                                        singleMiddleXObservations,
-                                        singleLateXObservations,
-                                        SINGLE_STABILITY_TOLERANCE);
+                        /*
+                         * SHOT PENDEK:
+                         *
+                         * Untuk shot <= 2 detik, tiga fase terlalu rapat
+                         * dan dapat menghasilkan evidence yang kurang stabil.
+                         *
+                         * Gunakan seluruh observation yang tersedia sebagai
+                         * satu population, lalu ambil median X/Y.
+                         *
+                         * Shot panjang tetap memakai stableThreePhase()
+                         * yang sudah terbukti baik.
+                         */
+                        long shotDurationMs =
+                                Math.max(
+                                        0L,
+                                        shot.samples.get(
+                                                shot.samples.size() - 1).timeMs
+                                                - shot.startMs);
 
-                        Float lockedY =
-                                stableThreePhase(
-                                        singleEarlyYObservations,
-                                        singleMiddleYObservations,
-                                        singleLateYObservations,
-                                        SINGLE_STABILITY_TOLERANCE);
+                        Float lockedX;
+                        Float lockedY;
+
+                        if (shotDurationMs <= 2000L) {
+
+                            List<Float> shortShotXObservations =
+                                    new ArrayList<>();
+
+                            List<Float> shortShotYObservations =
+                                    new ArrayList<>();
+
+                            shortShotXObservations.addAll(
+                                    singleEarlyXObservations);
+                            shortShotXObservations.addAll(
+                                    singleMiddleXObservations);
+                            shortShotXObservations.addAll(
+                                    singleLateXObservations);
+
+                            shortShotYObservations.addAll(
+                                    singleEarlyYObservations);
+                            shortShotYObservations.addAll(
+                                    singleMiddleYObservations);
+                            shortShotYObservations.addAll(
+                                    singleLateYObservations);
+
+                            lockedX =
+                                    medianObservation(
+                                            shortShotXObservations);
+
+                            lockedY =
+                                    medianObservation(
+                                            shortShotYObservations);
+
+                            Log.i(
+                                    TAG,
+                                    "SINGLE_SHORT_CALIBRATION shot=" +
+                                    shot.shotId +
+                                    " durationMs=" +
+                                    shotDurationMs +
+                                    " xSamples=" +
+                                    shortShotXObservations.size() +
+                                    " ySamples=" +
+                                    shortShotYObservations.size() +
+                                    " x=" +
+                                    lockedX +
+                                    " y=" +
+                                    lockedY);
+
+                        } else {
+
+                            lockedX =
+                                    stableThreePhase(
+                                            singleEarlyXObservations,
+                                            singleMiddleXObservations,
+                                            singleLateXObservations,
+                                            SINGLE_STABILITY_TOLERANCE);
+
+                            lockedY =
+                                    stableThreePhase(
+                                            singleEarlyYObservations,
+                                            singleMiddleYObservations,
+                                            singleLateYObservations,
+                                            SINGLE_STABILITY_TOLERANCE);
+                        }
 
                         if (lockedX != null && lockedY != null) {
 
@@ -1402,6 +1472,8 @@ public class Pass2Optimizer {
                                     TAG,
                                     "SINGLE_CALIBRATION_LOCK shot=" +
                                     shot.shotId +
+                                    " durationMs=" +
+                                    shotDurationMs +
                                     " earlyX=" +
                                     singleEarlyXObservations.size() +
                                     " middleX=" +
