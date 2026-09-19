@@ -974,6 +974,14 @@ public class Pass2Optimizer {
                     List<Float> bottomYObservations = new ArrayList<>();
                     List<Float> topYObservations = new ArrayList<>();
 
+                    final long SINGLE_CALIBRATION_START_MS = 250L;
+                    final long SINGLE_CALIBRATION_END_MS = 750L;
+                    final float SINGLE_STABILITY_TOLERANCE = 0.08f;
+
+                    List<Float> singleXObservations = new ArrayList<>();
+                    List<Float> singleYObservations = new ArrayList<>();
+                    JSONArray singleReferenceSubjects = new JSONArray();
+
                     boolean topYLocked = false;
                     boolean bottomYLocked = false;
 
@@ -1009,8 +1017,19 @@ public class Pass2Optimizer {
                         }
 
                         if (!splitShot &&
-                                lastPoseMs != Long.MIN_VALUE &&
-                                sample.timeMs - lastPoseMs < interval) {
+                                (sample.timeMs <
+                                         shot.startMs +
+                                         SINGLE_CALIBRATION_START_MS ||
+                                 sample.timeMs >
+                                         shot.startMs +
+                                         SINGLE_CALIBRATION_END_MS)) {
+                            /*
+                             * Jangan buang sample single.
+                             *
+                             * Calibration hanya menentukan posisi referensi.
+                             * Sample di luar window tetap menerima hasil terakhir
+                             * agar trajectory tidak menjadi sparse/default.
+                             */
                             sample.subjects =
                                     new JSONArray(lastSubjects.toString());
                             continue;
@@ -1128,28 +1147,38 @@ public class Pass2Optimizer {
 
                                 if (detected != null &&
                                         !detected.isEmpty()) {
-                                    lastPoseMs = sample.timeMs;
 
                                     SubjectDetector.Subject currentTarget =
                                             detected.get(0);
 
                                     /*
-                                     * SINGLE RAW POSE MODE:
-                                     * Jangan lock X ke posisi tengah.
-                                     * Subject.x langsung mengikuti hasil
-                                     * detector pada setiap deteksi.
+                                     * SINGLE CALIBRATION MODE:
+                                     *
+                                     * Sama seperti split-shot:
+                                     * jangan memakai satu sample.
+                                     *
+                                     * Kumpulkan beberapa observasi dalam
+                                     * window +250 .. +750 ms, lalu cari
+                                     * pasangan observasi yang stabil.
+                                     *
+                                     * Subject.x/y sudah berasal dari
+                                     * shoulder midpoint di SubjectDetector.
                                      */
-                                    lastSubjects =
+                                    singleXObservations.add(
+                                            currentTarget.x);
+
+                                    singleYObservations.add(
+                                            currentTarget.y);
+
+                                    singleReferenceSubjects =
                                             subjectsToJson(detected);
 
-                                    /*
-                                     * Evaluasi Pose pada setiap sample.
-                                     * Dengan demikian shoulder midpoint
-                                     * dapat mengikuti gerakan subject.
-                                     */
-                                    interval = 0L;
-                                    previousTarget = currentTarget;
-                                    previousTargetMs = sample.timeMs;
+                                    lastSubjects =
+                                            new JSONArray(
+                                                    singleReferenceSubjects
+                                                            .toString());
+
+                                    lastPoseMs = sample.timeMs;
                                 }
                             }
 
@@ -1196,6 +1225,98 @@ public class Pass2Optimizer {
                                 shot.bottomY +
                                 " topY=" +
                                 shot.topY);
+
+                    } else {
+                        /*
+                         * SINGLE CALIBRATION FINALIZATION:
+                         *
+                         * X dan Y sama-sama harus stabil.
+                         * Tidak ada EMA, deadband, center-lock,
+                         * atau continuous raw tracking.
+                         */
+                        Float lockedX =
+                                stableSplitY(
+                                        singleXObservations,
+                                        SINGLE_STABILITY_TOLERANCE);
+
+                        Float lockedY =
+                                stableSplitY(
+                                        singleYObservations,
+                                        SINGLE_STABILITY_TOLERANCE);
+
+                        if (lockedX != null && lockedY != null) {
+
+                            JSONObject lockedSubject =
+                                    singleReferenceSubjects.length() > 0
+                                            ? singleReferenceSubjects
+                                                    .optJSONObject(0)
+                                            : null;
+
+                            if (lockedSubject == null) {
+                                lockedSubject = new JSONObject();
+                            }
+
+                            lockedSubject.put("x", lockedX);
+                            lockedSubject.put("y", lockedY);
+
+                            JSONArray lockedSubjects =
+                                    new JSONArray();
+                            lockedSubjects.put(lockedSubject);
+
+                            /*
+                             * Back-fill seluruh sample shot.
+                             * Setelah calibration selesai, posisi single
+                             * tidak boleh kembali mengikuti jitter detector.
+                             */
+                            for (FrameSample sample : shot.samples) {
+                                sample.subjects =
+                                        new JSONArray(
+                                                lockedSubjects.toString());
+                            }
+
+                            shot.topX = lockedX;
+                            shot.topY = lockedY;
+                            shot.bottomX = lockedX;
+                            shot.bottomY = lockedY;
+
+                            lastSubjects = lockedSubjects;
+
+                            Log.i(
+                                    TAG,
+                                    "SINGLE_CALIBRATION_LOCK shot=" +
+                                    shot.shotId +
+                                    " samples=" +
+                                    singleXObservations.size() +
+                                    " x=" + lockedX +
+                                    " y=" + lockedY);
+
+                        } else {
+
+                            /*
+                             * Tidak ada pasangan stabil:
+                             * jangan membuat lock palsu.
+                             *
+                             * Tetapi seluruh sample tetap harus mempunyai
+                             * subject terakhir dari calibration agar trajectory
+                             * tidak kembali menjadi null/default.
+                             */
+                            if (lastSubjects.length() > 0) {
+                                for (FrameSample sample : shot.samples) {
+                                    sample.subjects =
+                                            new JSONArray(
+                                                    lastSubjects.toString());
+                                }
+                            }
+
+                            Log.i(
+                                    TAG,
+                                    "SINGLE_CALIBRATION_UNSTABLE shot=" +
+                                    shot.shotId +
+                                    " xSamples=" +
+                                    singleXObservations.size() +
+                                    " ySamples=" +
+                                    singleYObservations.size());
+                        }
                     }
 
                 } finally {
