@@ -974,12 +974,26 @@ public class Pass2Optimizer {
                     List<Float> bottomYObservations = new ArrayList<>();
                     List<Float> topYObservations = new ArrayList<>();
 
-                    final long SINGLE_CALIBRATION_START_MS = 250L;
-                    final long SINGLE_CALIBRATION_END_MS = 750L;
+                    /*
+                     * SINGLE CALIBRATION:
+                     *
+                     * Ambil evidence dari tiga bagian shot:
+                     *   - 250 ms awal
+                     *   - 250 ms sekitar tengah
+                     *   - 250 ms akhir
+                     *
+                     * Window boleh overlap pada shot pendek.
+                     */
+                    final long SINGLE_CALIBRATION_WINDOW_MS = 250L;
                     final float SINGLE_STABILITY_TOLERANCE = 0.08f;
 
-                    List<Float> singleXObservations = new ArrayList<>();
-                    List<Float> singleYObservations = new ArrayList<>();
+                    List<Float> singleEarlyXObservations = new ArrayList<>();
+                    List<Float> singleEarlyYObservations = new ArrayList<>();
+                    List<Float> singleMiddleXObservations = new ArrayList<>();
+                    List<Float> singleMiddleYObservations = new ArrayList<>();
+                    List<Float> singleLateXObservations = new ArrayList<>();
+                    List<Float> singleLateYObservations = new ArrayList<>();
+
                     JSONArray singleReferenceSubjects = new JSONArray();
 
                     boolean topYLocked = false;
@@ -1016,23 +1030,66 @@ public class Pass2Optimizer {
                             continue;
                         }
 
-                        if (!splitShot &&
-                                (sample.timeMs <
-                                         shot.startMs +
-                                         SINGLE_CALIBRATION_START_MS ||
-                                 sample.timeMs >
-                                         shot.startMs +
-                                         SINGLE_CALIBRATION_END_MS)) {
+                        if (!splitShot) {
                             /*
-                             * Jangan buang sample single.
+                             * Single-shot menggunakan tiga fase.
                              *
-                             * Calibration hanya menentukan posisi referensi.
-                             * Sample di luar window tetap menerima hasil terakhir
-                             * agar trajectory tidak menjadi sparse/default.
+                             * Durasi aktual diambil dari sample pertama/terakhir,
+                             * sehingga tidak bergantung pada panjang shot tertentu.
                              */
-                            sample.subjects =
-                                    new JSONArray(lastSubjects.toString());
-                            continue;
+                            long shotEndMs =
+                                    shot.samples.get(
+                                            shot.samples.size() - 1).timeMs;
+
+                            long shotDurationMs =
+                                    Math.max(
+                                            0L,
+                                            shotEndMs - shot.startMs);
+
+                            long middleStartMs =
+                                    shot.startMs +
+                                    Math.max(
+                                            0L,
+                                            shotDurationMs / 2L -
+                                            SINGLE_CALIBRATION_WINDOW_MS / 2L);
+
+                            long middleEndMs =
+                                    middleStartMs +
+                                    SINGLE_CALIBRATION_WINDOW_MS;
+
+                            long lateStartMs =
+                                    Math.max(
+                                            shot.startMs,
+                                            shotEndMs -
+                                            SINGLE_CALIBRATION_WINDOW_MS);
+
+                            boolean inEarlyWindow =
+                                    sample.timeMs >= shot.startMs &&
+                                    sample.timeMs <=
+                                            shot.startMs +
+                                            SINGLE_CALIBRATION_WINDOW_MS;
+
+                            boolean inMiddleWindow =
+                                    sample.timeMs >= middleStartMs &&
+                                    sample.timeMs <= middleEndMs;
+
+                            boolean inLateWindow =
+                                    sample.timeMs >= lateStartMs &&
+                                    sample.timeMs <= shotEndMs;
+
+                            if (!inEarlyWindow &&
+                                    !inMiddleWindow &&
+                                    !inLateWindow) {
+                                /*
+                                 * Calibration hanya menentukan reference.
+                                 * Sample lain tetap dipelihara agar trajectory
+                                 * tidak menjadi sparse.
+                                 */
+                                sample.subjects =
+                                        new JSONArray(
+                                                lastSubjects.toString());
+                                continue;
+                            }
                         }
 
                         Bitmap bitmap = null;
@@ -1152,23 +1209,72 @@ public class Pass2Optimizer {
                                             detected.get(0);
 
                                     /*
-                                     * SINGLE CALIBRATION MODE:
+                                     * SINGLE THREE-PHASE CALIBRATION:
                                      *
-                                     * Sama seperti split-shot:
-                                     * jangan memakai satu sample.
-                                     *
-                                     * Kumpulkan beberapa observasi dalam
-                                     * window +250 .. +750 ms, lalu cari
-                                     * pasangan observasi yang stabil.
-                                     *
-                                     * Subject.x/y sudah berasal dari
-                                     * shoulder midpoint di SubjectDetector.
+                                     * X/Y sudah berasal dari shoulder midpoint.
+                                     * Simpan evidence menurut posisi waktu shot:
+                                     * awal, tengah, dan akhir.
                                      */
-                                    singleXObservations.add(
-                                            currentTarget.x);
+                                    long shotEndMs =
+                                            shot.samples.get(
+                                                    shot.samples.size() - 1).timeMs;
 
-                                    singleYObservations.add(
-                                            currentTarget.y);
+                                    long shotDurationMs =
+                                            Math.max(
+                                                    0L,
+                                                    shotEndMs - shot.startMs);
+
+                                    long middleStartMs =
+                                            shot.startMs +
+                                            Math.max(
+                                                    0L,
+                                                    shotDurationMs / 2L -
+                                                    SINGLE_CALIBRATION_WINDOW_MS / 2L);
+
+                                    long middleEndMs =
+                                            middleStartMs +
+                                            SINGLE_CALIBRATION_WINDOW_MS;
+
+                                    long lateStartMs =
+                                            Math.max(
+                                                    shot.startMs,
+                                                    shotEndMs -
+                                                    SINGLE_CALIBRATION_WINDOW_MS);
+
+                                    boolean inEarlyWindow =
+                                            sample.timeMs >= shot.startMs &&
+                                            sample.timeMs <=
+                                                    shot.startMs +
+                                                    SINGLE_CALIBRATION_WINDOW_MS;
+
+                                    boolean inMiddleWindow =
+                                            sample.timeMs >= middleStartMs &&
+                                            sample.timeMs <= middleEndMs;
+
+                                    boolean inLateWindow =
+                                            sample.timeMs >= lateStartMs &&
+                                            sample.timeMs <= shotEndMs;
+
+                                    if (inEarlyWindow) {
+                                        singleEarlyXObservations.add(
+                                                currentTarget.x);
+                                        singleEarlyYObservations.add(
+                                                currentTarget.y);
+                                    }
+
+                                    if (inMiddleWindow) {
+                                        singleMiddleXObservations.add(
+                                                currentTarget.x);
+                                        singleMiddleYObservations.add(
+                                                currentTarget.y);
+                                    }
+
+                                    if (inLateWindow) {
+                                        singleLateXObservations.add(
+                                                currentTarget.x);
+                                        singleLateYObservations.add(
+                                                currentTarget.y);
+                                    }
 
                                     singleReferenceSubjects =
                                             subjectsToJson(detected);
@@ -1228,20 +1334,31 @@ public class Pass2Optimizer {
 
                     } else {
                         /*
-                         * SINGLE CALIBRATION FINALIZATION:
+                         * SINGLE THREE-PHASE FINALIZATION:
                          *
-                         * X dan Y sama-sama harus stabil.
-                         * Tidak ada EMA, deadband, center-lock,
-                         * atau continuous raw tracking.
+                         * Tentukan satu representative value untuk masing-masing
+                         * fase, lalu pilih evidence yang paling konsisten.
+                         *
+                         * Jika awal + tengah + akhir konsisten:
+                         *   gunakan ketiganya.
+                         *
+                         * Jika satu fase menyimpang:
+                         *   gunakan pasangan fase yang paling dekat.
+                         *
+                         * Tidak ada fake lock jika semua fase berbeda.
                          */
                         Float lockedX =
-                                stableSplitY(
-                                        singleXObservations,
+                                stableThreePhase(
+                                        singleEarlyXObservations,
+                                        singleMiddleXObservations,
+                                        singleLateXObservations,
                                         SINGLE_STABILITY_TOLERANCE);
 
                         Float lockedY =
-                                stableSplitY(
-                                        singleYObservations,
+                                stableThreePhase(
+                                        singleEarlyYObservations,
+                                        singleMiddleYObservations,
+                                        singleLateYObservations,
                                         SINGLE_STABILITY_TOLERANCE);
 
                         if (lockedX != null && lockedY != null) {
@@ -1285,8 +1402,12 @@ public class Pass2Optimizer {
                                     TAG,
                                     "SINGLE_CALIBRATION_LOCK shot=" +
                                     shot.shotId +
-                                    " samples=" +
-                                    singleXObservations.size() +
+                                    " earlyX=" +
+                                    singleEarlyXObservations.size() +
+                                    " middleX=" +
+                                    singleMiddleXObservations.size() +
+                                    " lateX=" +
+                                    singleLateXObservations.size() +
                                     " x=" + lockedX +
                                     " y=" + lockedY);
 
@@ -1312,10 +1433,12 @@ public class Pass2Optimizer {
                                     TAG,
                                     "SINGLE_CALIBRATION_UNSTABLE shot=" +
                                     shot.shotId +
-                                    " xSamples=" +
-                                    singleXObservations.size() +
-                                    " ySamples=" +
-                                    singleYObservations.size());
+                                    " earlyX=" +
+                                    singleEarlyXObservations.size() +
+                                    " middleX=" +
+                                    singleMiddleXObservations.size() +
+                                    " lateX=" +
+                                    singleLateXObservations.size());
                         }
                     }
 
@@ -1674,6 +1797,104 @@ public class Pass2Optimizer {
         }
 
         return result;
+    }
+
+    private static Float stableThreePhase(
+            List<Float> early,
+            List<Float> middle,
+            List<Float> late,
+            float tolerance) {
+
+        Float earlyValue = medianObservation(early);
+        Float middleValue = medianObservation(middle);
+        Float lateValue = medianObservation(late);
+
+        List<Float> values = new ArrayList<>();
+
+        if (earlyValue != null) {
+            values.add(earlyValue);
+        }
+
+        if (middleValue != null) {
+            values.add(middleValue);
+        }
+
+        if (lateValue != null) {
+            values.add(lateValue);
+        }
+
+        if (values.size() < 2) {
+            return null;
+        }
+
+        /*
+         * Semua fase tersedia dan konsisten:
+         * gunakan seluruh evidence, bukan hanya pasangan.
+         */
+        if (values.size() == 3 &&
+                Math.abs(values.get(0) - values.get(1)) <= tolerance &&
+                Math.abs(values.get(0) - values.get(2)) <= tolerance &&
+                Math.abs(values.get(1) - values.get(2)) <= tolerance) {
+
+            return (
+                    values.get(0) +
+                    values.get(1) +
+                    values.get(2)) / 3.0f;
+        }
+
+        /*
+         * Satu fase boleh menyimpang.
+         * Cari pasangan fase yang paling dekat.
+         */
+        float bestA = 0f;
+        float bestB = 0f;
+        float bestDistance = Float.MAX_VALUE;
+
+        for (int i = 0; i < values.size(); i++) {
+            for (int j = i + 1; j < values.size(); j++) {
+
+                float a = values.get(i);
+                float b = values.get(j);
+                float distance = Math.abs(a - b);
+
+                if (distance < bestDistance) {
+                    bestDistance = distance;
+                    bestA = a;
+                    bestB = b;
+                }
+            }
+        }
+
+        if (bestDistance > tolerance) {
+            return null;
+        }
+
+        return (bestA + bestB) * 0.5f;
+    }
+
+    private static Float medianObservation(
+            List<Float> observations) {
+
+        if (observations == null ||
+                observations.isEmpty()) {
+            return null;
+        }
+
+        List<Float> sorted =
+                new ArrayList<>(observations);
+
+        java.util.Collections.sort(sorted);
+
+        int middle =
+                sorted.size() / 2;
+
+        if ((sorted.size() & 1) == 1) {
+            return sorted.get(middle);
+        }
+
+        return (
+                sorted.get(middle - 1) +
+                sorted.get(middle)) * 0.5f;
     }
 
     private static Float stableSplitY(
