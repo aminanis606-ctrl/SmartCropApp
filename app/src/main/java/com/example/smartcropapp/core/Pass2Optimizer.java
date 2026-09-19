@@ -1651,20 +1651,12 @@ public class Pass2Optimizer {
             SubjectDetector.Subject subject,
             float headTopY) {
 
-        if (subject == null ||
-                Float.isNaN(headTopY) ||
-                Float.isInfinite(headTopY)) {
-            return clamp(
-                    subject == null
-                            ? DEFAULT_Y
-                            : subject.y - subject.height * 0.35f,
-                    0.15f,
-                    0.85f);
+        if (subject == null) {
+            return DEFAULT_Y;
         }
 
-        // Keep a geometry-derived half-torso margin below the head landmark.
         return clamp(
-                headTopY + subject.height * 0.5f,
+                subject.y,
                 0.15f,
                 0.85f);
     }

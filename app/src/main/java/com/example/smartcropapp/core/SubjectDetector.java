@@ -89,6 +89,7 @@ public final class SubjectDetector {
                             TimeUnit.SECONDS);
 
             List<PointF> torsoPoints = new ArrayList<>();
+            List<PointF> shoulderPoints = new ArrayList<>();
 
             addLandmark(
                     pose,
@@ -97,8 +98,18 @@ public final class SubjectDetector {
 
             addLandmark(
                     pose,
+                    PoseLandmark.LEFT_SHOULDER,
+                    shoulderPoints);
+
+            addLandmark(
+                    pose,
                     PoseLandmark.RIGHT_SHOULDER,
                     torsoPoints);
+
+            addLandmark(
+                    pose,
+                    PoseLandmark.RIGHT_SHOULDER,
+                    shoulderPoints);
 
             addLandmark(
                     pose,
@@ -134,6 +145,17 @@ public final class SubjectDetector {
 
             centerX /= torsoPoints.size();
             centerY /= torsoPoints.size();
+
+            // Framing anchor: prefer the midpoint of both shoulders.
+            // Torso bbox/width/height/areaScore tetap unchanged.
+            if (shoulderPoints.size() == 2) {
+                centerX =
+                        (shoulderPoints.get(0).x +
+                         shoulderPoints.get(1).x) * 0.5f;
+                centerY =
+                        (shoulderPoints.get(0).y +
+                         shoulderPoints.get(1).y) * 0.5f;
+            }
 
             float imageWidth = bitmap.getWidth();
             float imageHeight = bitmap.getHeight();
